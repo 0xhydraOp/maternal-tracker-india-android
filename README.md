@@ -2,6 +2,8 @@
 
 Native Android version of the desktop Maternal Tracking app. This project lives beside the Windows `.exe` project and keeps its own SQLite database on the Android device.
 
+Current version: `v1.0.0`
+
 ## Current Scope
 
 - Patient registration with patient ID generation.
