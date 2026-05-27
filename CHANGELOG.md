@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.1 - 2026-05-28
+
+- Added Play Store/proper release signing setup.
+- Added local release keystore generation script.
+- Added signed release APK build script.
+- Bumped Android app version to `1.0.1` / versionCode `2`.
+
 ## v1.0.0 - 2026-05-28
 
 - Initial Android project for Maternal Tracker India.
