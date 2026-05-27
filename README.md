@@ -38,6 +38,18 @@ Output:
 app\build\outputs\apk\debug\app-debug.apk
 ```
 
+Build signed release APK:
+
+```powershell
+.\build_release_apk.ps1
+```
+
+Output:
+
+```text
+release\MaternalTrackerIndia-v1.0.0-release.apk
+```
+
 Install to an attached phone/emulator:
 
 ```powershell

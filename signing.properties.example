@@ -1,0 +1,4 @@
+storeFile=maternal-tracker-india-release.jks
+storePassword=replace-with-keystore-password
+keyAlias=maternal-tracker-india
+keyPassword=replace-with-key-password
