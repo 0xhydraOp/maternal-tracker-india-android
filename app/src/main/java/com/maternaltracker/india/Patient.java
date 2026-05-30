@@ -1,6 +1,8 @@
 package com.maternaltracker.india;
 
 final class Patient {
+    long id;
+    int serialNumber;
     String patientId;
     String patientName;
     String mobileNumber;
@@ -21,4 +23,5 @@ final class Patient {
     String finalVisit;
     String entryDate;
     String remarks;
+    boolean recordLocked;
 }
