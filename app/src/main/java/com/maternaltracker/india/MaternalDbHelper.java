@@ -6,6 +6,9 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -108,7 +111,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         }
         ContentValues values = new ContentValues();
         values.put("username", "admin");
-        values.put("password_hash", "admin123");
+        values.put("password_hash", hashPassword("admin123"));
         values.put("role", "ADMIN");
         db.insertWithOnConflict("users", null, values, SQLiteDatabase.CONFLICT_IGNORE);
     }
@@ -119,16 +122,27 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         }
         SQLiteDatabase db = getReadableDatabase();
         try (Cursor c = db.rawQuery(
-                "SELECT role FROM users WHERE username = ? AND password_hash = ? LIMIT 1",
-                new String[]{username.trim(), password.trim()})) {
-            return c.moveToFirst() ? c.getString(0) : null;
+                "SELECT role, password_hash FROM users WHERE username = ? LIMIT 1",
+                new String[]{username.trim()})) {
+            if (!c.moveToFirst()) {
+                return null;
+            }
+            String stored = c.getString(1);
+            String supplied = password.trim();
+            if (!hashPassword(supplied).equals(stored) && !supplied.equals(stored)) {
+                return null;
+            }
+            return c.getString(0);
         }
     }
 
     long saveUser(String username, String password, String role) {
+        if (username == null || username.trim().isEmpty() || password == null || password.trim().isEmpty()) {
+            throw new IllegalArgumentException("Username and password are required");
+        }
         ContentValues values = new ContentValues();
         values.put("username", username.trim());
-        values.put("password_hash", password.trim());
+        values.put("password_hash", hashPassword(password.trim()));
         values.put("role", role == null || role.trim().isEmpty() ? "STAFF" : role.trim());
         return getWritableDatabase().insertWithOnConflict("users", null, values, SQLiteDatabase.CONFLICT_ABORT);
     }
@@ -321,13 +335,30 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
     }
 
     List<Patient> listPatients(String filter) {
+        return listPatients(filter, null, null);
+    }
+
+    List<Patient> listPatients(String filter, String extraWhere, String[] extraArgs) {
         List<Patient> out = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();
         String like = "%" + (filter == null ? "" : filter.trim()) + "%";
+        String where = "(patient_name LIKE ? OR patient_id LIKE ? OR mobile_number LIKE ? OR village_name LIKE ? OR motivator_name LIKE ? OR doctor_name LIKE ? OR district_name LIKE ?)";
+        List<String> args = new ArrayList<>();
+        for (int i = 0; i < 7; i++) {
+            args.add(like);
+        }
+        if (extraWhere != null && !extraWhere.trim().isEmpty()) {
+            where += " AND (" + extraWhere + ")";
+            if (extraArgs != null) {
+                for (String arg : extraArgs) {
+                    args.add(arg);
+                }
+            }
+        }
         try (Cursor c = db.rawQuery(
                 "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, remarks, record_locked " +
-                        "FROM patients WHERE patient_name LIKE ? OR patient_id LIKE ? OR mobile_number LIKE ? OR village_name LIKE ? OR motivator_name LIKE ? OR doctor_name LIKE ? OR district_name LIKE ? ORDER BY entry_date DESC, serial_number DESC",
-                new String[]{like, like, like, like, like, like, like})) {
+                        "FROM patients WHERE " + where + " ORDER BY entry_date DESC, serial_number DESC",
+                args.toArray(new String[0]))) {
             while (c.moveToNext()) {
                 out.add(patientFromCursor(c));
             }
@@ -430,5 +461,19 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         ContentValues values = new ContentValues();
         values.put("name", name.trim());
         db.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_IGNORE);
+    }
+
+    private static String hashPassword(String password) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest(password.getBytes(StandardCharsets.UTF_8));
+            StringBuilder out = new StringBuilder();
+            for (byte b : hashed) {
+                out.append(String.format(Locale.US, "%02x", b));
+            }
+            return out.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 not available", ex);
+        }
     }
 }

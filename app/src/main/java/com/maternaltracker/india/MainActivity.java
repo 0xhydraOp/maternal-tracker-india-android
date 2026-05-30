@@ -178,9 +178,9 @@ public class MainActivity extends Activity {
         int locked = db.countPatients("record_locked = 1", null);
         box.addView(statGrid(
                 stat("Total Patients", total, v -> showPatientList(false)),
-                stat("Today's Entries", today, v -> showFilteredPatients("entry_date = today")),
-                stat("EDD Within 30 Days", edd30, v -> showFilteredPatients("edd_date next 30 days")),
-                stat("Completed / Locked", locked, v -> showFilteredPatients("record_locked = 1"))
+                stat("Today's Entries", today, v -> showPatientList(false, "entry_date = ?", new String[]{LocalDate.now().toString()})),
+                stat("EDD Within 30 Days", edd30, v -> showPatientList(false, "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()})),
+                stat("Completed / Locked", locked, v -> showPatientList(false, "record_locked = 1", null))
         ));
         box.addView(section("Quick Actions",
                 navButton("New Patient", v -> showPatientForm(null)),
@@ -195,11 +195,6 @@ public class MainActivity extends Activity {
                     toast("Location data refreshed");
                 })
         ));
-    }
-
-    private void showFilteredPatients(String hint) {
-        showPatientList(false);
-        status.setText("Filter requested: " + hint + ". Use the search box for exact filtering.");
     }
 
     private View statGrid(View... stats) {
@@ -264,13 +259,17 @@ public class MainActivity extends Activity {
         if (patient != null) {
             state.setText(value(patient.stateName), false);
             selectedStateCode = db.getCodeByName("states", text(state));
+            setAdapter(district, db.listDistricts(selectedStateCode));
             district.setText(value(patient.districtName), false);
             selectedDistrictCode = db.getCodeByNameAndParent("districts", text(district), "state_code", selectedStateCode);
             subdistrict.setText(value(patient.subdistrictName), false);
             localBodyType.setText(value(patient.localBodyType), false);
+            setAdapter(localBody, db.listLocalBodies(selectedDistrictCode));
             localBody.setText(value(patient.localBodyName), false);
             selectedLocalBodyCode = db.getCodeByNameAndParent("local_bodies", text(localBody), "district_code", selectedDistrictCode);
+            setAdapter(ward, db.listWards(selectedLocalBodyCode));
             ward.setText(value(patient.wardName), false);
+            setAdapter(village, db.listVillages(selectedDistrictCode, selectedSubdistrictCode, selectedLocalBodyCode));
             village.setText(value(patient.villageName), false);
             motivator.setText(value(patient.motivatorName), false);
             doctor.setText(value(patient.doctorName), false);
@@ -413,6 +412,10 @@ public class MainActivity extends Activity {
     }
 
     private void showPatientList(boolean adminMode) {
+        showPatientList(adminMode, null, null);
+    }
+
+    private void showPatientList(boolean adminMode, String extraWhere, String[] extraArgs) {
         setPage(adminMode ? "Patient Management" : "Patient Search");
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -429,7 +432,7 @@ public class MainActivity extends Activity {
         list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        Runnable reload = () -> renderPatientRows(list, db.listPatients(text(search)), adminMode);
+        Runnable reload = () -> renderPatientRows(list, db.listPatients(text(search), extraWhere, extraArgs), adminMode);
         search.addTextChangedListener(simpleWatcher(s -> reload.run()));
         reload.run();
     }
@@ -557,7 +560,11 @@ public class MainActivity extends Activity {
 
     private void exportPatientsCsv(String filter) {
         try {
-            File dir = new File(getExternalFilesDir(null), "exports");
+            File base = getExternalFilesDir(null);
+            if (base == null) {
+                base = getFilesDir();
+            }
+            File dir = new File(base, "exports");
             if (!dir.exists()) {
                 dir.mkdirs();
             }
@@ -622,19 +629,24 @@ public class MainActivity extends Activity {
         try {
             File pre = new File(backupDir(), "pre_restore_" + System.currentTimeMillis() + ".db");
             copyFile(getDatabasePath(MaternalDbHelper.DB_NAME), pre);
-            copyFile(backup, getDatabasePath(MaternalDbHelper.DB_NAME));
             db.close();
+            copyFile(backup, getDatabasePath(MaternalDbHelper.DB_NAME));
             db = new MaternalDbHelper(this);
             db.ensureCoreData();
             toast("Backup restored");
             showDashboard();
         } catch (Exception ex) {
+            db = new MaternalDbHelper(this);
             toast("Restore failed: " + ex.getMessage());
         }
     }
 
     private File backupDir() {
-        File dir = new File(getExternalFilesDir(null), "backups");
+        File base = getExternalFilesDir(null);
+        if (base == null) {
+            base = getFilesDir();
+        }
+        File dir = new File(base, "backups");
         if (!dir.exists()) {
             dir.mkdirs();
         }
@@ -741,6 +753,10 @@ public class MainActivity extends Activity {
                 .setTitle("Add User")
                 .setView(box)
                 .setPositiveButton("Save", (dialog, which) -> {
+                    if (empty(text(username)) || empty(text(password))) {
+                        toast("Username and password are required");
+                        return;
+                    }
                     try {
                         db.saveUser(text(username), text(password), text(role));
                         db.logActivity("USER_CREATE", text(username), currentUser);

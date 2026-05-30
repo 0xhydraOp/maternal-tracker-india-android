@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.3 - 2026-05-31
+
+- Fixed dashboard statistic cards so they open the correct filtered patient lists.
+- Fixed backup restore to close and reopen the database around file replacement.
+- Fixed edit-mode location autocomplete adapters so district, local body, ward, and village suggestions remain available.
+- Added safe fallbacks for Android external app storage paths during CSV export and backup.
+- Added add-user validation and hashed password storage for new/default users while keeping legacy plain-text login compatibility.
+- Bumped Android app version to `1.0.3` / versionCode `4`.
+
 ## v1.0.2 - 2026-05-31
 
 - Replaced the thin Android flow with multi-screen desktop parity: login, dashboard, patient entry/edit, patient search, reports, backup, and administration.
