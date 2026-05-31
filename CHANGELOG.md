@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.5 - 2026-05-31
+
+- Cleared stale screen references when returning to login so detached status labels cannot be updated after logout.
+- Rechecked animation/drawable UI paths, Android lint, debug build, release build, and APK signature.
+- Bumped Android app version to `1.0.5` / versionCode `6`.
+
 ## v1.0.4 - 2026-05-31
 
 - Refined the Android UI with warmer background treatment, rounded elevated cards, styled form inputs, polished header, and softer navigation/action buttons.

@@ -36,8 +36,8 @@ try {
         throw "Gradle release build failed with exit code $LASTEXITCODE"
     }
     New-Item -ItemType Directory -Force -Path "release" | Out-Null
-    Copy-Item -LiteralPath "app\build\outputs\apk\release\app-release.apk" -Destination "release\MaternalTrackerIndia-v1.0.4-release.apk" -Force
-    Get-ChildItem "release\MaternalTrackerIndia-v1.0.4-release.apk" | Select-Object FullName,Length,LastWriteTime
+    Copy-Item -LiteralPath "app\build\outputs\apk\release\app-release.apk" -Destination "release\MaternalTrackerIndia-v1.0.5-release.apk" -Force
+    Get-ChildItem "release\MaternalTrackerIndia-v1.0.5-release.apk" | Select-Object FullName,Length,LastWriteTime
 }
 finally {
     Pop-Location

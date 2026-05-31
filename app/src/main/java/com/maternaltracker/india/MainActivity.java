@@ -88,6 +88,9 @@ public class MainActivity extends Activity {
     }
 
     private void showLogin() {
+        content = null;
+        headerTitle = null;
+        status = null;
         LinearLayout login = new LinearLayout(this);
         login.setOrientation(LinearLayout.VERTICAL);
         login.setGravity(Gravity.CENTER);
