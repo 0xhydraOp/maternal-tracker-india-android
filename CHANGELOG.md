@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.4 - 2026-05-31
+
+- Refined the Android UI with warmer background treatment, rounded elevated cards, styled form inputs, polished header, and softer navigation/action buttons.
+- Added page transition animation and button press scale animation.
+- Added visual chips for locked patient records and improved status/nav coloring.
+- Bumped Android app version to `1.0.4` / versionCode `5`.
+
 ## v1.0.3 - 2026-05-31
 
 - Fixed dashboard statistic cards so they open the correct filtered patient lists.

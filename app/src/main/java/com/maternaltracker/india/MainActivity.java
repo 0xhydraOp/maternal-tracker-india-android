@@ -5,11 +5,13 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
@@ -32,6 +34,17 @@ import java.util.List;
 import java.util.Map;
 
 public class MainActivity extends Activity {
+    private static final int BG_TOP = Color.rgb(239, 247, 250);
+    private static final int BG_BOTTOM = Color.rgb(246, 241, 235);
+    private static final int SURFACE = Color.WHITE;
+    private static final int SURFACE_ALT = Color.rgb(247, 250, 252);
+    private static final int PRIMARY = Color.rgb(26, 115, 110);
+    private static final int PRIMARY_DARK = Color.rgb(14, 87, 82);
+    private static final int ACCENT = Color.rgb(226, 140, 72);
+    private static final int TEXT = Color.rgb(31, 45, 61);
+    private static final int MUTED = Color.rgb(93, 109, 126);
+    private static final int BORDER = Color.rgb(219, 228, 235);
+
     private MaternalDbHelper db;
     private LinearLayout root;
     private LinearLayout content;
@@ -79,14 +92,15 @@ public class MainActivity extends Activity {
         login.setOrientation(LinearLayout.VERTICAL);
         login.setGravity(Gravity.CENTER);
         login.setPadding(dp(20), dp(20), dp(20), dp(20));
-        login.setBackgroundColor(Color.rgb(235, 241, 247));
+        login.setBackground(gradient(BG_TOP, BG_BOTTOM, dp(0)));
         setContentView(login);
 
         LinearLayout card = card();
-        card.setPadding(dp(22), dp(22), dp(22), dp(22));
-        TextView title = label("Maternal Tracker India", 24, true);
+        card.setPadding(dp(24), dp(24), dp(24), dp(24));
+        TextView title = label("Maternal Tracker India", 26, true);
         TextView sub = label("Offline Android version", 13, false);
-        sub.setTextColor(Color.rgb(93, 109, 126));
+        sub.setTextColor(MUTED);
+        sub.setPadding(0, dp(3), 0, dp(16));
         EditText username = input("admin");
         EditText password = input("admin123");
         password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
@@ -112,8 +126,8 @@ public class MainActivity extends Activity {
     private void buildShell() {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(238, 243, 248));
-        root.setPadding(dp(10), dp(10), dp(10), dp(8));
+        root.setBackground(gradient(BG_TOP, BG_BOTTOM, dp(0)));
+        root.setPadding(dp(12), dp(12), dp(12), dp(8));
         setContentView(root);
 
         root.addView(header());
@@ -122,17 +136,19 @@ public class MainActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
         status = label("", 12, false);
-        status.setTextColor(Color.rgb(93, 109, 126));
-        status.setPadding(dp(4), dp(6), dp(4), 0);
+        status.setTextColor(MUTED);
+        status.setPadding(dp(8), dp(6), dp(8), 0);
         root.addView(status);
     }
 
     private View header() {
-        LinearLayout box = card();
+        LinearLayout box = card(PRIMARY, 0, PRIMARY);
         box.setOrientation(LinearLayout.HORIZONTAL);
         box.setGravity(Gravity.CENTER_VERTICAL);
         headerTitle = label("Dashboard", 21, true);
+        headerTitle.setTextColor(Color.WHITE);
         TextView user = label(currentUser + " (" + currentRole + ")", 12, true);
+        user.setTextColor(Color.rgb(222, 244, 239));
         user.setGravity(Gravity.END);
         box.addView(headerTitle, new LinearLayout.LayoutParams(0, -2, 1));
         box.addView(user);
@@ -159,9 +175,18 @@ public class MainActivity extends Activity {
     }
 
     private void setPage(String title) {
+        content.animate().cancel();
         content.removeAllViews();
+        content.setAlpha(0f);
+        content.setTranslationY(dp(10));
         headerTitle.setText(title);
         status.setText("");
+        content.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(240)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .start();
     }
 
     private void showDashboard() {
@@ -216,9 +241,11 @@ public class MainActivity extends Activity {
         LinearLayout box = card();
         box.setOnClickListener(click);
         TextView number = label(String.valueOf(value), 26, true);
-        number.setTextColor(Color.rgb(44, 123, 229));
+        number.setTextColor(PRIMARY);
+        TextView caption = label(title, 13, true);
+        caption.setTextColor(MUTED);
         box.addView(number);
-        box.addView(label(title, 13, true));
+        box.addView(caption);
         return box;
     }
 
@@ -448,8 +475,7 @@ public class MainActivity extends Activity {
             card.addView(smallText("Motivator: " + value(p.motivatorName) + "  Doctor: " + value(p.doctorName)));
             card.addView(smallText("LMP: " + value(p.lmpDate) + "  EDD: " + value(p.eddDate) + "  Final: " + value(p.finalVisit)));
             if (p.recordLocked) {
-                TextView locked = smallText("Locked after final visit");
-                locked.setTextColor(Color.rgb(172, 82, 32));
+                TextView locked = chip("Locked after final visit", ACCENT, Color.WHITE);
                 card.addView(locked);
             }
             LinearLayout actions = new LinearLayout(this);
@@ -822,7 +848,8 @@ public class MainActivity extends Activity {
     private LinearLayout section(String title, View... rows) {
         LinearLayout box = card();
         TextView heading = label(title, 17, true);
-        heading.setTextColor(Color.rgb(44, 123, 229));
+        heading.setTextColor(PRIMARY);
+        heading.setPadding(0, 0, 0, dp(6));
         box.addView(heading);
         for (View row : rows) {
             box.addView(row);
@@ -835,19 +862,24 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(0, dp(5), 0, dp(5));
         TextView tv = label(label, 12, true);
-        tv.setTextColor(Color.rgb(45, 52, 54));
+        tv.setTextColor(MUTED);
         row.addView(tv);
         row.addView(input, new LinearLayout.LayoutParams(-1, dp(46)));
         return row;
     }
 
     private LinearLayout card() {
+        return card(SURFACE, 1, BORDER);
+    }
+
+    private LinearLayout card(int color, int strokeWidth, int strokeColor) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackgroundColor(Color.WHITE);
-        box.setPadding(dp(14), dp(14), dp(14), dp(14));
+        box.setBackground(rounded(color, dp(12), strokeWidth == 0 ? 0 : dp(strokeWidth), strokeColor));
+        box.setPadding(dp(15), dp(15), dp(15), dp(15));
+        box.setElevation(dp(2));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(10));
+        lp.setMargins(0, 0, 0, dp(12));
         box.setLayoutParams(lp);
         return box;
     }
@@ -856,7 +888,7 @@ public class MainActivity extends Activity {
         TextView tv = new TextView(this);
         tv.setText(text);
         tv.setTextSize(sp);
-        tv.setTextColor(Color.rgb(31, 45, 61));
+        tv.setTextColor(TEXT);
         if (bold) {
             tv.setTypeface(tv.getTypeface(), Typeface.BOLD);
         }
@@ -874,13 +906,18 @@ public class MainActivity extends Activity {
         edit.setSingleLine(true);
         edit.setText(value == null ? "" : value);
         edit.setTextSize(15);
-        edit.setPadding(dp(10), 0, dp(10), 0);
+        edit.setTextColor(TEXT);
+        edit.setHintTextColor(Color.rgb(135, 151, 166));
+        edit.setBackground(rounded(SURFACE_ALT, dp(10), dp(1), BORDER));
+        edit.setPadding(dp(12), 0, dp(12), 0);
         return edit;
     }
 
     private EditText readOnlyInput(String value) {
         EditText edit = input(value);
         edit.setEnabled(false);
+        edit.setTextColor(MUTED);
+        edit.setBackground(rounded(Color.rgb(235, 241, 246), dp(10), dp(1), BORDER));
         return edit;
     }
 
@@ -889,7 +926,10 @@ public class MainActivity extends Activity {
         view.setSingleLine(true);
         view.setThreshold(1);
         view.setTextSize(15);
-        view.setPadding(dp(10), 0, dp(10), 0);
+        view.setTextColor(TEXT);
+        view.setHintTextColor(Color.rgb(135, 151, 166));
+        view.setBackground(rounded(SURFACE_ALT, dp(10), dp(1), BORDER));
+        view.setPadding(dp(12), 0, dp(12), 0);
         setAdapter(view, values);
         return view;
     }
@@ -901,17 +941,65 @@ public class MainActivity extends Activity {
     private Button navButton(String text, View.OnClickListener listener) {
         Button b = button(text, listener);
         b.setAllCaps(false);
+        b.setTextColor(PRIMARY_DARK);
+        b.setBackground(rounded(Color.rgb(232, 246, 242), dp(22), dp(1), Color.rgb(190, 224, 215)));
+        b.setElevation(dp(1));
         return b;
     }
 
     private Button button(String text, View.OnClickListener listener) {
         Button b = new Button(this);
         b.setText(text);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(13);
+        b.setTypeface(b.getTypeface(), Typeface.BOLD);
+        b.setAllCaps(false);
+        b.setBackground(gradient(PRIMARY, PRIMARY_DARK, dp(22)));
+        b.setElevation(dp(2));
         b.setOnClickListener(listener);
+        b.setOnTouchListener((view, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                view.animate().scaleX(0.97f).scaleY(0.97f).setDuration(80).start();
+            } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                view.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+            }
+            return false;
+        });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(44));
         lp.setMargins(dp(4), dp(4), dp(4), dp(4));
         b.setLayoutParams(lp);
         return b;
+    }
+
+    private TextView chip(String text, int bg, int fg) {
+        TextView chip = label(text, 12, true);
+        chip.setTextColor(fg);
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(dp(10), dp(5), dp(10), dp(5));
+        chip.setBackground(rounded(bg, dp(16), 0, bg));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.setMargins(0, dp(6), 0, dp(2));
+        chip.setLayoutParams(lp);
+        return chip;
+    }
+
+    private GradientDrawable rounded(int color, int radius, int strokeWidth, int strokeColor) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(radius);
+        if (strokeWidth > 0) {
+            drawable.setStroke(strokeWidth, strokeColor);
+        }
+        return drawable;
+    }
+
+    private GradientDrawable gradient(int startColor, int endColor, int radius) {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{startColor, endColor}
+        );
+        drawable.setCornerRadius(radius);
+        return drawable;
     }
 
     private TextWatcher simpleWatcher(TextCallback callback) {
