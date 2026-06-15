@@ -355,10 +355,15 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
     }
 
     Map<String, Integer> countBy(String column) {
+        return countBy(column, null, null);
+    }
+
+    Map<String, Integer> countBy(String column, String where, String[] args) {
         Map<String, Integer> out = new LinkedHashMap<>();
+        String sqlWhere = where == null || where.trim().isEmpty() ? "" : " WHERE " + where;
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT COALESCE(NULLIF(" + column + ", ''), '-') AS label, COUNT(*) FROM patients GROUP BY label ORDER BY COUNT(*) DESC, label LIMIT 50",
-                null)) {
+                "SELECT COALESCE(NULLIF(" + column + ", ''), '-') AS label, COUNT(*) FROM patients" + sqlWhere + " GROUP BY label ORDER BY COUNT(*) DESC, label LIMIT 50",
+                args)) {
             while (c.moveToNext()) {
                 out.put(c.getString(0), c.getInt(1));
             }
@@ -367,13 +372,21 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
     }
 
     List<String[]> visitCompletionRows() {
+        return visitCompletionRows(null, null);
+    }
+
+    List<String[]> visitCompletionRows(String where, String[] args) {
         List<String[]> rows = new ArrayList<>();
-        int total = countPatients(null, null);
-        rows.add(new String[]{"1st Visit", String.valueOf(countPatients("visit1 IS NOT NULL AND visit1 != ''", null)), String.valueOf(total)});
-        rows.add(new String[]{"2nd Visit", String.valueOf(countPatients("visit2 IS NOT NULL AND visit2 != ''", null)), String.valueOf(total)});
-        rows.add(new String[]{"3rd Visit", String.valueOf(countPatients("visit3 IS NOT NULL AND visit3 != ''", null)), String.valueOf(total)});
-        rows.add(new String[]{"Final Visit", String.valueOf(countPatients("final_visit IS NOT NULL AND final_visit != ''", null)), String.valueOf(total)});
+        int total = countPatients(where, args);
+        rows.add(new String[]{"1st Visit", String.valueOf(countPatients(appendWhere(where, "visit1 IS NOT NULL AND visit1 != ''"), args)), String.valueOf(total)});
+        rows.add(new String[]{"2nd Visit", String.valueOf(countPatients(appendWhere(where, "visit2 IS NOT NULL AND visit2 != ''"), args)), String.valueOf(total)});
+        rows.add(new String[]{"3rd Visit", String.valueOf(countPatients(appendWhere(where, "visit3 IS NOT NULL AND visit3 != ''"), args)), String.valueOf(total)});
+        rows.add(new String[]{"Final Visit", String.valueOf(countPatients(appendWhere(where, "final_visit IS NOT NULL AND final_visit != ''"), args)), String.valueOf(total)});
         return rows;
+    }
+
+    private String appendWhere(String where, String extra) {
+        return where == null || where.trim().isEmpty() ? extra : "(" + where + ") AND (" + extra + ")";
     }
 
     List<String[]> upcomingEddRows(int limit) {
