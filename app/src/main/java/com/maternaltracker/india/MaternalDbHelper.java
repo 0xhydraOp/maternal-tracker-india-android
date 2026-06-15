@@ -175,7 +175,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         values.put("visit3", patient.visit3);
         values.put("final_visit", patient.finalVisit);
         values.put("entry_date", patient.entryDate);
-        values.put("record_locked", patient.finalVisit == null || patient.finalVisit.isEmpty() ? 0 : 1);
+        values.put("record_locked", patient.recordLocked ? 1 : 0);
         values.put("remarks", patient.remarks);
         return values;
     }

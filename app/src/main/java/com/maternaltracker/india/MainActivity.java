@@ -24,6 +24,7 @@ import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -71,6 +72,7 @@ public class MainActivity extends Activity {
     private TextView status;
     private TextView headerTitle;
     private TextView syncBadge;
+    private TextView backButton;
     private String currentUser = "";
     private String currentRole = "";
     private String currentPage = "Dashboard";
@@ -107,11 +109,16 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setStatusBarColor(PRIMARY_DARK);
+        getWindow().setNavigationBarColor(BG_BOTTOM);
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        );
         db = new MaternalDbHelper(this);
         firebase = new FirebaseGateway();
         db.ensureCoreData();
         LocationImporter.importBundledLgd(this, db);
-        showLogin();
+        restoreOrShowLogin();
     }
 
     @Override
@@ -128,26 +135,25 @@ public class MainActivity extends Activity {
         status = null;
         LinearLayout login = new LinearLayout(this);
         login.setOrientation(LinearLayout.VERTICAL);
-        login.setGravity(Gravity.CENTER);
-        login.setPadding(dp(18), dp(18), dp(18), dp(18));
+        login.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        login.setPadding(dp(18), topSafeInset() + dp(18), dp(18), bottomSafeInset() + dp(18));
         login.setBackground(gradient(BG_TOP, BG_BOTTOM, dp(0)));
         setContentView(login);
 
         LinearLayout card = card();
-        card.setPadding(dp(22), dp(22), dp(22), dp(22));
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
         card.setBackground(rounded(Color.WHITE, dp(8), dp(1), Color.rgb(194, 213, 228)));
         TextView mark = brandMark();
-        TextView title = label(HOSPITAL_NAME, 21, true);
+        TextView title = label(HOSPITAL_NAME, 18, true);
         title.setGravity(Gravity.CENTER);
-        title.setLetterSpacing(0.02f);
         TextView sub = label("Secure online maternal registry", 13, true);
         sub.setTextColor(MUTED);
         sub.setGravity(Gravity.CENTER);
-        sub.setPadding(0, dp(4), 0, dp(6));
-        TextView note = label("Sign in with your Blue Bird Firebase account", 12, false);
+        sub.setPadding(0, dp(2), 0, dp(4));
+        TextView note = label("Firebase account required", 12, false);
         note.setTextColor(MUTED);
         note.setGravity(Gravity.CENTER);
-        note.setPadding(0, 0, 0, dp(16));
+        note.setPadding(0, 0, 0, dp(10));
         EditText username = input("");
         EditText password = input("");
         username.setHint("Email");
@@ -188,14 +194,50 @@ public class MainActivity extends Activity {
         footer.setGravity(Gravity.CENTER);
         footer.setPadding(0, dp(12), 0, 0);
         card.addView(footer);
-        login.addView(card, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
+        cardLp.setMargins(0, dp(12), 0, 0);
+        login.addView(card, cardLp);
+    }
+
+    private void restoreOrShowLogin() {
+        showStartup();
+        firebase.restoreSession((session, error) -> runOnUiThread(() -> {
+            if (session != null && error == null) {
+                currentUser = session.email;
+                currentRole = session.role;
+                buildShell();
+                startOnlineSync();
+                showDashboard();
+                return;
+            }
+            firebase.signOut();
+            showLogin();
+        }));
+    }
+
+    private void showStartup() {
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setGravity(Gravity.CENTER);
+        screen.setPadding(dp(18), topSafeInset() + dp(18), dp(18), bottomSafeInset() + dp(18));
+        screen.setBackground(gradient(BG_TOP, BG_BOTTOM, dp(0)));
+        TextView mark = brandMark();
+        TextView title = label(HOSPITAL_NAME, 18, true);
+        title.setGravity(Gravity.CENTER);
+        TextView text = label("Checking secure session...", 13, false);
+        text.setTextColor(MUTED);
+        text.setGravity(Gravity.CENTER);
+        screen.addView(mark);
+        screen.addView(title);
+        screen.addView(text);
+        setContentView(screen);
     }
 
     private void buildShell() {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(gradient(BG_TOP, BG_BOTTOM, dp(0)));
-        root.setPadding(dp(10), dp(10), dp(10), dp(8));
+        root.setPadding(dp(10), topSafeInset() + dp(8), dp(10), bottomSafeInset() + dp(8));
         setContentView(root);
 
         root.addView(header());
@@ -210,8 +252,8 @@ public class MainActivity extends Activity {
         bottomNav.setOrientation(LinearLayout.HORIZONTAL);
         bottomNav.setGravity(Gravity.CENTER);
         bottomNav.setBackground(rounded(Color.WHITE, dp(8), dp(1), BORDER));
-        bottomNav.setPadding(dp(4), dp(4), dp(4), dp(4));
-        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(58)));
+        bottomNav.setPadding(dp(3), dp(3), dp(3), dp(3));
+        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(50)));
         rebuildBottomNav();
     }
 
@@ -251,7 +293,7 @@ public class MainActivity extends Activity {
         LinearLayout box = card(PRIMARY_DARK, 0, PRIMARY_DARK);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackground(gradient(PRIMARY_DARK, PRIMARY, dp(8)));
-        box.setPadding(dp(12), dp(9), dp(12), dp(9));
+        box.setPadding(dp(10), dp(8), dp(10), dp(8));
 
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
@@ -261,22 +303,28 @@ public class MainActivity extends Activity {
         mark.setTextColor(PRIMARY_DARK);
         mark.setGravity(Gravity.CENTER);
         mark.setBackground(rounded(Color.WHITE, dp(18), 0, Color.WHITE));
-        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(42), dp(42));
-        markLp.setMargins(0, 0, dp(12), 0);
+        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(34), dp(34));
+        markLp.setMargins(0, 0, dp(9), 0);
         top.addView(mark, markLp);
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        TextView hospital = label(HOSPITAL_NAME, 17, true);
+        TextView hospital = label(HOSPITAL_NAME, 14, true);
         hospital.setTextColor(Color.WHITE);
-        headerTitle = label("Dashboard", 13, true);
+        hospital.setSingleLine(true);
+        headerTitle = label("Dashboard", 12, true);
         headerTitle.setTextColor(Color.WHITE);
         headerTitle.setAlpha(0.82f);
         titles.addView(hospital);
         titles.addView(headerTitle);
 
         top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView logout = chip("Sign out", Color.argb(45, 255, 255, 255), Color.WHITE);
+        backButton = chip("Back", Color.argb(45, 255, 255, 255), Color.WHITE);
+        backButton.setVisibility(View.GONE);
+        backButton.setOnClickListener(v -> goBackInApp());
+        top.addView(backButton);
+
+        TextView logout = chip("Exit", Color.argb(45, 255, 255, 255), Color.WHITE);
         logout.setOnClickListener(v -> {
             firebase.signOut();
             currentUser = "";
@@ -289,11 +337,8 @@ public class MainActivity extends Activity {
         LinearLayout meta = new LinearLayout(this);
         meta.setOrientation(LinearLayout.HORIZONTAL);
         meta.setGravity(Gravity.CENTER_VERTICAL);
-        meta.setPadding(0, dp(6), 0, 0);
-        TextView user = label(currentUser, 11, true);
-        user.setTextColor(Color.rgb(222, 244, 239));
-        user.setSingleLine(true);
-        meta.addView(user, new LinearLayout.LayoutParams(0, -2, 1));
+        meta.setPadding(0, dp(4), 0, 0);
+        meta.addView(new TextView(this), new LinearLayout.LayoutParams(0, 1, 1));
         meta.addView(chip(currentRole, Color.argb(45, 255, 255, 255), Color.WHITE));
         syncBadge = chip("SYNCING", WARNING, Color.WHITE);
         meta.addView(syncBadge);
@@ -325,6 +370,9 @@ public class MainActivity extends Activity {
         content.setScaleY(0.98f);
         headerTitle.setText(title);
         status.setText("");
+        if (backButton != null) {
+            backButton.setVisibility("Dashboard".equals(title) ? View.GONE : View.VISIBLE);
+        }
         rebuildBottomNav();
         content.animate()
                 .alpha(1f)
@@ -334,6 +382,22 @@ public class MainActivity extends Activity {
                 .setDuration(240)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
                 .start();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (content != null && !"Dashboard".equals(currentPage)) {
+            goBackInApp();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    private void goBackInApp() {
+        if (content == null || "Dashboard".equals(currentPage)) {
+            return;
+        }
+        showDashboard();
     }
 
     private void showDashboard() {
@@ -355,36 +419,19 @@ public class MainActivity extends Activity {
                 stat("EDD Within 30 Days", edd30, v -> showPatientList(false, "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()})),
                 stat("Completed / Locked", locked, v -> showPatientList(false, "record_locked = 1", null))
         ));
-        if (isAdmin()) {
-            box.addView(actionGrid(
-                    actionTile("+", "New Patient", v -> showPatientForm(null)),
-                    actionTile("S", "Search", v -> showPatientList(false)),
-                    actionTile("R", "Reports", v -> showReports()),
-                    actionTile("X", "Export", v -> startExport("", REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                    actionTile("B", "Backup", v -> createBackupNow()),
-                    actionTile("A", "Admin", v -> showAdmin())
-            ));
-        } else {
-            box.addView(actionGrid(
-                    actionTile("+", "New Patient", v -> showPatientForm(null)),
-                    actionTile("S", "Search", v -> showPatientList(false)),
-                    actionTile("R", "Reports", v -> showReports()),
-                    actionTile("X", "Export", v -> startExport("", REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                    actionTile("B", "Backup", v -> createBackupNow())
-            ));
-        }
+        box.addView(dashboardCommandBar());
         box.addView(section("Upcoming EDD", upcomingEddView()));
         box.addView(section("Recent Patients", recentPatientsView()));
     }
 
     private View dashboardStatusStrip(int total) {
         LinearLayout box = card(PRIMARY_SOFT, 1, Color.rgb(190, 214, 231));
-        box.setPadding(dp(12), dp(10), dp(12), dp(10));
-        TextView title = label("Murshidabad Maternal Follow-up", 15, true);
+        box.setPadding(dp(10), dp(8), dp(10), dp(8));
+        TextView title = label("Murshidabad Maternal Follow-up", 14, true);
         title.setTextColor(PRIMARY_DARK);
-        TextView context = label(isAdmin() ? "Admin view: all hospital records visible" : "Staff view: hospital records synced online", 12, false);
+        TextView context = label(isAdmin() ? "Admin sees all hospital records" : "Online hospital records", 11, false);
         context.setTextColor(MUTED);
-        context.setPadding(0, dp(2), 0, dp(5));
+        context.setPadding(0, dp(1), 0, dp(3));
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.addView(chip(DEFAULT_DISTRICT, Color.WHITE, PRIMARY_DARK));
@@ -451,9 +498,10 @@ public class MainActivity extends Activity {
         LinearLayout box = card();
         box.setOnClickListener(click);
         box.setBackground(rounded(SURFACE, dp(14), dp(1), Color.rgb(205, 220, 232)));
-        TextView number = label(String.valueOf(value), 28, true);
+        box.setPadding(dp(10), dp(9), dp(10), dp(9));
+        TextView number = label(String.valueOf(value), 23, true);
         number.setTextColor(PRIMARY);
-        TextView caption = label(title, 13, true);
+        TextView caption = label(title, 11, true);
         caption.setTextColor(MUTED);
         box.addView(number);
         box.addView(caption);
@@ -612,11 +660,16 @@ public class MainActivity extends Activity {
             toast(validation);
             return;
         }
-        if (shouldConfirmFinalLock(old, p)) {
+        boolean shouldLockAfterSave = shouldConfirmFinalLock(old, p);
+        p.recordLocked = old != null && old.recordLocked;
+        if (shouldLockAfterSave) {
             new AlertDialog.Builder(this)
                     .setTitle("Lock Patient Record")
                     .setMessage("Saving a final visit locks this record for staff users. Continue?")
-                    .setPositiveButton("Save and Lock", (dialog, which) -> persistPatient(p, old))
+                    .setPositiveButton("Save and Lock", (dialog, which) -> {
+                        p.recordLocked = true;
+                        persistPatient(p, old);
+                    })
                     .setNegativeButton("Cancel", null)
                     .show();
             return;
@@ -700,12 +753,12 @@ public class MainActivity extends Activity {
         EditText search = input("");
         search.setHint("Search name, ID, mobile, village, block, doctor");
         page.addView(search);
-        LinearLayout tools = new LinearLayout(this);
-        tools.addView(button("Export CSV", v -> exportPatientsCsv(text(search))));
-        tools.addView(button("Excel", v -> startExport(text(search), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")));
-        tools.addView(button("PDF", v -> startExport(text(search), REQ_EXPORT_PDF, "patients.pdf", "application/pdf")));
-        tools.addView(button("New Patient", v -> showPatientForm(null)));
-        page.addView(tools);
+        page.addView(scrollingActions(
+                button("Export CSV", v -> exportPatientsCsv(text(search), extraWhere, extraArgs)),
+                button("Excel", v -> startListExport(text(search), extraWhere, extraArgs, REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                button("PDF", v -> startListExport(text(search), extraWhere, extraArgs, REQ_EXPORT_PDF, "patients.pdf", "application/pdf")),
+                button("New Patient", v -> showPatientForm(null))
+        ));
         ScrollView scroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
@@ -848,8 +901,8 @@ public class MainActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         content.addView(page, new LinearLayout.LayoutParams(-1, -1));
 
-        LinearLayout filters = card();
-        filters.setPadding(dp(12), dp(12), dp(12), dp(10));
+        LinearLayout filters = new LinearLayout(this);
+        filters.setOrientation(LinearLayout.VERTICAL);
         EditText from = input("");
         EditText to = input("");
         AutoCompleteTextView block = auto(murshidabadBlocks());
@@ -864,27 +917,25 @@ public class MainActivity extends Activity {
         statusFilter.setText("All", false);
         attachDatePicker(from);
         attachDatePicker(to);
-        filters.addView(label("Filters", 15, true));
         filters.addView(compactTwoColumn(row("From", from), row("To", to)));
         filters.addView(compactTwoColumn(row("Block", block), row("Village", villageFilter)));
         filters.addView(compactTwoColumn(row("Motivator", motivatorFilter), row("Status", statusFilter)));
-        page.addView(filters);
 
         LinearLayout reportBody = new LinearLayout(this);
         reportBody.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(reportBody);
-        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         Runnable[] render = new Runnable[1];
         render[0] = () -> renderReports(reportBody, text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter));
-        LinearLayout tools = new LinearLayout(this);
-        tools.setGravity(Gravity.CENTER_VERTICAL);
-        tools.addView(button("Apply", v -> render[0].run()));
-        tools.addView(button("Search", v -> openFilteredPatientSearch(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter))));
-        tools.addView(button("Excel", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")));
-        tools.addView(button("PDF", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_PDF, "patients.pdf", "application/pdf")));
-        filters.addView(tools);
+        page.addView(scrollingActions(
+                button("Apply", v -> render[0].run()),
+                button("Search", v -> openFilteredPatientSearch(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter))),
+                button("Excel", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                button("PDF", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_PDF, "patients.pdf", "application/pdf"))
+        ));
+        page.addView(collapsibleSection("Filters", false, filters));
+        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         render[0].run();
     }
 
@@ -1061,6 +1112,22 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void startListExport(String filter, String where, String[] args, int requestCode, String fileName, String mimeType) {
+        pendingExportFilter = value(filter);
+        pendingExportWhere = where;
+        pendingExportArgs = args;
+        pendingExportPatientId = -1;
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(mimeType);
+        intent.putExtra(Intent.EXTRA_TITLE, fileName);
+        try {
+            startActivityForResult(intent, requestCode);
+        } catch (Exception ex) {
+            toast("No document app available: " + ex.getMessage());
+        }
+    }
+
     private void startPatientExport(long patientId, int requestCode, String fileName, String mimeType) {
         pendingExportFilter = "";
         pendingExportWhere = null;
@@ -1123,7 +1190,7 @@ public class MainActivity extends Activity {
             return p == null ? java.util.Collections.emptyList() : java.util.Collections.singletonList(p);
         }
         if (!empty(pendingExportWhere)) {
-            return db.listPatients("", pendingExportWhere, pendingExportArgs);
+            return db.listPatients(pendingExportFilter, pendingExportWhere, pendingExportArgs);
         }
         return db.listPatients(pendingExportFilter);
     }
@@ -1143,6 +1210,10 @@ public class MainActivity extends Activity {
     }
 
     private void exportPatientsCsv(String filter) {
+        exportPatientsCsv(filter, null, null);
+    }
+
+    private void exportPatientsCsv(String filter, String where, String[] args) {
         try {
             File base = getExternalFilesDir(null);
             if (base == null) {
@@ -1162,7 +1233,8 @@ public class MainActivity extends Activity {
                 csv.append(csv(headers[i]));
             }
             csv.append('\n');
-            for (Patient p : db.listPatients(filter)) {
+            List<Patient> patients = empty(where) ? db.listPatients(filter) : db.listPatients(filter, where, args);
+            for (Patient p : patients) {
                 String[] values = patientExportValues(p);
                 for (int i = 0; i < values.length; i++) {
                     if (i > 0) {
@@ -1572,13 +1644,13 @@ public class MainActivity extends Activity {
         head.setGravity(Gravity.CENTER_VERTICAL);
         TextView accent = new TextView(this);
         accent.setBackground(rounded(ACCENT, dp(2), 0, ACCENT));
-        LinearLayout.LayoutParams accentLp = new LinearLayout.LayoutParams(dp(4), dp(24));
-        accentLp.setMargins(0, 0, dp(9), 0);
+        LinearLayout.LayoutParams accentLp = new LinearLayout.LayoutParams(dp(4), dp(20));
+        accentLp.setMargins(0, 0, dp(8), 0);
         head.addView(accent, accentLp);
-        TextView heading = label(title, 16, true);
+        TextView heading = label(title, 14, true);
         heading.setTextColor(PRIMARY_DARK);
         head.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
-        head.setPadding(0, 0, 0, dp(10));
+        head.setPadding(0, 0, 0, dp(7));
         box.addView(head);
         for (View row : rows) {
             box.addView(row);
@@ -1639,6 +1711,67 @@ public class MainActivity extends Activity {
             row.addView(actions[i], new LinearLayout.LayoutParams(0, dp(76), 1));
         }
         return section("Quick Actions", wrap);
+    }
+
+    private View dashboardCommandBar() {
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        if (isAdmin()) {
+            body.addView(scrollingActions(
+                    commandChip("+", "New", v -> showPatientForm(null)),
+                    commandChip("S", "Search", v -> showPatientList(false)),
+                    commandChip("R", "Reports", v -> showReports()),
+                    commandChip("X", "Export", v -> startExport("", REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                    commandChip("B", "Backup", v -> createBackupNow()),
+                    commandChip("A", "Admin", v -> showAdmin())
+            ));
+        } else {
+            body.addView(scrollingActions(
+                    commandChip("+", "New", v -> showPatientForm(null)),
+                    commandChip("S", "Search", v -> showPatientList(false)),
+                    commandChip("R", "Reports", v -> showReports()),
+                    commandChip("X", "Export", v -> startExport("", REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                    commandChip("B", "Backup", v -> createBackupNow())
+            ));
+        }
+        LinearLayout box = section("Commands", body);
+        box.setPadding(dp(10), dp(9), dp(10), dp(9));
+        return box;
+    }
+
+    private View commandChip(String symbol, String text, View.OnClickListener listener) {
+        LinearLayout chip = new LinearLayout(this);
+        chip.setOrientation(LinearLayout.HORIZONTAL);
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(dp(9), 0, dp(10), 0);
+        chip.setBackground(rounded(PRIMARY_SOFT, dp(18), dp(1), Color.rgb(184, 207, 225)));
+        chip.setOnClickListener(listener);
+        TextView icon = label(symbol, 13, true);
+        icon.setTextColor(PRIMARY);
+        icon.setGravity(Gravity.CENTER);
+        TextView label = label(text, 11, true);
+        label.setTextColor(PRIMARY_DARK);
+        label.setPadding(dp(5), 0, 0, 0);
+        chip.addView(icon);
+        chip.addView(label);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(38));
+        lp.setMargins(dp(3), dp(3), dp(3), dp(3));
+        chip.setLayoutParams(lp);
+        return chip;
+    }
+
+    private View scrollingActions(View... actions) {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(4), 0, dp(6));
+        for (View action : actions) {
+            row.addView(action);
+        }
+        scroll.addView(row);
+        return scroll;
     }
 
     private View actionTile(String symbol, String text, View.OnClickListener listener) {
@@ -1721,23 +1854,23 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackground(rounded(color, dp(8), strokeWidth == 0 ? 0 : dp(strokeWidth), strokeColor));
-        box.setPadding(dp(12), dp(12), dp(12), dp(12));
+        box.setPadding(dp(10), dp(10), dp(10), dp(10));
         box.setElevation(dp(1));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(8));
+        lp.setMargins(0, 0, 0, dp(7));
         box.setLayoutParams(lp);
         animateIn(box);
         return box;
     }
 
     private TextView brandMark() {
-        TextView mark = label("BBH", 16, true);
+        TextView mark = label("BBH", 14, true);
         mark.setTextColor(Color.WHITE);
         mark.setGravity(Gravity.CENTER);
         mark.setBackground(gradient(PRIMARY, ACCENT, dp(28)));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(56), dp(56));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(44), dp(44));
         lp.gravity = Gravity.CENTER_HORIZONTAL;
-        lp.setMargins(0, 0, 0, dp(12));
+        lp.setMargins(0, 0, 0, dp(8));
         mark.setLayoutParams(lp);
         return mark;
     }
@@ -1822,8 +1955,11 @@ public class MainActivity extends Activity {
         b.setTextSize(13);
         b.setTypeface(b.getTypeface(), Typeface.BOLD);
         b.setAllCaps(false);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
         b.setMinHeight(dp(42));
         b.setMinimumHeight(dp(42));
+        b.setPadding(dp(12), 0, dp(12), 0);
         b.setBackground(gradient(PRIMARY, PRIMARY_DARK, dp(8)));
         b.setElevation(dp(2));
         b.setOnClickListener(listener);
@@ -1962,6 +2098,14 @@ public class MainActivity extends Activity {
 
     private int dp(int value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private int topSafeInset() {
+        return dp(32);
+    }
+
+    private int bottomSafeInset() {
+        return dp(42);
     }
 
     private void toast(String text) {

@@ -50,6 +50,15 @@ final class FirebaseGateway {
                 .addOnFailureListener(error -> result.onComplete(null, error));
     }
 
+    void restoreSession(Result<Session> result) {
+        FirebaseUser user = auth.getCurrentUser();
+        if (user == null || user.getEmail() == null) {
+            result.onComplete(null, null);
+            return;
+        }
+        loadRole(normalizeEmail(user.getEmail()), result);
+    }
+
     void signOut() {
         stopPatientListener();
         auth.signOut();
