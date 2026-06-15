@@ -15,10 +15,8 @@ final class PatientRules {
         if (empty(p.patientId) || empty(p.patientName) || empty(p.mobileNumber) ||
                 empty(p.stateName) || empty(p.districtName) || empty(p.localBodyType) ||
                 empty(p.localBodyName) || empty(p.villageName) || empty(p.lmpDate) ||
-                empty(p.eddDate) || empty(p.doctorName) || empty(p.visit1) ||
-                empty(p.visit2) || empty(p.visit3) || empty(p.finalVisit) ||
-                empty(p.remarks)) {
-            return "All patient entry fields are required except motivator name";
+                empty(p.eddDate) || empty(p.doctorName) || empty(p.visit1)) {
+            return "Fill all required fields. Motivator and later visits are optional";
         }
         String digits = p.mobileNumber.replaceAll("\\D", "");
         if (digits.length() < 10 || digits.length() > 15) {

@@ -68,10 +68,23 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
-            db.execSQL("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, details TEXT, performed_by TEXT NOT NULL, performed_at TEXT NOT NULL DEFAULT (datetime('now')))");
-            db.execSQL("CREATE TABLE IF NOT EXISTS change_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id TEXT NOT NULL, field_name TEXT NOT NULL, old_value TEXT, new_value TEXT, changed_by TEXT NOT NULL, changed_at TEXT NOT NULL DEFAULT (datetime('now')))");
+            ensureUpgradeTables(db);
         }
+    }
+
+    private void ensureUpgradeTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS custom_motivators (name TEXT PRIMARY KEY, added_at TEXT NOT NULL DEFAULT (datetime('now')))");
+        db.execSQL("CREATE TABLE IF NOT EXISTS custom_doctors (name TEXT PRIMARY KEY, added_at TEXT NOT NULL DEFAULT (datetime('now')))");
+        db.execSQL("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
+        db.execSQL("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, details TEXT, performed_by TEXT NOT NULL, performed_at TEXT NOT NULL DEFAULT (datetime('now')))");
+        db.execSQL("CREATE TABLE IF NOT EXISTS change_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id TEXT NOT NULL, field_name TEXT NOT NULL, old_value TEXT, new_value TEXT, changed_by TEXT NOT NULL, changed_at TEXT NOT NULL DEFAULT (datetime('now')))");
+        db.execSQL("CREATE TABLE IF NOT EXISTS states (code TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, kind TEXT)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS districts (code TEXT PRIMARY KEY, state_code TEXT, name TEXT NOT NULL)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS subdistricts (code TEXT PRIMARY KEY, district_code TEXT, name TEXT NOT NULL)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS local_bodies (code TEXT PRIMARY KEY, state_code TEXT, district_code TEXT, subdistrict_code TEXT, name TEXT NOT NULL, kind TEXT)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS wards (code TEXT PRIMARY KEY, local_body_code TEXT, name TEXT NOT NULL)");
+        db.execSQL("CREATE TABLE IF NOT EXISTS villages (code TEXT PRIMARY KEY, state_code TEXT, district_code TEXT, subdistrict_code TEXT, local_body_code TEXT, name TEXT NOT NULL)");
+        seedStates(db);
     }
 
     void ensureCoreData() {

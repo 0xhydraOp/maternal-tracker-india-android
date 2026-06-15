@@ -39,7 +39,7 @@ public class PatientRulesTest {
         Patient p = validPatient();
         p.visit1 = null;
         p.visit2 = "2026-06-20";
-        assertEquals("All patient entry fields are required except motivator name", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+        assertEquals("Fill all required fields. Motivator and later visits are optional", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
     @Test
@@ -47,7 +47,16 @@ public class PatientRulesTest {
         Patient p = validPatient();
         p.visit1 = null;
         p.finalVisit = "2026-07-01";
-        assertEquals("All patient entry fields are required except motivator name", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+        assertEquals("Fill all required fields. Motivator and later visits are optional", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationAcceptsMissingLaterVisits() {
+        Patient p = validPatient();
+        p.visit2 = null;
+        p.visit3 = null;
+        p.finalVisit = null;
+        assertNull(PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
     private Patient validPatient() {
@@ -67,7 +76,6 @@ public class PatientRulesTest {
         p.visit2 = "2026-06-20";
         p.visit3 = "2026-06-25";
         p.finalVisit = "2026-07-01";
-        p.remarks = "Completed";
         return p;
     }
 }
