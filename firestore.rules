@@ -1,0 +1,80 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    function email() {
+      return request.auth.token.email.lower();
+    }
+
+    function roleDoc() {
+      return get(/databases/$(database)/documents/user_roles/$(email()));
+    }
+
+    function isActive() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/user_roles/$(email()))
+        && roleDoc().data.active == true;
+    }
+
+    function isAdmin() {
+      return isActive() && roleDoc().data.role == 'ADMIN';
+    }
+
+    function validRoleDocument(userEmail) {
+      return request.resource.data.keys().hasOnly(['email', 'role', 'active', 'updatedAt', 'updatedBy'])
+        && request.resource.data.email == userEmail
+        && request.resource.data.active == true
+        && request.resource.data.role in ['ADMIN', 'STAFF'];
+    }
+
+    function validPatientDocument(patientId) {
+      return request.resource.data.keys().hasOnly([
+          'serialNumber', 'patientId', 'patientName', 'mobileNumber',
+          'stateName', 'districtName', 'subdistrictName', 'localBodyType',
+          'localBodyName', 'wardName', 'villageName', 'lmpDate', 'eddDate',
+          'motivatorName', 'doctorName', 'visit1', 'visit2', 'visit3',
+          'finalVisit', 'entryDate', 'recordLocked', 'remarks', 'updatedAt',
+          'updatedBy'
+        ])
+        && request.resource.data.patientId == patientId
+        && request.resource.data.updatedBy == email();
+    }
+
+    match /user_roles/{userEmail} {
+      allow read: if signedIn() && (email() == userEmail || isAdmin());
+      allow create: if signedIn()
+        && validRoleDocument(userEmail)
+        && (
+          isAdmin()
+          || (
+            email() == 'iamrobiul94@gmail.com'
+            && userEmail == 'iamrobiul94@gmail.com'
+            && request.resource.data.role == 'ADMIN'
+            && request.resource.data.active == true
+          )
+        );
+      allow update: if isAdmin() && userEmail != email() && validRoleDocument(userEmail);
+      allow delete: if isAdmin() && userEmail != email();
+    }
+
+    match /patients/{patientId} {
+      allow read: if isActive();
+      allow create: if isActive() && validPatientDocument(patientId);
+      allow update: if validPatientDocument(patientId)
+        && (
+          isAdmin()
+          || (isActive() && resource.data.recordLocked != true && request.resource.data.recordLocked == true)
+          || (isActive() && resource.data.recordLocked != true && request.resource.data.recordLocked != true)
+        );
+      allow delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

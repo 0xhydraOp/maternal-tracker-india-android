@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "479804492886",
+    "project_id": "blue-bird-maternal",
+    "storage_bucket": "blue-bird-maternal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:479804492886:android:de6445f9db6b72f1273ff7",
+        "android_client_info": {
+          "package_name": "com.maternaltracker.india"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDXj5TtVeYmGo_xQfaqiryL9lYY4CIgQYw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

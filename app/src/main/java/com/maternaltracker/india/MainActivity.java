@@ -2,10 +2,16 @@ package com.maternaltracker.india;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.annotation.SuppressLint;
+import android.app.DatePickerDialog;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Paint;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.pdf.PdfDocument;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
@@ -27,31 +33,45 @@ import android.widget.Toast;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
+@SuppressLint("SetTextI18n")
 public class MainActivity extends Activity {
-    private static final int BG_TOP = Color.rgb(239, 247, 250);
-    private static final int BG_BOTTOM = Color.rgb(246, 241, 235);
+    private static final int BG_TOP = Color.rgb(234, 244, 252);
+    private static final int BG_BOTTOM = Color.rgb(248, 251, 253);
     private static final int SURFACE = Color.WHITE;
-    private static final int SURFACE_ALT = Color.rgb(247, 250, 252);
-    private static final int PRIMARY = Color.rgb(26, 115, 110);
-    private static final int PRIMARY_DARK = Color.rgb(14, 87, 82);
-    private static final int ACCENT = Color.rgb(226, 140, 72);
-    private static final int TEXT = Color.rgb(31, 45, 61);
-    private static final int MUTED = Color.rgb(93, 109, 126);
-    private static final int BORDER = Color.rgb(219, 228, 235);
+    private static final int SURFACE_ALT = Color.rgb(245, 248, 251);
+    private static final int SURFACE_WARM = Color.rgb(255, 252, 247);
+    private static final int PRIMARY = Color.rgb(22, 91, 145);
+    private static final int PRIMARY_DARK = Color.rgb(9, 50, 91);
+    private static final int PRIMARY_SOFT = Color.rgb(226, 240, 250);
+    private static final int ACCENT = Color.rgb(0, 137, 123);
+    private static final int WARNING = Color.rgb(180, 103, 22);
+    private static final int TEXT = Color.rgb(24, 37, 54);
+    private static final int MUTED = Color.rgb(92, 110, 128);
+    private static final int BORDER = Color.rgb(213, 224, 234);
+    private static final String HOSPITAL_NAME = "BLUE BIRD A GENERAL HOSPITAL";
+    private static final String APP_NAME = "Maternal Care Registry";
+    private static final String DEFAULT_STATE = "West Bengal";
+    private static final String DEFAULT_DISTRICT = "MURSHIDABAD";
+    private static final int REQ_EXPORT_EXCEL = 501;
+    private static final int REQ_EXPORT_PDF = 502;
+    private static final int REQ_EXPORT_BACKUP = 503;
 
     private MaternalDbHelper db;
+    private FirebaseGateway firebase;
     private LinearLayout root;
     private LinearLayout content;
     private TextView status;
     private TextView headerTitle;
-    private String currentUser = "admin";
-    private String currentRole = "ADMIN";
+    private String currentUser = "";
+    private String currentRole = "";
 
     private EditText patientId;
     private EditText patientName;
@@ -77,14 +97,25 @@ public class MainActivity extends Activity {
     private String selectedDistrictCode;
     private String selectedSubdistrictCode;
     private String selectedLocalBodyCode;
+    private String pendingExportFilter = "";
+    private long pendingExportPatientId = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         db = new MaternalDbHelper(this);
+        firebase = new FirebaseGateway();
         db.ensureCoreData();
         LocationImporter.importBundledLgd(this, db);
         showLogin();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (firebase != null) {
+            firebase.stopPatientListener();
+        }
+        super.onDestroy();
     }
 
     private void showLogin() {
@@ -94,35 +125,65 @@ public class MainActivity extends Activity {
         LinearLayout login = new LinearLayout(this);
         login.setOrientation(LinearLayout.VERTICAL);
         login.setGravity(Gravity.CENTER);
-        login.setPadding(dp(20), dp(20), dp(20), dp(20));
+        login.setPadding(dp(18), dp(18), dp(18), dp(18));
         login.setBackground(gradient(BG_TOP, BG_BOTTOM, dp(0)));
         setContentView(login);
 
         LinearLayout card = card();
-        card.setPadding(dp(24), dp(24), dp(24), dp(24));
-        TextView title = label("Maternal Tracker India", 26, true);
-        TextView sub = label("Offline Android version", 13, false);
+        card.setPadding(dp(22), dp(22), dp(22), dp(22));
+        card.setBackground(rounded(Color.WHITE, dp(8), dp(1), Color.rgb(194, 213, 228)));
+        TextView mark = brandMark();
+        TextView title = label(HOSPITAL_NAME, 21, true);
+        title.setGravity(Gravity.CENTER);
+        title.setLetterSpacing(0.02f);
+        TextView sub = label("Secure online maternal registry", 13, true);
         sub.setTextColor(MUTED);
-        sub.setPadding(0, dp(3), 0, dp(16));
-        EditText username = input("admin");
-        EditText password = input("admin123");
+        sub.setGravity(Gravity.CENTER);
+        sub.setPadding(0, dp(4), 0, dp(6));
+        TextView note = label("Sign in with your Blue Bird Firebase account", 12, false);
+        note.setTextColor(MUTED);
+        note.setGravity(Gravity.CENTER);
+        note.setPadding(0, 0, 0, dp(16));
+        EditText username = input("");
+        EditText password = input("");
+        username.setHint("Email");
+        password.setHint("Password");
         password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        card.addView(mark);
         card.addView(title);
         card.addView(sub);
-        card.addView(row("Username", username));
+        card.addView(note);
+        card.addView(row("Email", username));
         card.addView(row("Password", password));
-        Button loginBtn = button("Login", v -> {
-            String role = db.loginRole(text(username), text(password));
-            if (role == null) {
-                toast("Invalid username or password");
+        final Button[] loginHolder = new Button[1];
+        Button loginBtn = button("Sign in securely", v -> {
+            String email = text(username);
+            String pass = text(password);
+            if (empty(email) || empty(pass)) {
+                toast("Email and password are required");
                 return;
             }
-            currentUser = text(username);
-            currentRole = role;
-            buildShell();
-            showDashboard();
+            loginHolder[0].setEnabled(false);
+            firebase.signIn(email, pass, (session, error) -> runOnUiThread(() -> {
+                loginHolder[0].setEnabled(true);
+                if (error != null) {
+                    toast("Login failed: " + error.getMessage());
+                    return;
+                }
+                currentUser = session.email;
+                currentRole = session.role;
+                buildShell();
+                startOnlineSync();
+                showDashboard();
+            }));
         });
+        loginHolder[0] = loginBtn;
         card.addView(loginBtn);
+        TextView footer = label("Internet connection required for live sync", 11, false);
+        footer.setTextColor(MUTED);
+        footer.setGravity(Gravity.CENTER);
+        footer.setPadding(0, dp(12), 0, 0);
+        card.addView(footer);
         login.addView(card, new LinearLayout.LayoutParams(-1, -2));
     }
 
@@ -130,7 +191,7 @@ public class MainActivity extends Activity {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(gradient(BG_TOP, BG_BOTTOM, dp(0)));
-        root.setPadding(dp(12), dp(12), dp(12), dp(8));
+        root.setPadding(dp(10), dp(10), dp(10), dp(8));
         setContentView(root);
 
         root.addView(header());
@@ -144,17 +205,69 @@ public class MainActivity extends Activity {
         root.addView(status);
     }
 
+    private void startOnlineSync() {
+        firebase.startPatientListener(new FirebaseGateway.PatientsListener() {
+            @Override
+            public void onPatients(List<Patient> patients) {
+                runOnUiThread(() -> {
+                    db.replacePatientsFromCloud(patients);
+                    if (status != null) {
+                        status.setText("Online sync active | " + patients.size() + " patient(s) cached");
+                    }
+                });
+            }
+
+            @Override
+            public void onError(Exception error) {
+                runOnUiThread(() -> {
+                    if (status != null) {
+                        status.setText("Sync error: " + error.getMessage());
+                    }
+                    toast("Sync error: " + error.getMessage());
+                });
+            }
+        });
+    }
+
     private View header() {
-        LinearLayout box = card(PRIMARY, 0, PRIMARY);
-        box.setOrientation(LinearLayout.HORIZONTAL);
-        box.setGravity(Gravity.CENTER_VERTICAL);
-        headerTitle = label("Dashboard", 21, true);
+        LinearLayout box = card(PRIMARY_DARK, 0, PRIMARY_DARK);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackground(gradient(PRIMARY_DARK, PRIMARY, dp(8)));
+        box.setPadding(dp(14), dp(12), dp(14), dp(12));
+
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView mark = label("BBH", 13, true);
+        mark.setTextColor(PRIMARY_DARK);
+        mark.setGravity(Gravity.CENTER);
+        mark.setBackground(rounded(Color.WHITE, dp(18), 0, Color.WHITE));
+        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(42), dp(42));
+        markLp.setMargins(0, 0, dp(12), 0);
+        top.addView(mark, markLp);
+
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        TextView hospital = label(HOSPITAL_NAME, 17, true);
+        hospital.setTextColor(Color.WHITE);
+        headerTitle = label("Dashboard", 13, true);
         headerTitle.setTextColor(Color.WHITE);
-        TextView user = label(currentUser + " (" + currentRole + ")", 12, true);
+        headerTitle.setAlpha(0.82f);
+        titles.addView(hospital);
+        titles.addView(headerTitle);
+
+        top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
+        box.addView(top);
+
+        TextView user = label(currentUser + "  |  " + currentRole, 12, true);
         user.setTextColor(Color.rgb(222, 244, 239));
-        user.setGravity(Gravity.END);
-        box.addView(headerTitle, new LinearLayout.LayoutParams(0, -2, 1));
-        box.addView(user);
+        user.setGravity(Gravity.CENTER_VERTICAL);
+        user.setBackground(rounded(Color.argb(38, 255, 255, 255), dp(16), dp(1), Color.argb(55, 255, 255, 255)));
+        user.setPadding(dp(10), dp(6), dp(10), dp(6));
+        LinearLayout.LayoutParams userLp = new LinearLayout.LayoutParams(-1, -2);
+        userLp.setMargins(0, dp(10), 0, 0);
+        box.addView(user, userLp);
         return box;
     }
 
@@ -172,7 +285,12 @@ public class MainActivity extends Activity {
         if (isAdmin()) {
             row.addView(navButton("Administration", v -> showAdmin()));
         }
-        row.addView(navButton("Logout", v -> showLogin()));
+        row.addView(navButton("Logout", v -> {
+            firebase.signOut();
+            currentUser = "";
+            currentRole = "";
+            showLogin();
+        }));
         scroll.addView(row);
         return scroll;
     }
@@ -181,12 +299,16 @@ public class MainActivity extends Activity {
         content.animate().cancel();
         content.removeAllViews();
         content.setAlpha(0f);
-        content.setTranslationY(dp(10));
+        content.setTranslationY(dp(16));
+        content.setScaleX(0.98f);
+        content.setScaleY(0.98f);
         headerTitle.setText(title);
         status.setText("");
         content.animate()
                 .alpha(1f)
                 .translationY(0f)
+                .scaleX(1f)
+                .scaleY(1f)
                 .setDuration(240)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
                 .start();
@@ -204,12 +326,14 @@ public class MainActivity extends Activity {
         int today = db.countPatients("entry_date = ?", new String[]{LocalDate.now().toString()});
         int edd30 = db.countPatients("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()});
         int locked = db.countPatients("record_locked = 1", null);
+        box.addView(facilityPanel());
         box.addView(statGrid(
                 stat("Total Patients", total, v -> showPatientList(false)),
                 stat("Today's Entries", today, v -> showPatientList(false, "entry_date = ?", new String[]{LocalDate.now().toString()})),
                 stat("EDD Within 30 Days", edd30, v -> showPatientList(false, "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()})),
                 stat("Completed / Locked", locked, v -> showPatientList(false, "record_locked = 1", null))
         ));
+        box.addView(section("Upcoming EDD", upcomingEddView()));
         box.addView(section("Quick Actions",
                 navButton("New Patient", v -> showPatientForm(null)),
                 navButton("Search / Edit Patients", v -> showPatientList(false)),
@@ -217,12 +341,47 @@ public class MainActivity extends Activity {
                 navButton("Create Backup", v -> createBackupNow())
         ));
         box.addView(section("India Location Data",
-                smallText("State, UT, district, sub-district, local body, ward, and village fields are available through the bundled LGD-ready lookup tables."),
+                smallText("Patient entry is configured for West Bengal, Murshidabad, with a Murshidabad block dropdown and manual village entry."),
                 navButton("Refresh Location Data", v -> {
                     LocationImporter.importBundledLgd(this, db);
                     toast("Location data refreshed");
                 })
         ));
+    }
+
+    private View facilityPanel() {
+        LinearLayout box = card(PRIMARY_DARK, 0, PRIMARY_DARK);
+        box.setBackground(gradient(PRIMARY, ACCENT, dp(8)));
+        box.setPadding(dp(18), dp(16), dp(18), dp(16));
+        TextView name = label(HOSPITAL_NAME, 20, true);
+        name.setTextColor(Color.WHITE);
+        TextView context = label("Murshidabad maternal care follow-up and visit tracking", 13, false);
+        context.setTextColor(Color.rgb(229, 248, 250));
+        context.setPadding(0, dp(4), 0, dp(10));
+        LinearLayout chips = new LinearLayout(this);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        chips.addView(chip(DEFAULT_DISTRICT, Color.argb(48, 255, 255, 255), Color.WHITE));
+        chips.addView(chip("West Bengal", Color.argb(48, 255, 255, 255), Color.WHITE));
+        box.addView(name);
+        box.addView(context);
+        box.addView(chips);
+        return box;
+    }
+
+    private View upcomingEddView() {
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        List<String[]> rows = db.upcomingEddRows(5);
+        if (rows.isEmpty()) {
+            list.addView(smallText("No upcoming EDD records."));
+            return list;
+        }
+        for (String[] row : rows) {
+            TextView item = smallText(row[2] + " | " + value(row[1]) + " | " + value(row[4]) + " | " + value(row[3]));
+            item.setTextColor(TEXT);
+            list.addView(item);
+        }
+        return list;
     }
 
     private View statGrid(View... stats) {
@@ -243,7 +402,8 @@ public class MainActivity extends Activity {
     private View stat(String title, int value, View.OnClickListener click) {
         LinearLayout box = card();
         box.setOnClickListener(click);
-        TextView number = label(String.valueOf(value), 26, true);
+        box.setBackground(rounded(SURFACE, dp(14), dp(1), Color.rgb(205, 220, 232)));
+        TextView number = label(String.valueOf(value), 28, true);
         number.setTextColor(PRIMARY);
         TextView caption = label(title, 13, true);
         caption.setTextColor(MUTED);
@@ -269,22 +429,53 @@ public class MainActivity extends Activity {
         patientId = readOnlyInput(patient == null ? db.nextPatientId() : patient.patientId);
         patientName = input(value(patient == null ? null : patient.patientName));
         mobile = input(value(patient == null ? null : patient.mobileNumber));
+        patientName.setHint("Patient full name");
+        mobile.setHint("10 digit mobile number");
         state = auto(db.listStates());
-        district = auto(db.listDistricts(selectedStateCode));
-        subdistrict = auto(db.listSubdistricts(selectedDistrictCode));
-        localBodyType = auto(list("Panchayat", "Municipality", "Municipal Corporation", "Nagar Panchayat", "Traditional Local Body"));
-        localBody = auto(db.listLocalBodies(selectedDistrictCode));
+        state.setText(DEFAULT_STATE, false);
+        state.setEnabled(false);
+        selectedStateCode = db.getCodeByName("states", DEFAULT_STATE);
+        district = auto(list(DEFAULT_DISTRICT));
+        district.setText(DEFAULT_DISTRICT, false);
+        district.setEnabled(false);
+        selectedDistrictCode = db.getCodeByNameAndParent("districts", DEFAULT_DISTRICT, "state_code", selectedStateCode);
+        subdistrict = auto(murshidabadBlocks());
+        localBodyType = auto(list("Block"));
+        localBodyType.setText("Block", false);
+        localBody = auto(murshidabadBlocks());
+        localBody.setHint("Select block");
+        localBody.setThreshold(0);
+        localBody.setOnClickListener(v -> localBody.showDropDown());
+        localBody.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                localBody.showDropDown();
+            }
+        });
         ward = auto(db.listWards(selectedLocalBodyCode));
-        village = auto(db.listVillages(selectedDistrictCode, selectedSubdistrictCode, selectedLocalBodyCode));
+        village = auto(list());
+        village.setHint("Type village name");
+        village.setThreshold(Integer.MAX_VALUE);
         lmpDate = input(patient == null ? LocalDate.now().toString() : value(patient.lmpDate));
         eddDate = input(patient == null ? LocalDate.now().plusDays(280).toString() : value(patient.eddDate));
         motivator = auto(db.listNames("custom_motivators"));
         doctor = auto(db.listNames("custom_doctors"));
+        lmpDate.setHint("YYYY-MM-DD");
+        eddDate.setHint("YYYY-MM-DD");
+        motivator.setHint("Optional");
+        doctor.setHint("Doctor name");
         visit1 = readOnlyInput(patient == null ? LocalDate.now().toString() : value(patient.visit1));
         visit2 = input(value(patient == null ? null : patient.visit2));
         visit3 = input(value(patient == null ? null : patient.visit3));
         finalVisit = input(value(patient == null ? null : patient.finalVisit));
         remarks = input(value(patient == null ? null : patient.remarks));
+        visit2.setHint("YYYY-MM-DD");
+        visit3.setHint("YYYY-MM-DD");
+        finalVisit.setHint("YYYY-MM-DD");
+        remarks.setHint("Notes");
+        attachDatePicker(lmpDate);
+        attachDatePicker(visit2);
+        attachDatePicker(visit3);
+        attachDatePicker(finalVisit);
 
         if (patient != null) {
             state.setText(value(patient.stateName), false);
@@ -293,24 +484,20 @@ public class MainActivity extends Activity {
             district.setText(value(patient.districtName), false);
             selectedDistrictCode = db.getCodeByNameAndParent("districts", text(district), "state_code", selectedStateCode);
             subdistrict.setText(value(patient.subdistrictName), false);
-            localBodyType.setText(value(patient.localBodyType), false);
-            setAdapter(localBody, db.listLocalBodies(selectedDistrictCode));
+            localBodyType.setText("Block", false);
+            setAdapter(localBody, murshidabadBlocks());
             localBody.setText(value(patient.localBodyName), false);
             selectedLocalBodyCode = db.getCodeByNameAndParent("local_bodies", text(localBody), "district_code", selectedDistrictCode);
             setAdapter(ward, db.listWards(selectedLocalBodyCode));
             ward.setText(value(patient.wardName), false);
-            setAdapter(village, db.listVillages(selectedDistrictCode, selectedSubdistrictCode, selectedLocalBodyCode));
             village.setText(value(patient.villageName), false);
             motivator.setText(value(patient.motivatorName), false);
             doctor.setText(value(patient.doctorName), false);
-            refreshDistrictChildren(false);
         }
 
         lmpDate.addTextChangedListener(simpleWatcher(s -> updateEdd()));
-        state.setOnItemClickListener((parent, view, position, id) -> refreshDistricts(true));
-        district.setOnItemClickListener((parent, view, position, id) -> refreshDistrictChildren(true));
-        subdistrict.setOnItemClickListener((parent, view, position, id) -> refreshVillageAdapter(true));
-        localBody.setOnItemClickListener((parent, view, position, id) -> refreshWardAndVillageAdapters(true));
+        subdistrict.setOnItemClickListener((parent, view, position, id) -> localBody.setText(text(subdistrict), false));
+        localBody.setOnItemClickListener((parent, view, position, id) -> subdistrict.setText(text(localBody), false));
 
         boolean lockedForStaff = patient != null && patient.recordLocked && !isAdmin();
         form.addView(section("Patient Information",
@@ -319,12 +506,9 @@ public class MainActivity extends Activity {
                 row("Mobile Number *", mobile),
                 row("State / UT *", state),
                 row("District *", district),
-                row("Sub-District", subdistrict),
-                row("Panchayat / Municipality Type", localBodyType),
-                row("Panchayat / Municipality", localBody),
-                row("Ward", ward),
+                row("Block Name *", localBody),
                 row("Village *", village),
-                row("Motivator Name *", motivator),
+                row("Motivator Name", motivator),
                 row("Doctor Name", doctor)
         ));
         form.addView(section("Pregnancy Dates",
@@ -380,56 +564,71 @@ public class MainActivity extends Activity {
             toast(validation);
             return;
         }
+        if (shouldConfirmFinalLock(old, p)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Lock Patient Record")
+                    .setMessage("Saving a final visit locks this record for staff users. Continue?")
+                    .setPositiveButton("Save and Lock", (dialog, which) -> persistPatient(p, old))
+                    .setNegativeButton("Cancel", null)
+                    .show();
+            return;
+        }
+        persistPatient(p, old);
+    }
+
+    private boolean shouldConfirmFinalLock(Patient old, Patient p) {
+        return !empty(p.finalVisit) && (old == null || empty(old.finalVisit));
+    }
+
+    private void persistPatient(Patient p, Patient old) {
         try {
+            boolean creating = editingPatient == null;
             db.savePatient(p);
             if (old != null) {
                 logPatientDiff(old, p);
             }
-            db.logActivity(editingPatient == null ? "PATIENT_CREATE" : "PATIENT_UPDATE", p.patientId, currentUser);
-            hideKeyboard();
-            toast(editingPatient == null ? "Patient saved" : "Patient updated");
-            showPatientList(false);
+            db.logActivity(creating ? "PATIENT_CREATE" : "PATIENT_UPDATE", p.patientId, currentUser);
+            if (status != null) {
+                status.setText("Saving online...");
+            }
+            firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
+                hideKeyboard();
+                if (error != null) {
+                    rollbackPatientCache(p, old, creating);
+                    toast("Cloud save failed: " + error.getMessage());
+                    return;
+                }
+                toast(creating ? "Patient saved online" : "Patient updated online");
+                showPatientList(false);
+            }));
         } catch (Exception ex) {
             toast("Save failed: " + ex.getMessage());
         }
     }
 
-    private String validatePatient(Patient p) {
-        if (empty(p.patientName) || empty(p.mobileNumber) || empty(p.stateName) || empty(p.districtName) || empty(p.villageName) || empty(p.motivatorName)) {
-            return "Fill patient name, mobile, state, district, village, and motivator";
-        }
-        String digits = p.mobileNumber.replaceAll("\\D", "");
-        if (digits.length() < 10 || digits.length() > 15) {
-            return "Mobile number must contain 10 to 15 digits";
-        }
-        if (!validDate(p.lmpDate) || !validDate(p.eddDate) || !validDate(p.visit1) || !validDate(p.visit2) || !validDate(p.visit3) || !validDate(p.finalVisit)) {
-            return "Use date format YYYY-MM-DD";
-        }
+    private void rollbackPatientCache(Patient p, Patient old, boolean creating) {
         try {
-            if (!empty(p.lmpDate) && LocalDate.parse(p.lmpDate).isAfter(LocalDate.now())) {
-                return "LMP date cannot be in the future";
+            if (creating) {
+                db.deletePatient(p.id);
+                p.id = 0;
+            } else if (old != null) {
+                db.savePatient(old);
+                editingPatient = old;
             }
-            if (!empty(p.visit2) && LocalDate.parse(p.visit2).isBefore(LocalDate.parse(p.visit1))) {
-                return "2nd visit cannot be before 1st visit";
-            }
-            if (!empty(p.visit3) && LocalDate.parse(p.visit3).isBefore(LocalDate.parse(empty(p.visit2) ? p.visit1 : p.visit2))) {
-                return "3rd visit cannot be before previous visit";
-            }
-            if (!empty(p.finalVisit)) {
-                String previous = !empty(p.visit3) ? p.visit3 : (!empty(p.visit2) ? p.visit2 : p.visit1);
-                if (LocalDate.parse(p.finalVisit).isBefore(LocalDate.parse(previous))) {
-                    return "Final visit cannot be before previous visit";
-                }
-            }
-        } catch (DateTimeParseException ex) {
-            return "Use date format YYYY-MM-DD";
+        } catch (Exception ignored) {
         }
-        return null;
+    }
+
+    private String validatePatient(Patient p) {
+        return PatientRules.validate(p, LocalDate.now());
     }
 
     private void logPatientDiff(Patient old, Patient p) {
         db.logChange(p.patientId, "patient_name", old.patientName, p.patientName, currentUser);
         db.logChange(p.patientId, "mobile_number", old.mobileNumber, p.mobileNumber, currentUser);
+        db.logChange(p.patientId, "state_name", old.stateName, p.stateName, currentUser);
+        db.logChange(p.patientId, "district_name", old.districtName, p.districtName, currentUser);
+        db.logChange(p.patientId, "block_name", old.localBodyName, p.localBodyName, currentUser);
         db.logChange(p.patientId, "village_name", old.villageName, p.villageName, currentUser);
         db.logChange(p.patientId, "lmp_date", old.lmpDate, p.lmpDate, currentUser);
         db.logChange(p.patientId, "edd_date", old.eddDate, p.eddDate, currentUser);
@@ -451,10 +650,12 @@ public class MainActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         content.addView(page, new LinearLayout.LayoutParams(-1, -1));
         EditText search = input("");
-        search.setHint("Search name, patient ID, mobile, village, motivator, doctor, district");
+        search.setHint("Search name, ID, mobile, village, block, doctor");
         page.addView(search);
         LinearLayout tools = new LinearLayout(this);
         tools.addView(button("Export CSV", v -> exportPatientsCsv(text(search))));
+        tools.addView(button("Excel", v -> startExport(text(search), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")));
+        tools.addView(button("PDF", v -> startExport(text(search), REQ_EXPORT_PDF, "patients.pdf", "application/pdf")));
         tools.addView(button("New Patient", v -> showPatientForm(null)));
         page.addView(tools);
         ScrollView scroll = new ScrollView(this);
@@ -469,12 +670,23 @@ public class MainActivity extends Activity {
 
     private void renderPatientRows(LinearLayout list, List<Patient> patients, boolean adminMode) {
         list.removeAllViews();
-        list.addView(label(patients.size() + " patient(s)", 13, true));
+        TextView count = chip(patients.size() + " patient(s)", PRIMARY_SOFT, PRIMARY_DARK);
+        list.addView(count);
+        if (patients.isEmpty()) {
+            LinearLayout empty = card(SURFACE_WARM, 1, Color.rgb(230, 214, 190));
+            TextView title = label("No matching patient records", 15, true);
+            title.setTextColor(WARNING);
+            empty.addView(title);
+            empty.addView(smallText("Create a new patient record or adjust the search text."));
+            empty.addView(navButton("New Patient", v -> showPatientForm(null)));
+            list.addView(empty);
+            return;
+        }
         for (Patient p : patients) {
             LinearLayout card = card();
             card.addView(label(p.patientId + "  |  " + value(p.patientName), 15, true));
             card.addView(smallText("Mobile: " + value(p.mobileNumber) + "  Village: " + value(p.villageName)));
-            card.addView(smallText("District: " + value(p.districtName) + "  Local body: " + value(p.localBodyName)));
+            card.addView(smallText("District: " + value(p.districtName) + "  Block: " + value(p.localBodyName)));
             card.addView(smallText("Motivator: " + value(p.motivatorName) + "  Doctor: " + value(p.doctorName)));
             card.addView(smallText("LMP: " + value(p.lmpDate) + "  EDD: " + value(p.eddDate) + "  Final: " + value(p.finalVisit)));
             if (p.recordLocked) {
@@ -482,12 +694,20 @@ public class MainActivity extends Activity {
                 card.addView(locked);
             }
             LinearLayout actions = new LinearLayout(this);
-            actions.addView(button("Open", v -> showPatientForm(db.getPatient(p.id))));
+            actions.addView(button("View", v -> showPatientDetail(db.getPatient(p.id), adminMode)));
             if (adminMode && isAdmin()) {
                 actions.addView(button("Unlock", v -> {
-                    db.unlockPatient(p.id);
-                    db.logActivity("PATIENT_UNLOCK", p.patientId, currentUser);
-                    showPatientList(true);
+                    p.recordLocked = false;
+                    firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
+                        if (error != null) {
+                            p.recordLocked = true;
+                            toast("Unlock sync failed: " + error.getMessage());
+                            return;
+                        }
+                        db.unlockPatient(p.id);
+                        db.logActivity("PATIENT_UNLOCK", p.patientId, currentUser);
+                        showPatientList(true);
+                    }));
                 }));
                 actions.addView(button("Delete", v -> confirmDeletePatient(p)));
             }
@@ -496,14 +716,79 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void showPatientDetail(Patient p, boolean adminMode) {
+        if (p == null) {
+            toast("Patient not found");
+            return;
+        }
+        setPage("Patient Detail");
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(page);
+        content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+
+        page.addView(section(value(p.patientName),
+                smallText("Patient ID: " + value(p.patientId)),
+                smallText("Mobile: " + value(p.mobileNumber)),
+                smallText("State: " + value(p.stateName) + " | District: " + value(p.districtName)),
+                smallText("Block: " + value(p.localBodyName) + " | Village: " + value(p.villageName)),
+                smallText("Motivator: " + value(p.motivatorName) + " | Doctor: " + value(p.doctorName))
+        ));
+        page.addView(section("Visit Timeline",
+                smallText("LMP: " + value(p.lmpDate)),
+                smallText("EDD: " + value(p.eddDate)),
+                smallText("1st Visit: " + value(p.visit1)),
+                smallText("2nd Visit: " + value(p.visit2)),
+                smallText("3rd Visit: " + value(p.visit3)),
+                smallText("Final Visit: " + value(p.finalVisit)),
+                smallText("Remarks: " + value(p.remarks))
+        ));
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        actions.addView(navButton("Back to Search", v -> showPatientList(adminMode)));
+        if (!p.recordLocked || isAdmin()) {
+            actions.addView(button("Edit Patient", v -> showPatientForm(db.getPatient(p.id))));
+        }
+        actions.addView(button("Export Single Excel", v -> startPatientExport(p.id, REQ_EXPORT_EXCEL, value(p.patientId) + ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")));
+        actions.addView(button("Export Single PDF", v -> startPatientExport(p.id, REQ_EXPORT_PDF, value(p.patientId) + ".pdf", "application/pdf")));
+        if (p.recordLocked) {
+            actions.addView(chip("Locked after final visit", ACCENT, Color.WHITE));
+        }
+        if (adminMode && isAdmin()) {
+            actions.addView(button("Unlock", v -> {
+                p.recordLocked = false;
+                firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
+                    if (error != null) {
+                        p.recordLocked = true;
+                        toast("Unlock sync failed: " + error.getMessage());
+                        return;
+                    }
+                    db.unlockPatient(p.id);
+                    db.logActivity("PATIENT_UNLOCK", p.patientId, currentUser);
+                    showPatientDetail(db.getPatient(p.id), true);
+                }));
+            }));
+            actions.addView(button("Delete", v -> confirmDeletePatient(p)));
+        }
+        page.addView(section("Actions", actions));
+    }
+
     private void confirmDeletePatient(Patient p) {
         new AlertDialog.Builder(this)
                 .setTitle("Delete Patient")
                 .setMessage("Delete " + p.patientName + " (" + p.patientId + ")?")
                 .setPositiveButton("Delete", (dialog, which) -> {
-                    db.deletePatient(p.id);
-                    db.logActivity("PATIENT_DELETE", p.patientId, currentUser);
-                    showPatientList(true);
+                    firebase.deletePatient(p, (unused, error) -> runOnUiThread(() -> {
+                        if (error != null) {
+                            toast("Delete sync failed: " + error.getMessage());
+                            return;
+                        }
+                        db.deletePatient(p.id);
+                        db.logActivity("PATIENT_DELETE", p.patientId, currentUser);
+                        showPatientList(true);
+                    }));
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -520,7 +805,9 @@ public class MainActivity extends Activity {
         page.addView(section("Patient List",
                 smallText("Total records: " + total),
                 navButton("Open Patient Search", v -> showPatientList(false)),
-                navButton("Export Patient CSV", v -> exportPatientsCsv(""))
+                navButton("Export Patient CSV", v -> exportPatientsCsv("")),
+                navButton("Export Patient Excel", v -> startExport("", REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                navButton("Export Patient PDF", v -> startExport("", REQ_EXPORT_PDF, "patients.pdf", "application/pdf"))
         ));
         LinearLayout visits = new LinearLayout(this);
         visits.setOrientation(LinearLayout.VERTICAL);
@@ -566,6 +853,7 @@ public class MainActivity extends Activity {
         page.addView(section("Database Backup",
                 smallText("Backups are stored in the app external files backup folder."),
                 navButton("Create Backup Now", v -> createBackupNow()),
+                navButton("Export Backup File", v -> startBackupExport()),
                 navButton("Refresh", v -> showBackup())
         ));
         File dir = backupDir();
@@ -580,11 +868,103 @@ public class MainActivity extends Activity {
                 LinearLayout row = new LinearLayout(this);
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.addView(smallText(file.getName() + "  (" + file.length() + " bytes)"), new LinearLayout.LayoutParams(0, -2, 1));
-                row.addView(button("Restore", v -> confirmRestore(file)));
+                if (isAdmin()) {
+                    row.addView(button("Restore", v -> confirmRestore(file)));
+                }
                 list.addView(row);
             }
         }
         page.addView(section("Existing Backups", list));
+    }
+
+    private void startExport(String filter, int requestCode, String fileName, String mimeType) {
+        pendingExportFilter = value(filter);
+        pendingExportPatientId = -1;
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(mimeType);
+        intent.putExtra(Intent.EXTRA_TITLE, fileName);
+        try {
+            startActivityForResult(intent, requestCode);
+        } catch (Exception ex) {
+            toast("No document app available: " + ex.getMessage());
+        }
+    }
+
+    private void startPatientExport(long patientId, int requestCode, String fileName, String mimeType) {
+        pendingExportFilter = "";
+        pendingExportPatientId = patientId;
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(mimeType);
+        intent.putExtra(Intent.EXTRA_TITLE, fileName);
+        try {
+            startActivityForResult(intent, requestCode);
+        } catch (Exception ex) {
+            toast("No document app available: " + ex.getMessage());
+        }
+    }
+
+    private void startBackupExport() {
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/octet-stream");
+        intent.putExtra(Intent.EXTRA_TITLE, "blue_bird_backup_" + LocalDate.now() + ".db");
+        try {
+            startActivityForResult(intent, REQ_EXPORT_BACKUP);
+        } catch (Exception ex) {
+            toast("No document app available: " + ex.getMessage());
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            return;
+        }
+        Uri uri = data.getData();
+        try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+            if (out == null) {
+                toast("Could not open export location");
+                return;
+            }
+            if (requestCode == REQ_EXPORT_BACKUP) {
+                copyFile(getDatabasePath(MaternalDbHelper.DB_NAME), out);
+                toast("Backup exported");
+            } else if (requestCode == REQ_EXPORT_EXCEL) {
+                writePatientsXlsx(out, pendingExportPatients());
+                toast("Excel export saved");
+            } else if (requestCode == REQ_EXPORT_PDF) {
+                writePatientsPdf(out, pendingExportPatients());
+                toast("PDF export saved");
+            }
+            shareExport(uri, requestCode);
+        } catch (Exception ex) {
+            toast("Export failed: " + ex.getMessage());
+        }
+    }
+
+    private List<Patient> pendingExportPatients() {
+        if (pendingExportPatientId > 0) {
+            Patient p = db.getPatient(pendingExportPatientId);
+            return p == null ? java.util.Collections.emptyList() : java.util.Collections.singletonList(p);
+        }
+        return db.listPatients(pendingExportFilter);
+    }
+
+    private void shareExport(Uri uri, int requestCode) {
+        if (requestCode == REQ_EXPORT_BACKUP) {
+            return;
+        }
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType(requestCode == REQ_EXPORT_PDF ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        share.putExtra(Intent.EXTRA_STREAM, uri);
+        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivity(Intent.createChooser(share, "Share export"));
+        } catch (Exception ignored) {
+        }
     }
 
     private void exportPatientsCsv(String filter) {
@@ -599,30 +979,23 @@ public class MainActivity extends Activity {
             }
             File target = new File(dir, "patients_" + System.currentTimeMillis() + ".csv");
             StringBuilder csv = new StringBuilder();
-            csv.append("Serial,Entry Date,Patient Name,Patient ID,State,District,Sub-District,Local Body Type,Local Body,Ward,Village,Mobile,Motivator,Doctor,LMP,EDD,1st Visit,2nd Visit,3rd Visit,Final Visit,Locked,Remarks\n");
+            String[] headers = patientExportHeaders();
+            for (int i = 0; i < headers.length; i++) {
+                if (i > 0) {
+                    csv.append(',');
+                }
+                csv.append(csv(headers[i]));
+            }
+            csv.append('\n');
             for (Patient p : db.listPatients(filter)) {
-                csv.append(p.serialNumber).append(',')
-                        .append(csv(p.entryDate)).append(',')
-                        .append(csv(p.patientName)).append(',')
-                        .append(csv(p.patientId)).append(',')
-                        .append(csv(p.stateName)).append(',')
-                        .append(csv(p.districtName)).append(',')
-                        .append(csv(p.subdistrictName)).append(',')
-                        .append(csv(p.localBodyType)).append(',')
-                        .append(csv(p.localBodyName)).append(',')
-                        .append(csv(p.wardName)).append(',')
-                        .append(csv(p.villageName)).append(',')
-                        .append(csv(p.mobileNumber)).append(',')
-                        .append(csv(p.motivatorName)).append(',')
-                        .append(csv(p.doctorName)).append(',')
-                        .append(csv(p.lmpDate)).append(',')
-                        .append(csv(p.eddDate)).append(',')
-                        .append(csv(p.visit1)).append(',')
-                        .append(csv(p.visit2)).append(',')
-                        .append(csv(p.visit3)).append(',')
-                        .append(csv(p.finalVisit)).append(',')
-                        .append(p.recordLocked ? "1" : "0").append(',')
-                        .append(csv(p.remarks)).append('\n');
+                String[] values = patientExportValues(p);
+                for (int i = 0; i < values.length; i++) {
+                    if (i > 0) {
+                        csv.append(',');
+                    }
+                    csv.append(csv(values[i]));
+                }
+                csv.append('\n');
             }
             try (FileOutputStream out = new FileOutputStream(target)) {
                 out.write(csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -632,6 +1005,116 @@ public class MainActivity extends Activity {
         } catch (Exception ex) {
             toast("Export failed: " + ex.getMessage());
         }
+    }
+
+    private void writePatientsXlsx(OutputStream out, List<Patient> patients) throws Exception {
+        try (ZipOutputStream zip = new ZipOutputStream(out)) {
+            addZipEntry(zip, "[Content_Types].xml",
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                            "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
+                            "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+                            "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
+                            "<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>" +
+                            "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>" +
+                            "</Types>");
+            addZipEntry(zip, "_rels/.rels",
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                            "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>" +
+                            "</Relationships>");
+            addZipEntry(zip, "xl/_rels/workbook.xml.rels",
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                            "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>" +
+                            "</Relationships>");
+            addZipEntry(zip, "xl/workbook.xml",
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                            "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">" +
+                            "<sheets><sheet name=\"Patients\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");
+            addZipEntry(zip, "xl/worksheets/sheet1.xml", patientsSheetXml(patients));
+        }
+    }
+
+    private String patientsSheetXml(List<Patient> patients) {
+        String[] headers = patientExportHeaders();
+        StringBuilder xml = new StringBuilder();
+        xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        xml.append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+        appendXlsxRow(xml, 1, headers);
+        int row = 2;
+        for (Patient p : patients) {
+            appendXlsxRow(xml, row++, patientExportValues(p));
+        }
+        xml.append("</sheetData></worksheet>");
+        return xml.toString();
+    }
+
+    private void appendXlsxRow(StringBuilder xml, int rowNumber, String[] values) {
+        xml.append("<row r=\"").append(rowNumber).append("\">");
+        for (int i = 0; i < values.length; i++) {
+            xml.append("<c r=\"").append((char) ('A' + i)).append(rowNumber).append("\" t=\"inlineStr\"><is><t>")
+                    .append(xml(value(values[i])))
+                    .append("</t></is></c>");
+        }
+        xml.append("</row>");
+    }
+
+    private void addZipEntry(ZipOutputStream zip, String name, String content) throws Exception {
+        zip.putNextEntry(new ZipEntry(name));
+        zip.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        zip.closeEntry();
+    }
+
+    private void writePatientsPdf(OutputStream out, List<Patient> patients) throws Exception {
+        PdfDocument document = new PdfDocument();
+        Paint titlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        titlePaint.setTextSize(16);
+        titlePaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        titlePaint.setColor(PRIMARY_DARK);
+        Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        textPaint.setTextSize(9);
+        textPaint.setColor(TEXT);
+        int pageWidth = 595;
+        int pageHeight = 842;
+        int margin = 28;
+        int pageNo = 1;
+        PdfDocument.Page page = newPdfPage(document, pageWidth, pageHeight, pageNo);
+        int y = drawPdfHeader(page, titlePaint, textPaint, margin, pageNo);
+        for (Patient p : patients) {
+            if (y > pageHeight - 70) {
+                document.finishPage(page);
+                page = newPdfPage(document, pageWidth, pageHeight, ++pageNo);
+                y = drawPdfHeader(page, titlePaint, textPaint, margin, pageNo);
+            }
+            page.getCanvas().drawText(value(p.patientId) + " | " + value(p.patientName), margin, y, textPaint);
+            y += 14;
+            page.getCanvas().drawText("Mobile: " + value(p.mobileNumber) + " | Block: " + value(p.localBodyName) + " | Village: " + value(p.villageName), margin, y, textPaint);
+            y += 14;
+            page.getCanvas().drawText("LMP: " + value(p.lmpDate) + " | EDD: " + value(p.eddDate) + " | Final: " + value(p.finalVisit), margin, y, textPaint);
+            y += 20;
+        }
+        document.finishPage(page);
+        document.writeTo(out);
+        document.close();
+    }
+
+    private PdfDocument.Page newPdfPage(PdfDocument document, int width, int height, int pageNo) {
+        return document.startPage(new PdfDocument.PageInfo.Builder(width, height, pageNo).create());
+    }
+
+    private int drawPdfHeader(PdfDocument.Page page, Paint titlePaint, Paint textPaint, int margin, int pageNo) {
+        page.getCanvas().drawText(HOSPITAL_NAME, margin, 36, titlePaint);
+        page.getCanvas().drawText(APP_NAME + " | Patient Export | Page " + pageNo, margin, 54, textPaint);
+        page.getCanvas().drawLine(margin, 66, 565, 66, textPaint);
+        return 86;
+    }
+
+    private String[] patientExportHeaders() {
+        return new String[]{"Serial", "Entry Date", "Patient Name", "Patient ID", "State", "District", "Block", "Village", "Mobile", "Motivator", "Doctor", "LMP", "EDD", "1st Visit", "2nd Visit", "3rd Visit", "Final Visit", "Locked", "Remarks"};
+    }
+
+    private String[] patientExportValues(Patient p) {
+        return new String[]{String.valueOf(p.serialNumber), value(p.entryDate), value(p.patientName), value(p.patientId), value(p.stateName), value(p.districtName), value(p.localBodyName), value(p.villageName), value(p.mobileNumber), value(p.motivatorName), value(p.doctorName), value(p.lmpDate), value(p.eddDate), value(p.visit1), value(p.visit2), value(p.visit3), value(p.finalVisit), p.recordLocked ? "1" : "0", value(p.remarks)};
     }
 
     private void createBackupNow() {
@@ -655,6 +1138,10 @@ public class MainActivity extends Activity {
     }
 
     private void restoreBackup(File backup) {
+        if (!isAdmin()) {
+            toast("Only admin can restore backups");
+            return;
+        }
         try {
             File pre = new File(backupDir(), "pre_restore_" + System.currentTimeMillis() + ".db");
             copyFile(getDatabasePath(MaternalDbHelper.DB_NAME), pre);
@@ -692,6 +1179,16 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void copyFile(File source, OutputStream out) throws Exception {
+        try (FileInputStream in = new FileInputStream(source)) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+            }
+        }
+    }
+
     private void showAdmin() {
         setPage("Administration");
         ScrollView scroll = new ScrollView(this);
@@ -720,9 +1217,33 @@ public class MainActivity extends Activity {
     private View usersView() {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        for (String[] user : db.listUsers()) {
-            list.addView(smallText(user[1] + "  (" + user[2] + ")"));
-        }
+        list.addView(smallText("Loading Firebase roles..."));
+        firebase.listRoles((rows, error) -> runOnUiThread(() -> {
+            list.removeAllViews();
+            list.addView(smallText("Create the Firebase Auth account in Firebase Console, then grant app access here."));
+            if (error != null) {
+                list.addView(smallText("Could not load roles: " + error.getMessage()));
+                return;
+            }
+            if (rows == null || rows.isEmpty()) {
+                list.addView(smallText("No app roles added yet."));
+                return;
+            }
+            for (String[] user : rows) {
+                LinearLayout row = new LinearLayout(this);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.addView(smallText(user[0] + "  (" + user[1] + ")"), new LinearLayout.LayoutParams(0, -2, 1));
+                if (!user[0].equalsIgnoreCase(currentUser)) {
+                    row.addView(button("Remove Access", v -> firebase.deleteRole(user[0], (unused, deleteError) -> runOnUiThread(() -> {
+                        if (deleteError != null) {
+                            toast("Could not remove access: " + deleteError.getMessage());
+                        }
+                        showAdmin();
+                    }))));
+                }
+                list.addView(row);
+            }
+        }));
         return list;
     }
 
@@ -771,28 +1292,28 @@ public class MainActivity extends Activity {
     private void addUserDialog() {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        EditText username = input("");
-        EditText password = input("");
+        EditText email = input("");
         AutoCompleteTextView role = auto(list("STAFF", "ADMIN"));
         role.setText("STAFF", false);
-        box.addView(row("Username", username));
-        box.addView(row("Password", password));
+        box.addView(smallText("On the Spark plan, create the Email/Password Auth account in Firebase Console first. This screen grants or removes app access."));
+        box.addView(row("Email", email));
         box.addView(row("Role", role));
         new AlertDialog.Builder(this)
-                .setTitle("Add User")
+                .setTitle("Grant App Access")
                 .setView(box)
                 .setPositiveButton("Save", (dialog, which) -> {
-                    if (empty(text(username)) || empty(text(password))) {
-                        toast("Username and password are required");
+                    if (empty(text(email))) {
+                        toast("Email is required");
                         return;
                     }
-                    try {
-                        db.saveUser(text(username), text(password), text(role));
-                        db.logActivity("USER_CREATE", text(username), currentUser);
+                    firebase.saveRole(text(email), text(role), (unused, error) -> runOnUiThread(() -> {
+                        if (error != null) {
+                            toast("Could not grant access: " + error.getMessage());
+                            return;
+                        }
+                        db.logActivity("USER_ACCESS_GRANT", text(email), currentUser);
                         showAdmin();
-                    } catch (Exception ex) {
-                        toast("Could not add user: " + ex.getMessage());
-                    }
+                    }));
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -848,12 +1369,42 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void attachDatePicker(EditText field) {
+        field.setFocusable(false);
+        field.setOnClickListener(v -> showDatePicker(field));
+    }
+
+    private void showDatePicker(EditText field) {
+        LocalDate date;
+        try {
+            date = empty(text(field)) ? LocalDate.now() : LocalDate.parse(text(field));
+        } catch (Exception ex) {
+            date = LocalDate.now();
+        }
+        new DatePickerDialog(
+                this,
+                (view, year, month, dayOfMonth) -> field.setText(LocalDate.of(year, month + 1, dayOfMonth).toString()),
+                date.getYear(),
+                date.getMonthValue() - 1,
+                date.getDayOfMonth()
+        ).show();
+    }
+
     private LinearLayout section(String title, View... rows) {
         LinearLayout box = card();
-        TextView heading = label(title, 17, true);
-        heading.setTextColor(PRIMARY);
-        heading.setPadding(0, 0, 0, dp(6));
-        box.addView(heading);
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView accent = new TextView(this);
+        accent.setBackground(rounded(ACCENT, dp(2), 0, ACCENT));
+        LinearLayout.LayoutParams accentLp = new LinearLayout.LayoutParams(dp(4), dp(24));
+        accentLp.setMargins(0, 0, dp(9), 0);
+        head.addView(accent, accentLp);
+        TextView heading = label(title, 16, true);
+        heading.setTextColor(PRIMARY_DARK);
+        head.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
+        head.setPadding(0, 0, 0, dp(10));
+        box.addView(head);
         for (View row : rows) {
             box.addView(row);
         }
@@ -863,9 +1414,10 @@ public class MainActivity extends Activity {
     private LinearLayout row(String label, View input) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(0, dp(5), 0, dp(5));
+        row.setPadding(0, dp(6), 0, dp(7));
         TextView tv = label(label, 12, true);
         tv.setTextColor(MUTED);
+        tv.setLetterSpacing(0.03f);
         row.addView(tv);
         row.addView(input, new LinearLayout.LayoutParams(-1, dp(46)));
         return row;
@@ -878,13 +1430,26 @@ public class MainActivity extends Activity {
     private LinearLayout card(int color, int strokeWidth, int strokeColor) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackground(rounded(color, dp(12), strokeWidth == 0 ? 0 : dp(strokeWidth), strokeColor));
-        box.setPadding(dp(15), dp(15), dp(15), dp(15));
+        box.setBackground(rounded(color, dp(8), strokeWidth == 0 ? 0 : dp(strokeWidth), strokeColor));
+        box.setPadding(dp(16), dp(16), dp(16), dp(16));
         box.setElevation(dp(2));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(12));
         box.setLayoutParams(lp);
+        animateIn(box);
         return box;
+    }
+
+    private TextView brandMark() {
+        TextView mark = label("BBH", 16, true);
+        mark.setTextColor(Color.WHITE);
+        mark.setGravity(Gravity.CENTER);
+        mark.setBackground(gradient(PRIMARY, ACCENT, dp(28)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(56), dp(56));
+        lp.gravity = Gravity.CENTER_HORIZONTAL;
+        lp.setMargins(0, 0, 0, dp(12));
+        mark.setLayoutParams(lp);
+        return mark;
     }
 
     private TextView label(String text, int sp, boolean bold) {
@@ -911,8 +1476,10 @@ public class MainActivity extends Activity {
         edit.setTextSize(15);
         edit.setTextColor(TEXT);
         edit.setHintTextColor(Color.rgb(135, 151, 166));
-        edit.setBackground(rounded(SURFACE_ALT, dp(10), dp(1), BORDER));
+        edit.setBackground(rounded(SURFACE_ALT, dp(8), dp(1), BORDER));
         edit.setPadding(dp(12), 0, dp(12), 0);
+        edit.setOnFocusChangeListener((v, hasFocus) ->
+                edit.setBackground(rounded(hasFocus ? Color.WHITE : SURFACE_ALT, dp(8), dp(1), hasFocus ? PRIMARY : BORDER)));
         return edit;
     }
 
@@ -920,7 +1487,7 @@ public class MainActivity extends Activity {
         EditText edit = input(value);
         edit.setEnabled(false);
         edit.setTextColor(MUTED);
-        edit.setBackground(rounded(Color.rgb(235, 241, 246), dp(10), dp(1), BORDER));
+        edit.setBackground(rounded(Color.rgb(235, 241, 246), dp(8), dp(1), BORDER));
         return edit;
     }
 
@@ -931,8 +1498,10 @@ public class MainActivity extends Activity {
         view.setTextSize(15);
         view.setTextColor(TEXT);
         view.setHintTextColor(Color.rgb(135, 151, 166));
-        view.setBackground(rounded(SURFACE_ALT, dp(10), dp(1), BORDER));
+        view.setBackground(rounded(SURFACE_ALT, dp(8), dp(1), BORDER));
         view.setPadding(dp(12), 0, dp(12), 0);
+        view.setOnFocusChangeListener((v, hasFocus) ->
+                view.setBackground(rounded(hasFocus ? Color.WHITE : SURFACE_ALT, dp(8), dp(1), hasFocus ? PRIMARY : BORDER)));
         setAdapter(view, values);
         return view;
     }
@@ -944,20 +1513,28 @@ public class MainActivity extends Activity {
     private Button navButton(String text, View.OnClickListener listener) {
         Button b = button(text, listener);
         b.setAllCaps(false);
-        b.setTextColor(PRIMARY_DARK);
-        b.setBackground(rounded(Color.rgb(232, 246, 242), dp(22), dp(1), Color.rgb(190, 224, 215)));
+        b.setTextColor(PRIMARY);
+        b.setBackground(rounded(PRIMARY_SOFT, dp(18), dp(1), Color.rgb(184, 207, 225)));
         b.setElevation(dp(1));
         return b;
     }
 
     private Button button(String text, View.OnClickListener listener) {
-        Button b = new Button(this);
+        Button b = new Button(this) {
+            @Override
+            public boolean performClick() {
+                super.performClick();
+                return true;
+            }
+        };
         b.setText(text);
         b.setTextColor(Color.WHITE);
         b.setTextSize(13);
         b.setTypeface(b.getTypeface(), Typeface.BOLD);
         b.setAllCaps(false);
-        b.setBackground(gradient(PRIMARY, PRIMARY_DARK, dp(22)));
+        b.setMinHeight(dp(42));
+        b.setMinimumHeight(dp(42));
+        b.setBackground(gradient(PRIMARY, PRIMARY_DARK, dp(8)));
         b.setElevation(dp(2));
         b.setOnClickListener(listener);
         b.setOnTouchListener((view, event) -> {
@@ -965,10 +1542,13 @@ public class MainActivity extends Activity {
                 view.animate().scaleX(0.97f).scaleY(0.97f).setDuration(80).start();
             } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
                 view.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    view.performClick();
+                }
             }
-            return false;
+            return true;
         });
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(44));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(42));
         lp.setMargins(dp(4), dp(4), dp(4), dp(4));
         b.setLayoutParams(lp);
         return b;
@@ -979,11 +1559,22 @@ public class MainActivity extends Activity {
         chip.setTextColor(fg);
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(10), dp(5), dp(10), dp(5));
-        chip.setBackground(rounded(bg, dp(16), 0, bg));
+        chip.setBackground(rounded(bg, dp(14), 0, bg));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
         lp.setMargins(0, dp(6), 0, dp(2));
         chip.setLayoutParams(lp);
         return chip;
+    }
+
+    private void animateIn(View view) {
+        view.setAlpha(0f);
+        view.setTranslationY(dp(8));
+        view.post(() -> view.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(220)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .start());
     }
 
     private GradientDrawable rounded(int color, int radius, int strokeWidth, int strokeColor) {
@@ -1017,6 +1608,37 @@ public class MainActivity extends Activity {
         return java.util.Arrays.asList(values);
     }
 
+    private List<String> murshidabadBlocks() {
+        return list(
+                "BELDANGA I",
+                "BELDANGA II",
+                "BERHAMPUR",
+                "BHAGAWANGOLA I",
+                "BHAGAWANGOLA II",
+                "BHARATPUR I",
+                "BHARATPUR II",
+                "BURWAN",
+                "DOMKAL",
+                "FARAKKA",
+                "HARIHARPARA",
+                "JALANGI",
+                "KANDI",
+                "KHARGRAM",
+                "LALGOLA",
+                "MURSHIDABAD-JIAGANJ",
+                "NABAGRAM",
+                "NOWDA",
+                "RAGHUNATHGANJ I",
+                "RAGHUNATHGANJ II",
+                "RANINAGAR I",
+                "RANINAGAR II",
+                "SAGARDIGHI",
+                "SAMSHERGANJ",
+                "SUTI I",
+                "SUTI II"
+        );
+    }
+
     private String text(TextView view) {
         String value = view.getText() == null ? "" : view.getText().toString().trim();
         return value.isEmpty() ? null : value;
@@ -1031,20 +1653,17 @@ public class MainActivity extends Activity {
         return "\"" + safe + "\"";
     }
 
-    private boolean empty(String value) {
-        return value == null || value.trim().isEmpty();
+    private String xml(String value) {
+        return value(value)
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 
-    private boolean validDate(String value) {
-        if (empty(value)) {
-            return true;
-        }
-        try {
-            LocalDate.parse(value);
-            return true;
-        } catch (DateTimeParseException ex) {
-            return false;
-        }
+    private boolean empty(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private boolean isAdmin() {

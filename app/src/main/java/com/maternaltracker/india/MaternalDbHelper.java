@@ -6,15 +6,11 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 final class MaternalDbHelper extends SQLiteOpenHelper {
@@ -66,7 +62,6 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE local_bodies (code TEXT PRIMARY KEY, state_code TEXT, district_code TEXT, subdistrict_code TEXT, name TEXT NOT NULL, kind TEXT)");
         db.execSQL("CREATE TABLE wards (code TEXT PRIMARY KEY, local_body_code TEXT, name TEXT NOT NULL)");
         db.execSQL("CREATE TABLE villages (code TEXT PRIMARY KEY, state_code TEXT, district_code TEXT, subdistrict_code TEXT, local_body_code TEXT, name TEXT NOT NULL)");
-        seedDefaultAdmin(db);
         seedStates(db);
     }
 
@@ -76,13 +71,11 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
             db.execSQL("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))");
             db.execSQL("CREATE TABLE IF NOT EXISTS activity_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, details TEXT, performed_by TEXT NOT NULL, performed_at TEXT NOT NULL DEFAULT (datetime('now')))");
             db.execSQL("CREATE TABLE IF NOT EXISTS change_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id TEXT NOT NULL, field_name TEXT NOT NULL, old_value TEXT, new_value TEXT, changed_by TEXT NOT NULL, changed_at TEXT NOT NULL DEFAULT (datetime('now')))");
-            seedDefaultAdmin(db);
         }
     }
 
     void ensureCoreData() {
         SQLiteDatabase db = getWritableDatabase();
-        seedDefaultAdmin(db);
         seedStates(db);
     }
 
@@ -103,60 +96,6 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         }
     }
 
-    private void seedDefaultAdmin(SQLiteDatabase db) {
-        try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM users", null)) {
-            if (c.moveToFirst() && c.getInt(0) > 0) {
-                return;
-            }
-        }
-        ContentValues values = new ContentValues();
-        values.put("username", "admin");
-        values.put("password_hash", hashPassword("admin123"));
-        values.put("role", "ADMIN");
-        db.insertWithOnConflict("users", null, values, SQLiteDatabase.CONFLICT_IGNORE);
-    }
-
-    String loginRole(String username, String password) {
-        if (username == null || password == null) {
-            return null;
-        }
-        SQLiteDatabase db = getReadableDatabase();
-        try (Cursor c = db.rawQuery(
-                "SELECT role, password_hash FROM users WHERE username = ? LIMIT 1",
-                new String[]{username.trim()})) {
-            if (!c.moveToFirst()) {
-                return null;
-            }
-            String stored = c.getString(1);
-            String supplied = password.trim();
-            if (!hashPassword(supplied).equals(stored) && !supplied.equals(stored)) {
-                return null;
-            }
-            return c.getString(0);
-        }
-    }
-
-    long saveUser(String username, String password, String role) {
-        if (username == null || username.trim().isEmpty() || password == null || password.trim().isEmpty()) {
-            throw new IllegalArgumentException("Username and password are required");
-        }
-        ContentValues values = new ContentValues();
-        values.put("username", username.trim());
-        values.put("password_hash", hashPassword(password.trim()));
-        values.put("role", role == null || role.trim().isEmpty() ? "STAFF" : role.trim());
-        return getWritableDatabase().insertWithOnConflict("users", null, values, SQLiteDatabase.CONFLICT_ABORT);
-    }
-
-    List<String[]> listUsers() {
-        List<String[]> out = new ArrayList<>();
-        try (Cursor c = getReadableDatabase().rawQuery("SELECT id, username, role FROM users ORDER BY username", null)) {
-            while (c.moveToNext()) {
-                out.add(new String[]{String.valueOf(c.getLong(0)), c.getString(1), c.getString(2)});
-            }
-        }
-        return out;
-    }
-
     String nextPatientId() {
         LocalDate today = LocalDate.now();
         String month = today.format(MONTH_FMT);
@@ -169,14 +108,54 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
             if (c.moveToFirst()) {
                 next = c.getInt(0) + 1;
             }
-            return String.format(Locale.US, "PT%02d-%s-%s", next, month, year);
+            String candidate = PatientRules.patientId(next, month, year);
+            while (patientIdExists(db, candidate)) {
+                next++;
+                candidate = PatientRules.patientId(next, month, year);
+            }
+            return candidate;
         }
     }
 
     long savePatient(Patient patient) {
         SQLiteDatabase db = getWritableDatabase();
+        ContentValues values = patientValues(patient, patient.serialNumber > 0 ? patient.serialNumber : nextSerial(db));
+        long id;
+        if (patient.id > 0) {
+            id = db.update("patients", values, "id = ?", new String[]{String.valueOf(patient.id)});
+            id = patient.id;
+        } else {
+            id = db.insertWithOnConflict("patients", null, values, SQLiteDatabase.CONFLICT_ABORT);
+        }
+        patient.id = id;
+        patient.serialNumber = values.getAsInteger("serial_number");
+        patient.recordLocked = values.getAsInteger("record_locked") == 1;
+        insertLookup(db, "custom_motivators", patient.motivatorName);
+        insertLookup(db, "custom_doctors", patient.doctorName);
+        return id;
+    }
+
+    void replacePatientsFromCloud(List<Patient> patients) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            db.delete("patients", null, null);
+            for (Patient patient : patients) {
+                ContentValues values = patientValues(patient, patient.serialNumber);
+                long id = db.insertWithOnConflict("patients", null, values, SQLiteDatabase.CONFLICT_REPLACE);
+                patient.id = id;
+                insertLookup(db, "custom_motivators", patient.motivatorName);
+                insertLookup(db, "custom_doctors", patient.doctorName);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    private ContentValues patientValues(Patient patient, int serialNumber) {
         ContentValues values = new ContentValues();
-        values.put("serial_number", patient.serialNumber > 0 ? patient.serialNumber : nextSerial(db));
+        values.put("serial_number", serialNumber > 0 ? serialNumber : 1);
         values.put("patient_name", patient.patientName);
         values.put("patient_id", patient.patientId);
         values.put("mobile_number", patient.mobileNumber);
@@ -198,15 +177,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         values.put("entry_date", patient.entryDate);
         values.put("record_locked", patient.finalVisit == null || patient.finalVisit.isEmpty() ? 0 : 1);
         values.put("remarks", patient.remarks);
-        long id;
-        if (patient.id > 0) {
-            id = db.update("patients", values, "id = ?", new String[]{String.valueOf(patient.id)});
-        } else {
-            id = db.insertWithOnConflict("patients", null, values, SQLiteDatabase.CONFLICT_ABORT);
-        }
-        insertLookup(db, "custom_motivators", patient.motivatorName);
-        insertLookup(db, "custom_doctors", patient.doctorName);
-        return id;
+        return values;
     }
 
     void logChange(String patientId, String field, String oldValue, String newValue, String user) {
@@ -342,9 +313,9 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         List<Patient> out = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();
         String like = "%" + (filter == null ? "" : filter.trim()) + "%";
-        String where = "(patient_name LIKE ? OR patient_id LIKE ? OR mobile_number LIKE ? OR village_name LIKE ? OR motivator_name LIKE ? OR doctor_name LIKE ? OR district_name LIKE ?)";
+        String where = "(patient_name LIKE ? OR patient_id LIKE ? OR mobile_number LIKE ? OR village_name LIKE ? OR motivator_name LIKE ? OR doctor_name LIKE ? OR district_name LIKE ? OR local_body_name LIKE ?)";
         List<String> args = new ArrayList<>();
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 8; i++) {
             args.add(like);
         }
         if (extraWhere != null && !extraWhere.trim().isEmpty()) {
@@ -405,6 +376,20 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         return rows;
     }
 
+    List<String[]> upcomingEddRows(int limit) {
+        List<String[]> rows = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT patient_id, patient_name, edd_date, mobile_number, village_name FROM patients " +
+                        "WHERE edd_date IS NOT NULL AND edd_date != '' AND edd_date >= ? " +
+                        "ORDER BY edd_date ASC LIMIT ?",
+                new String[]{LocalDate.now().toString(), String.valueOf(limit)})) {
+            while (c.moveToNext()) {
+                rows.add(new String[]{c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4)});
+            }
+        }
+        return rows;
+    }
+
     List<String[]> changeLogs() {
         List<String[]> rows = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
@@ -454,6 +439,12 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         }
     }
 
+    private boolean patientIdExists(SQLiteDatabase db, String patientId) {
+        try (Cursor c = db.rawQuery("SELECT 1 FROM patients WHERE patient_id = ? LIMIT 1", new String[]{patientId})) {
+            return c.moveToFirst();
+        }
+    }
+
     private void insertLookup(SQLiteDatabase db, String table, String name) {
         if (name == null || name.trim().isEmpty()) {
             return;
@@ -463,17 +454,4 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         db.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_IGNORE);
     }
 
-    private static String hashPassword(String password) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hashed = digest.digest(password.getBytes(StandardCharsets.UTF_8));
-            StringBuilder out = new StringBuilder();
-            for (byte b : hashed) {
-                out.append(String.format(Locale.US, "%02x", b));
-            }
-            return out.toString();
-        } catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException("SHA-256 not available", ex);
-        }
-    }
 }

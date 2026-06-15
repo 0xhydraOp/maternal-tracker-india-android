@@ -36,8 +36,14 @@ try {
         throw "Gradle release build failed with exit code $LASTEXITCODE"
     }
     New-Item -ItemType Directory -Force -Path "release" | Out-Null
-    Copy-Item -LiteralPath "app\build\outputs\apk\release\app-release.apk" -Destination "release\MaternalTrackerIndia-v1.0.5-release.apk" -Force
-    Get-ChildItem "release\MaternalTrackerIndia-v1.0.5-release.apk" | Select-Object FullName,Length,LastWriteTime
+    $gradleText = Get-Content -Raw -LiteralPath "app\build.gradle"
+    $versionName = [regex]::Match($gradleText, 'versionName\s+"([^"]+)"').Groups[1].Value
+    if ([string]::IsNullOrWhiteSpace($versionName)) {
+        throw "Could not read versionName from app\build.gradle"
+    }
+    $releaseApk = "release\MaternalTrackerIndia-v$versionName-release.apk"
+    Copy-Item -LiteralPath "app\build\outputs\apk\release\app-release.apk" -Destination $releaseApk -Force
+    Get-ChildItem $releaseApk | Select-Object FullName,Length,LastWriteTime
 }
 finally {
     Pop-Location
