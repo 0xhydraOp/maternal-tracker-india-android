@@ -39,7 +39,7 @@ public class PatientRulesTest {
         Patient p = validPatient();
         p.visit1 = null;
         p.visit2 = "2026-06-20";
-        assertEquals("1st visit is required before 2nd visit", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+        assertEquals("All patient entry fields are required except motivator name", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
     @Test
@@ -47,20 +47,27 @@ public class PatientRulesTest {
         Patient p = validPatient();
         p.visit1 = null;
         p.finalVisit = "2026-07-01";
-        assertEquals("Previous visit is required before final visit", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+        assertEquals("All patient entry fields are required except motivator name", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
     private Patient validPatient() {
         Patient p = new Patient();
+        p.patientId = "PT01-06-2026";
         p.patientName = "Test Patient";
         p.mobileNumber = "9876543210";
         p.stateName = "West Bengal";
         p.districtName = "MURSHIDABAD";
+        p.localBodyType = "Block";
         p.localBodyName = "KANDI";
         p.villageName = "Test Village";
         p.lmpDate = "2026-06-01";
         p.eddDate = "2027-03-08";
+        p.doctorName = "Test Doctor";
         p.visit1 = "2026-06-15";
+        p.visit2 = "2026-06-20";
+        p.visit3 = "2026-06-25";
+        p.finalVisit = "2026-07-01";
+        p.remarks = "Completed";
         return p;
     }
 }

@@ -43,10 +43,10 @@ import java.util.zip.ZipOutputStream;
 
 @SuppressLint("SetTextI18n")
 public class MainActivity extends Activity {
-    private static final int BG_TOP = Color.rgb(226, 239, 249);
-    private static final int BG_BOTTOM = Color.rgb(247, 252, 255);
-    private static final int SURFACE = Color.argb(226, 255, 255, 255);
-    private static final int SURFACE_ALT = Color.argb(176, 255, 255, 255);
+    private static final int BG_TOP = Color.rgb(198, 225, 241);
+    private static final int BG_BOTTOM = Color.rgb(232, 246, 251);
+    private static final int SURFACE = Color.argb(178, 255, 255, 255);
+    private static final int SURFACE_ALT = Color.argb(132, 255, 255, 255);
     private static final int SURFACE_WARM = Color.rgb(255, 252, 247);
     private static final int PRIMARY = Color.rgb(22, 91, 145);
     private static final int PRIMARY_DARK = Color.rgb(9, 50, 91);
@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
     private static final int WARNING = Color.rgb(180, 103, 22);
     private static final int TEXT = Color.rgb(24, 37, 54);
     private static final int MUTED = Color.rgb(92, 110, 128);
-    private static final int BORDER = Color.argb(160, 179, 205, 224);
+    private static final int BORDER = Color.argb(210, 255, 255, 255);
     private static final String HOSPITAL_NAME = "BLUE BIRD A GENERAL HOSPITAL";
     private static final String APP_NAME = "Maternal Care Registry";
     private static final String DEFAULT_STATE = "West Bengal";
@@ -96,6 +96,7 @@ public class MainActivity extends Activity {
     private EditText visit3;
     private EditText finalVisit;
     private EditText remarks;
+    private Button savePatientButton;
     private Patient editingPatient;
     private String selectedStateCode;
     private String selectedDistrictCode;
@@ -251,7 +252,7 @@ public class MainActivity extends Activity {
         bottomNav = new LinearLayout(this);
         bottomNav.setOrientation(LinearLayout.HORIZONTAL);
         bottomNav.setGravity(Gravity.CENTER);
-        bottomNav.setBackground(rounded(Color.argb(232, 255, 255, 255), dp(14), dp(1), Color.argb(190, 190, 213, 231)));
+        bottomNav.setBackground(glassPanel(dp(14)));
         bottomNav.setElevation(dp(4));
         bottomNav.setPadding(dp(3), dp(3), dp(3), dp(3));
         root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(50)));
@@ -421,14 +422,13 @@ public class MainActivity extends Activity {
                 stat("Completed / Locked", locked, v -> showPatientList(false, "record_locked = 1", null))
         ));
         box.addView(dashboardCommandBar());
-        box.addView(section("Upcoming EDD", upcomingEddView()));
-        box.addView(section("Recent Patients", recentPatientsView()));
+        box.addView(compactTwoColumn(section("Upcoming EDD", upcomingEddView()), section("Recent Patients", recentPatientsView())));
     }
 
     private View dashboardStatusStrip(int total) {
-        LinearLayout box = card(PRIMARY_SOFT, 1, Color.rgb(190, 214, 231));
+        LinearLayout box = card();
         box.setPadding(dp(10), dp(8), dp(10), dp(8));
-        TextView title = label("Murshidabad Maternal Follow-up", 14, true);
+        TextView title = label("Blue Bird Maternal Follow-up", 14, true);
         title.setTextColor(PRIMARY_DARK);
         TextView context = label(isAdmin() ? "Admin sees all hospital records" : "Online hospital records", 11, false);
         context.setTextColor(MUTED);
@@ -449,7 +449,7 @@ public class MainActivity extends Activity {
         list.setOrientation(LinearLayout.VERTICAL);
         List<String[]> rows = db.upcomingEddRows(5);
         if (rows.isEmpty()) {
-            list.addView(smallText("No upcoming EDD records."));
+            list.addView(emptyState("No upcoming EDD", "Upcoming delivery dates will appear here after patient records are saved."));
             return list;
         }
         for (String[] row : rows) {
@@ -498,7 +498,7 @@ public class MainActivity extends Activity {
     private View stat(String title, int value, View.OnClickListener click) {
         LinearLayout box = card();
         box.setOnClickListener(click);
-        box.setBackground(rounded(SURFACE, dp(14), dp(1), Color.rgb(205, 220, 232)));
+        box.setBackground(glassPanel(dp(14)));
         box.setPadding(dp(10), dp(9), dp(10), dp(9));
         TextView number = label(String.valueOf(value), 23, true);
         number.setTextColor(PRIMARY);
@@ -606,26 +606,26 @@ public class MainActivity extends Activity {
                 row("Block Name *", localBody),
                 row("Village *", village),
                 row("Motivator Name", motivator),
-                row("Doctor Name", doctor)
+                row("Doctor Name *", doctor)
         ));
         form.addView(collapsibleSection("Pregnancy Dates", true,
                 row("LMP Date *", lmpDate),
-                row("EDD Date", eddDate),
-                row("Entry / 1st Visit", visit1)
+                row("EDD Date *", eddDate),
+                row("Entry / 1st Visit *", visit1)
         ));
-        form.addView(collapsibleSection("Visit Tracking", patient != null,
-                row("2nd Visit", visit2),
-                row("3rd Visit", visit3),
-                row("Final Visit", finalVisit),
-                row("Remarks", remarks)
+        form.addView(collapsibleSection("Visit Tracking", true,
+                row("2nd Visit *", visit2),
+                row("3rd Visit *", visit3),
+                row("Final Visit *", finalVisit),
+                row("Remarks *", remarks)
         ));
 
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.END);
         actions.addView(button("Clear", v -> showPatientForm(null)));
-        Button save = button(patient == null ? "Save Patient" : "Update Patient", v -> savePatient());
-        save.setEnabled(!lockedForStaff);
-        actions.addView(save);
+        savePatientButton = button(patient == null ? "Save Patient" : "Update Patient", v -> savePatient());
+        savePatientButton.setEnabled(!lockedForStaff);
+        actions.addView(savePatientButton);
         form.addView(actions);
         if (lockedForStaff) {
             status.setText("This record is locked after final visit. Admin can unlock it.");
@@ -685,6 +685,7 @@ public class MainActivity extends Activity {
     private void persistPatient(Patient p, Patient old) {
         try {
             boolean creating = editingPatient == null;
+            setPatientSaveBusy(true);
             db.savePatient(p);
             if (old != null) {
                 logPatientDiff(old, p);
@@ -697,6 +698,7 @@ public class MainActivity extends Activity {
                 hideKeyboard();
                 if (error != null) {
                     rollbackPatientCache(p, old, creating);
+                    setPatientSaveBusy(false);
                     toast("Cloud save failed: " + error.getMessage());
                     return;
                 }
@@ -704,8 +706,17 @@ public class MainActivity extends Activity {
                 showPatientList(false);
             }));
         } catch (Exception ex) {
+            setPatientSaveBusy(false);
             toast("Save failed: " + ex.getMessage());
         }
+    }
+
+    private void setPatientSaveBusy(boolean busy) {
+        if (savePatientButton == null) {
+            return;
+        }
+        savePatientButton.setEnabled(!busy);
+        savePatientButton.setText(busy ? "Saving..." : (editingPatient == null ? "Save Patient" : "Update Patient"));
     }
 
     private void rollbackPatientCache(Patient p, Patient old, boolean creating) {
@@ -938,6 +949,37 @@ public class MainActivity extends Activity {
         page.addView(collapsibleSection("Filters", false, filters));
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         render[0].run();
+    }
+
+    private void showExportCenter() {
+        setPage("Export Center");
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(page);
+        content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+
+        int total = db.countPatients(null, null);
+        int locked = db.countPatients("record_locked = 1", null);
+        page.addView(section("Export Records",
+                emptyState(total + " records ready", "Save Excel or PDF directly through Android's file picker, then share it from the system sheet."),
+                scrollingActions(
+                        button("Excel", v -> startExport("", REQ_EXPORT_EXCEL, "blue_bird_patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                        button("PDF", v -> startExport("", REQ_EXPORT_PDF, "blue_bird_patients.pdf", "application/pdf")),
+                        button("Search Filtered Export", v -> showPatientList(false))
+                )
+        ));
+        page.addView(section("Backup",
+                smallText("Locked records: " + locked + " | Database backup is admin-only restore data."),
+                scrollingActions(
+                        button("Create Backup", v -> createBackupNow()),
+                        button("Save Backup File", v -> startBackupExport())
+                )
+        ));
+        page.addView(section("Export Tips",
+                smallText("Use Reports for date, block, village, motivator, or lock-status filtered Excel/PDF exports."),
+                smallText("Use Patient Detail when one patient's PDF or Excel file is needed.")
+        ));
     }
 
     private void renderReports(LinearLayout page, String from, String to, String block, String village, String motivatorName, String statusName) {
@@ -1444,8 +1486,16 @@ public class MainActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(page);
         content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
-        page.addView(section("Patient Management",
-                navButton("Open Patient Management", v -> showPatientList(true))
+        int total = db.countPatients(null, null);
+        int locked = db.countPatients("record_locked = 1", null);
+        page.addView(section("Admin Control Panel",
+                compactTwoColumn(stat("Records", total, v -> showPatientList(true)), stat("Locked", locked, v -> showPatientList(true, "record_locked = 1", null))),
+                scrollingActions(
+                        commandChip("P", "Patients", v -> showPatientList(true)),
+                        commandChip("U", "Users", v -> addUserDialog()),
+                        commandChip("X", "Exports", v -> showExportCenter()),
+                        commandChip("B", "Backup", v -> showBackup())
+                )
         ));
         page.addView(section("Users",
                 usersView(),
@@ -1474,13 +1524,18 @@ public class MainActivity extends Activity {
                 return;
             }
             if (rows == null || rows.isEmpty()) {
-                list.addView(smallText("No app roles added yet."));
+                list.addView(emptyState("No users added yet", "Create the first staff login from the Add User button."));
                 return;
             }
             for (String[] user : rows) {
-                LinearLayout row = new LinearLayout(this);
+                LinearLayout row = card();
+                row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setGravity(Gravity.CENTER_VERTICAL);
-                row.addView(smallText(user[0] + "  (" + user[1] + ")"), new LinearLayout.LayoutParams(0, -2, 1));
+                LinearLayout details = new LinearLayout(this);
+                details.setOrientation(LinearLayout.VERTICAL);
+                details.addView(label(user[0], 13, true));
+                details.addView(smallText("Role: " + user[1] + (user[0].equalsIgnoreCase(currentUser) ? " | Current login" : "")));
+                row.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
                 if (!user[0].equalsIgnoreCase(currentUser)) {
                     row.addView(button("Remove Access", v -> firebase.deleteRole(user[0], (unused, deleteError) -> runOnUiThread(() -> {
                         if (deleteError != null) {
@@ -1731,8 +1786,8 @@ public class MainActivity extends Activity {
                     commandChip("+", "New", v -> showPatientForm(null)),
                     commandChip("S", "Search", v -> showPatientList(false)),
                     commandChip("R", "Reports", v -> showReports()),
-                    commandChip("X", "Export", v -> startExport("", REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                    commandChip("B", "Backup", v -> createBackupNow()),
+                    commandChip("X", "Export", v -> showExportCenter()),
+                    commandChip("B", "Backup", v -> showBackup()),
                     commandChip("A", "Admin", v -> showAdmin())
             ));
         } else {
@@ -1740,8 +1795,7 @@ public class MainActivity extends Activity {
                     commandChip("+", "New", v -> showPatientForm(null)),
                     commandChip("S", "Search", v -> showPatientList(false)),
                     commandChip("R", "Reports", v -> showReports()),
-                    commandChip("X", "Export", v -> startExport("", REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                    commandChip("B", "Backup", v -> createBackupNow())
+                    commandChip("X", "Export", v -> showExportCenter())
             ));
         }
         LinearLayout box = section("Commands", body);
@@ -1754,7 +1808,7 @@ public class MainActivity extends Activity {
         chip.setOrientation(LinearLayout.HORIZONTAL);
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(9), 0, dp(10), 0);
-        chip.setBackground(rounded(PRIMARY_SOFT, dp(18), dp(1), Color.rgb(184, 207, 225)));
+        chip.setBackground(glassInput(false));
         chip.setOnClickListener(listener);
         TextView icon = label(symbol, 13, true);
         icon.setTextColor(PRIMARY);
@@ -1813,9 +1867,10 @@ public class MainActivity extends Activity {
     private View emptyState(String title, String message) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(0, dp(4), 0, dp(4));
+        box.setPadding(dp(10), dp(8), dp(10), dp(8));
+        box.setBackground(rounded(Color.argb(70, 255, 255, 255), dp(10), dp(1), Color.argb(140, 255, 255, 255)));
         TextView t = label(title, 14, true);
-        t.setTextColor(MUTED);
+        t.setTextColor(PRIMARY_DARK);
         TextView m = smallText(message);
         m.setTextColor(MUTED);
         box.addView(t);
@@ -1863,9 +1918,12 @@ public class MainActivity extends Activity {
     private LinearLayout card(int color, int strokeWidth, int strokeColor) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        int fill = color == SURFACE ? Color.argb(224, 255, 255, 255) : color;
-        int border = strokeWidth == 0 ? 0 : Color.argb(170, Color.red(strokeColor), Color.green(strokeColor), Color.blue(strokeColor));
-        box.setBackground(rounded(fill, dp(10), strokeWidth == 0 ? 0 : dp(strokeWidth), border));
+        if (color == SURFACE) {
+            box.setBackground(glassPanel(dp(10)));
+        } else {
+            int border = strokeWidth == 0 ? 0 : Color.argb(170, Color.red(strokeColor), Color.green(strokeColor), Color.blue(strokeColor));
+            box.setBackground(rounded(color, dp(10), strokeWidth == 0 ? 0 : dp(strokeWidth), border));
+        }
         box.setPadding(dp(10), dp(10), dp(10), dp(10));
         box.setElevation(dp(3));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -1911,10 +1969,10 @@ public class MainActivity extends Activity {
         edit.setTextSize(15);
         edit.setTextColor(TEXT);
         edit.setHintTextColor(Color.rgb(135, 151, 166));
-        edit.setBackground(rounded(SURFACE_ALT, dp(10), dp(1), BORDER));
+        edit.setBackground(glassInput(false));
         edit.setPadding(dp(12), 0, dp(12), 0);
         edit.setOnFocusChangeListener((v, hasFocus) ->
-                edit.setBackground(rounded(hasFocus ? Color.argb(242, 255, 255, 255) : SURFACE_ALT, dp(10), dp(1), hasFocus ? PRIMARY : BORDER)));
+                edit.setBackground(glassInput(hasFocus)));
         return edit;
     }
 
@@ -1933,10 +1991,10 @@ public class MainActivity extends Activity {
         view.setTextSize(15);
         view.setTextColor(TEXT);
         view.setHintTextColor(Color.rgb(135, 151, 166));
-        view.setBackground(rounded(SURFACE_ALT, dp(10), dp(1), BORDER));
+        view.setBackground(glassInput(false));
         view.setPadding(dp(12), 0, dp(12), 0);
         view.setOnFocusChangeListener((v, hasFocus) ->
-                view.setBackground(rounded(hasFocus ? Color.argb(242, 255, 255, 255) : SURFACE_ALT, dp(10), dp(1), hasFocus ? PRIMARY : BORDER)));
+                view.setBackground(glassInput(hasFocus)));
         setAdapter(view, values);
         return view;
     }
@@ -2031,6 +2089,32 @@ public class MainActivity extends Activity {
                 new int[]{startColor, endColor}
         );
         drawable.setCornerRadius(radius);
+        return drawable;
+    }
+
+    private GradientDrawable glassPanel(int radius) {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{
+                        Color.argb(210, 255, 255, 255),
+                        Color.argb(132, 228, 244, 252)
+                }
+        );
+        drawable.setCornerRadius(radius);
+        drawable.setStroke(dp(1), Color.argb(230, 255, 255, 255));
+        return drawable;
+    }
+
+    private GradientDrawable glassInput(boolean focused) {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{
+                        focused ? Color.argb(236, 255, 255, 255) : Color.argb(150, 255, 255, 255),
+                        focused ? Color.argb(210, 238, 249, 255) : Color.argb(108, 226, 242, 250)
+                }
+        );
+        drawable.setCornerRadius(dp(10));
+        drawable.setStroke(dp(1), focused ? PRIMARY : Color.argb(210, 255, 255, 255));
         return drawable;
     }
 
