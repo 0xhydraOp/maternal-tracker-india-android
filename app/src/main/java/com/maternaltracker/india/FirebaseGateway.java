@@ -1,7 +1,12 @@
 package com.maternaltracker.india;
 
+import android.content.Context;
+
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.FirebaseOptions;
 import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseAuthUserCollisionException;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -18,10 +23,16 @@ final class FirebaseGateway {
     private static final String ADMIN_BOOTSTRAP_EMAIL = "iamrobiul94@gmail.com";
     private static final String ROLE_ADMIN = "ADMIN";
     private static final String ROLE_STAFF = "STAFF";
+    private static final String SECONDARY_AUTH_APP = "blue_bird_user_creator";
 
+    private final Context context;
     private final FirebaseAuth auth = FirebaseAuth.getInstance();
     private final FirebaseFirestore firestore = FirebaseFirestore.getInstance();
     private ListenerRegistration patientListener;
+
+    FirebaseGateway(Context context) {
+        this.context = context.getApplicationContext();
+    }
 
     interface Result<T> {
         void onComplete(T value, Exception error);
@@ -120,6 +131,32 @@ final class FirebaseGateway {
                 .addOnFailureListener(error -> result.onComplete(null, error));
     }
 
+    void createAuthUserAndRole(String email, String password, String role, Result<Void> result) {
+        String normalized = normalizeEmail(email);
+        if (normalized.isEmpty()) {
+            result.onComplete(null, new IllegalArgumentException("Email is required"));
+            return;
+        }
+        if (password == null || password.length() < 6) {
+            result.onComplete(null, new IllegalArgumentException("Password must be at least 6 characters"));
+            return;
+        }
+        FirebaseAuth creatorAuth = FirebaseAuth.getInstance(secondaryApp());
+        creatorAuth.createUserWithEmailAndPassword(normalized, password)
+                .addOnSuccessListener(authResult -> {
+                    creatorAuth.signOut();
+                    saveRole(normalized, role, result);
+                })
+                .addOnFailureListener(error -> {
+                    creatorAuth.signOut();
+                    if (error instanceof FirebaseAuthUserCollisionException) {
+                        saveRole(normalized, role, result);
+                        return;
+                    }
+                    result.onComplete(null, error);
+                });
+    }
+
     void deleteRole(String email, Result<Void> result) {
         firestore.collection("user_roles")
                 .document(normalizeEmail(email))
@@ -171,6 +208,14 @@ final class FirebaseGateway {
                     result.onComplete(new Session(email, normalizeRole(doc.getString("role"))), null);
                 })
                 .addOnFailureListener(error -> result.onComplete(null, error));
+    }
+
+    private FirebaseApp secondaryApp() {
+        try {
+            return FirebaseApp.getInstance(SECONDARY_AUTH_APP);
+        } catch (IllegalStateException ignored) {
+            return FirebaseApp.initializeApp(context, FirebaseOptions.fromResource(context), SECONDARY_AUTH_APP);
+        }
     }
 
     private Patient patientFromDocument(DocumentSnapshot doc) {

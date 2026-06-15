@@ -43,10 +43,10 @@ import java.util.zip.ZipOutputStream;
 
 @SuppressLint("SetTextI18n")
 public class MainActivity extends Activity {
-    private static final int BG_TOP = Color.rgb(234, 244, 252);
-    private static final int BG_BOTTOM = Color.rgb(248, 251, 253);
-    private static final int SURFACE = Color.WHITE;
-    private static final int SURFACE_ALT = Color.rgb(245, 248, 251);
+    private static final int BG_TOP = Color.rgb(226, 239, 249);
+    private static final int BG_BOTTOM = Color.rgb(247, 252, 255);
+    private static final int SURFACE = Color.argb(226, 255, 255, 255);
+    private static final int SURFACE_ALT = Color.argb(176, 255, 255, 255);
     private static final int SURFACE_WARM = Color.rgb(255, 252, 247);
     private static final int PRIMARY = Color.rgb(22, 91, 145);
     private static final int PRIMARY_DARK = Color.rgb(9, 50, 91);
@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
     private static final int WARNING = Color.rgb(180, 103, 22);
     private static final int TEXT = Color.rgb(24, 37, 54);
     private static final int MUTED = Color.rgb(92, 110, 128);
-    private static final int BORDER = Color.rgb(213, 224, 234);
+    private static final int BORDER = Color.argb(160, 179, 205, 224);
     private static final String HOSPITAL_NAME = "BLUE BIRD A GENERAL HOSPITAL";
     private static final String APP_NAME = "Maternal Care Registry";
     private static final String DEFAULT_STATE = "West Bengal";
@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         );
         db = new MaternalDbHelper(this);
-        firebase = new FirebaseGateway();
+        firebase = new FirebaseGateway(this);
         db.ensureCoreData();
         LocationImporter.importBundledLgd(this, db);
         restoreOrShowLogin();
@@ -251,7 +251,8 @@ public class MainActivity extends Activity {
         bottomNav = new LinearLayout(this);
         bottomNav.setOrientation(LinearLayout.HORIZONTAL);
         bottomNav.setGravity(Gravity.CENTER);
-        bottomNav.setBackground(rounded(Color.WHITE, dp(8), dp(1), BORDER));
+        bottomNav.setBackground(rounded(Color.argb(232, 255, 255, 255), dp(14), dp(1), Color.argb(190, 190, 213, 231)));
+        bottomNav.setElevation(dp(4));
         bottomNav.setPadding(dp(3), dp(3), dp(3), dp(3));
         root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(50)));
         rebuildBottomNav();
@@ -1467,7 +1468,7 @@ public class MainActivity extends Activity {
         list.addView(smallText("Loading Firebase roles..."));
         firebase.listRoles((rows, error) -> runOnUiThread(() -> {
             list.removeAllViews();
-            list.addView(smallText("Create the Firebase Auth account in Firebase Console, then grant app access here."));
+            list.addView(smallText("Create app users here with email, password, and role. Admin controls access."));
             if (error != null) {
                 list.addView(smallText("Could not load roles: " + error.getMessage()));
                 return;
@@ -1540,25 +1541,34 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         EditText email = input("");
+        EditText password = input("");
         AutoCompleteTextView role = auto(list("STAFF", "ADMIN"));
         role.setText("STAFF", false);
-        box.addView(smallText("On the Spark plan, create the Email/Password Auth account in Firebase Console first. This screen grants or removes app access."));
+        password.setHint("Minimum 6 characters");
+        password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        box.addView(smallText("This creates the Firebase login and grants app access. Share the password only with that user."));
         box.addView(row("Email", email));
+        box.addView(row("Temporary Password", password));
         box.addView(row("Role", role));
         new AlertDialog.Builder(this)
-                .setTitle("Grant App Access")
+                .setTitle("Create App User")
                 .setView(box)
-                .setPositiveButton("Save", (dialog, which) -> {
+                .setPositiveButton("Create", (dialog, which) -> {
                     if (empty(text(email))) {
                         toast("Email is required");
                         return;
                     }
-                    firebase.saveRole(text(email), text(role), (unused, error) -> runOnUiThread(() -> {
+                    if (empty(text(password)) || text(password).length() < 6) {
+                        toast("Password must be at least 6 characters");
+                        return;
+                    }
+                    firebase.createAuthUserAndRole(text(email), text(password), text(role), (unused, error) -> runOnUiThread(() -> {
                         if (error != null) {
-                            toast("Could not grant access: " + error.getMessage());
+                            toast("Could not create user: " + error.getMessage());
                             return;
                         }
-                        db.logActivity("USER_ACCESS_GRANT", text(email), currentUser);
+                        db.logActivity("USER_CREATE", text(email), currentUser);
+                        toast("User created");
                         showAdmin();
                     }));
                 })
@@ -1853,9 +1863,11 @@ public class MainActivity extends Activity {
     private LinearLayout card(int color, int strokeWidth, int strokeColor) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackground(rounded(color, dp(8), strokeWidth == 0 ? 0 : dp(strokeWidth), strokeColor));
+        int fill = color == SURFACE ? Color.argb(224, 255, 255, 255) : color;
+        int border = strokeWidth == 0 ? 0 : Color.argb(170, Color.red(strokeColor), Color.green(strokeColor), Color.blue(strokeColor));
+        box.setBackground(rounded(fill, dp(10), strokeWidth == 0 ? 0 : dp(strokeWidth), border));
         box.setPadding(dp(10), dp(10), dp(10), dp(10));
-        box.setElevation(dp(1));
+        box.setElevation(dp(3));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(7));
         box.setLayoutParams(lp);
@@ -1899,10 +1911,10 @@ public class MainActivity extends Activity {
         edit.setTextSize(15);
         edit.setTextColor(TEXT);
         edit.setHintTextColor(Color.rgb(135, 151, 166));
-        edit.setBackground(rounded(SURFACE_ALT, dp(8), dp(1), BORDER));
+        edit.setBackground(rounded(SURFACE_ALT, dp(10), dp(1), BORDER));
         edit.setPadding(dp(12), 0, dp(12), 0);
         edit.setOnFocusChangeListener((v, hasFocus) ->
-                edit.setBackground(rounded(hasFocus ? Color.WHITE : SURFACE_ALT, dp(8), dp(1), hasFocus ? PRIMARY : BORDER)));
+                edit.setBackground(rounded(hasFocus ? Color.argb(242, 255, 255, 255) : SURFACE_ALT, dp(10), dp(1), hasFocus ? PRIMARY : BORDER)));
         return edit;
     }
 
@@ -1921,10 +1933,10 @@ public class MainActivity extends Activity {
         view.setTextSize(15);
         view.setTextColor(TEXT);
         view.setHintTextColor(Color.rgb(135, 151, 166));
-        view.setBackground(rounded(SURFACE_ALT, dp(8), dp(1), BORDER));
+        view.setBackground(rounded(SURFACE_ALT, dp(10), dp(1), BORDER));
         view.setPadding(dp(12), 0, dp(12), 0);
         view.setOnFocusChangeListener((v, hasFocus) ->
-                view.setBackground(rounded(hasFocus ? Color.WHITE : SURFACE_ALT, dp(8), dp(1), hasFocus ? PRIMARY : BORDER)));
+                view.setBackground(rounded(hasFocus ? Color.argb(242, 255, 255, 255) : SURFACE_ALT, dp(10), dp(1), hasFocus ? PRIMARY : BORDER)));
         setAdapter(view, values);
         return view;
     }
