@@ -241,6 +241,7 @@ final class FirebaseGateway {
         p.finalVisit = string(doc, "finalVisit", "");
         p.entryDate = string(doc, "entryDate", "");
         p.createdBy = string(doc, "createdBy", string(doc, "updatedBy", ""));
+        p.updatedBy = string(doc, "updatedBy", "");
         p.remarks = string(doc, "remarks", "");
         p.recordLocked = Boolean.TRUE.equals(doc.getBoolean("recordLocked"));
         return p;
@@ -269,10 +270,10 @@ final class FirebaseGateway {
         values.put("finalVisit", p.finalVisit);
         values.put("entryDate", p.entryDate);
         values.put("createdBy", p.createdBy == null || p.createdBy.trim().isEmpty() ? currentEmail() : normalizeEmail(p.createdBy));
+        values.put("updatedBy", currentEmail());
         values.put("recordLocked", p.recordLocked);
         values.put("remarks", p.remarks);
         values.put("updatedAt", Timestamp.now());
-        values.put("updatedBy", currentEmail());
         return values;
     }
 

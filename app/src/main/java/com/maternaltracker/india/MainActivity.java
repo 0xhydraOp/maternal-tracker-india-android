@@ -35,7 +35,9 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
@@ -43,19 +45,22 @@ import java.util.zip.ZipOutputStream;
 
 @SuppressLint("SetTextI18n")
 public class MainActivity extends Activity {
-    private static final int BG_TOP = Color.rgb(198, 225, 241);
-    private static final int BG_BOTTOM = Color.rgb(232, 246, 251);
-    private static final int SURFACE = Color.argb(178, 255, 255, 255);
-    private static final int SURFACE_ALT = Color.argb(132, 255, 255, 255);
+    private static final int BG_TOP = Color.rgb(238, 246, 248);
+    private static final int BG_BOTTOM = Color.rgb(250, 252, 251);
+    private static final int SURFACE = Color.argb(188, 255, 255, 255);
+    private static final int SURFACE_ALT = Color.argb(146, 255, 255, 255);
     private static final int SURFACE_WARM = Color.rgb(255, 252, 247);
-    private static final int PRIMARY = Color.rgb(22, 91, 145);
-    private static final int PRIMARY_DARK = Color.rgb(9, 50, 91);
-    private static final int PRIMARY_SOFT = Color.rgb(226, 240, 250);
+    private static final int PRIMARY = Color.rgb(7, 84, 117);
+    private static final int PRIMARY_DARK = Color.rgb(7, 59, 92);
+    private static final int PRIMARY_SOFT = Color.rgb(231, 242, 245);
     private static final int ACCENT = Color.rgb(0, 137, 123);
-    private static final int WARNING = Color.rgb(180, 103, 22);
-    private static final int TEXT = Color.rgb(24, 37, 54);
-    private static final int MUTED = Color.rgb(92, 110, 128);
+    private static final int WARNING = Color.rgb(183, 110, 0);
+    private static final int URGENT = Color.rgb(180, 35, 24);
+    private static final int SLATE = Color.rgb(71, 85, 105);
+    private static final int TEXT = Color.rgb(23, 43, 58);
+    private static final int MUTED = Color.rgb(100, 116, 139);
     private static final int BORDER = Color.argb(210, 255, 255, 255);
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("hh:mm a");
     private static final String HOSPITAL_NAME = "BLUE BIRD A GENERAL HOSPITAL";
     private static final String APP_NAME = "Maternal Care Registry";
     private static final String DEFAULT_STATE = "West Bengal";
@@ -78,6 +83,7 @@ public class MainActivity extends Activity {
     private String currentRole = "";
     private String currentPage = "Dashboard";
     private boolean dashboardDetailed = false;
+    private String lastSyncText = "Not synced yet";
 
     private EditText patientId;
     private EditText patientName;
@@ -273,6 +279,7 @@ public class MainActivity extends Activity {
             public void onPatients(List<Patient> patients) {
                 runOnUiThread(() -> {
                     db.replacePatientsFromCloud(patients);
+                    lastSyncText = "Last synced " + LocalDateTime.now().format(TIME_FMT);
                     if (syncBadge != null) {
                         syncBadge.setText("ONLINE");
                         syncBadge.setBackground(rounded(ACCENT, dp(12), 0, ACCENT));
@@ -281,7 +288,7 @@ public class MainActivity extends Activity {
                         showDashboard();
                     }
                     if (status != null) {
-                        status.setText("Online sync active | " + patients.size() + " patient(s) cached");
+                        status.setText("Online sync active | " + patients.size() + " patient(s) cached | " + lastSyncText);
                     }
                 });
             }
@@ -289,6 +296,7 @@ public class MainActivity extends Activity {
             @Override
             public void onError(Exception error) {
                 runOnUiThread(() -> {
+                    lastSyncText = "Last sync failed " + LocalDateTime.now().format(TIME_FMT);
                     if (syncBadge != null) {
                         syncBadge.setText("SYNC ERROR");
                         syncBadge.setBackground(rounded(WARNING, dp(12), 0, WARNING));
@@ -308,7 +316,7 @@ public class MainActivity extends Activity {
     private View header() {
         LinearLayout box = card(PRIMARY_DARK, 0, PRIMARY_DARK);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackground(gradient(PRIMARY_DARK, PRIMARY, dp(8)));
+        box.setBackground(gradient(PRIMARY_DARK, ACCENT, dp(8)));
         box.setPadding(dp(10), dp(8), dp(10), dp(8));
 
         LinearLayout top = new LinearLayout(this);
@@ -522,8 +530,17 @@ public class MainActivity extends Activity {
         int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
         int pending = Math.max(0, total - locked);
         int needsCompletion = db.countPatients(appendWhere(scopeWhere, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = '')"), scopeArgs);
+        int todayFocus = dueWeek + needsCompletion;
         box.addView(dashboardStatusStrip(total));
         box.addView(dashboardDensityToggle());
+        box.addView(todayFocusBanner(total, todayFocus));
+        if (total == 0) {
+            box.addView(emptyDashboardState());
+            if (dashboardDetailed) {
+                box.addView(syncOverview(total));
+            }
+            return;
+        }
         box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, pending, needsCompletion)));
         box.addView(compactKpiRow(
                 compactKpi("Total", total, "Patients", v -> showScopedPatientList(null, null)),
@@ -547,20 +564,45 @@ public class MainActivity extends Activity {
     private View dashboardStatusStrip(int total) {
         LinearLayout box = card();
         box.setPadding(dp(10), dp(8), dp(10), dp(8));
-        TextView title = label("Blue Bird Maternal Follow-up", 14, true);
+        TextView title = label(isAdmin() ? "Hospital Overview" : "Your Follow-up Work", 14, true);
         title.setTextColor(PRIMARY_DARK);
         TextView context = label(isAdmin() ? "Admin view: all Blue Bird records" : "Staff view: records created by you", 11, false);
         context.setTextColor(MUTED);
         context.setPadding(0, dp(1), 0, dp(3));
+        HorizontalScrollView chipScroll = new HorizontalScrollView(this);
+        chipScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.addView(chip(DEFAULT_DISTRICT, Color.WHITE, PRIMARY_DARK));
         chips.addView(chip(DEFAULT_STATE, Color.WHITE, PRIMARY_DARK));
         chips.addView(chip(total + " records", ACCENT, Color.WHITE));
+        chips.addView(chip(lastSyncText, PRIMARY_SOFT, PRIMARY_DARK));
+        chipScroll.addView(chips);
         box.addView(title);
         box.addView(context);
-        box.addView(chips);
+        box.addView(chipScroll);
         return box;
+    }
+
+    private View todayFocusBanner(int total, int actionCount) {
+        LinearLayout box = card(actionCount > 0 ? Color.rgb(255, 248, 237) : Color.rgb(237, 250, 247), 1, actionCount > 0 ? WARNING : ACCENT);
+        box.setPadding(dp(12), dp(9), dp(12), dp(9));
+        TextView title = label(total == 0 ? "Ready for first patient entry" : (actionCount > 0 ? actionCount + " record(s) need action today" : "All clear for today"), 15, true);
+        title.setTextColor(actionCount > 0 ? WARNING : ACCENT);
+        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Review due EDD and incomplete follow-up records first." : "No urgent dashboard flags in the current view."));
+        sub.setTextColor(MUTED);
+        box.addView(title);
+        box.addView(sub);
+        if (total == 0) {
+            box.addView(navButton("Add Patient", v -> showPatientForm(null)));
+        }
+        return box;
+    }
+
+    private View emptyDashboardState() {
+        return section("Start Registry",
+                emptyActionState("No patient records yet", "Add the first patient to activate dashboard priorities, EDD tracking, reports, and exports.", "Add First Patient", v -> showPatientForm(null))
+        );
     }
 
     private View dashboardDensityToggle() {
@@ -642,19 +684,36 @@ public class MainActivity extends Activity {
             list.addView(emptyState("No attention flags", "Current dashboard records are complete for the tracked checks."));
             return list;
         }
-        list.addView(attentionItem("No 2nd visit recorded", noSecondVisit, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '')", null));
-        list.addView(attentionItem("EDD within 7 days", edd7, "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
-        list.addView(attentionItem("Missing doctor", missingDoctor, "doctor_name IS NULL OR doctor_name = ''", null));
-        list.addView(attentionItem("Mobile needs review", invalidMobile, "mobile_number IS NULL OR length(trim(mobile_number)) != 10", null));
+        list.addView(attentionItem("EDD within 7 days", edd7, "Urgent", URGENT, "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
+        list.addView(attentionItem("No 2nd visit recorded", noSecondVisit, "Attention", WARNING, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '')", null));
+        list.addView(attentionItem("Missing doctor", missingDoctor, "Review", SLATE, "doctor_name IS NULL OR doctor_name = ''", null));
+        list.addView(attentionItem("Mobile needs review", invalidMobile, "Review", SLATE, "mobile_number IS NULL OR length(trim(mobile_number)) != 10", null));
         return list;
     }
 
-    private View attentionItem(String title, int count, String where, String[] args) {
-        TextView item = smallText(title + ": " + count);
-        item.setTextColor(count > 0 ? WARNING : MUTED);
-        item.setTypeface(item.getTypeface(), count > 0 ? Typeface.BOLD : Typeface.NORMAL);
-        item.setOnClickListener(v -> showScopedPatientList(where, args));
-        return item;
+    private View attentionItem(String title, int count, String severity, int color, String where, String[] args) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(9), dp(7), dp(9), dp(7));
+        row.setBackground(rounded(Color.argb(count > 0 ? 72 : 34, Color.red(color), Color.green(color), Color.blue(color)), dp(10), dp(1), Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))));
+        row.setOnClickListener(v -> showScopedPatientList(where, args));
+        TextView badge = chip(severity, count > 0 ? color : PRIMARY_SOFT, count > 0 ? Color.WHITE : MUTED);
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(9), 0, 0, 0);
+        TextView name = label(title, 13, true);
+        name.setTextColor(count > 0 ? color : MUTED);
+        TextView detail = smallText(count + " record(s)");
+        detail.setTextColor(MUTED);
+        copy.addView(name);
+        copy.addView(detail);
+        row.addView(badge);
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(6));
+        row.setLayoutParams(lp);
+        return row;
     }
 
     private View upcomingEddView(String where, String[] args) {
@@ -935,6 +994,7 @@ public class MainActivity extends Activity {
         p.finalVisit = text(finalVisit);
         p.entryDate = p.entryDate == null ? LocalDate.now().toString() : p.entryDate;
         p.createdBy = old == null || empty(old.createdBy) ? currentUser : old.createdBy;
+        p.updatedBy = currentUser;
         p.remarks = "";
 
         String validation = validatePatient(p);
@@ -1094,13 +1154,14 @@ public class MainActivity extends Activity {
             if (adminMode && isAdmin()) {
                 actions.addView(button("Unlock", v -> {
                     p.recordLocked = false;
+                    p.updatedBy = currentUser;
                     firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
                         if (error != null) {
                             p.recordLocked = true;
                             toast("Unlock sync failed: " + error.getMessage());
                             return;
                         }
-                        db.unlockPatient(p.id);
+                        db.savePatient(p);
                         db.logActivity("PATIENT_UNLOCK", p.patientId, currentUser);
                         showPatientList(true);
                     }));
@@ -1131,6 +1192,13 @@ public class MainActivity extends Activity {
                 smallText("Block: " + value(p.localBodyName) + " | Village: " + value(p.villageName)),
                 smallText("Motivator: " + value(p.motivatorName) + " | Doctor: " + value(p.doctorName))
         ));
+        page.addView(section("Record Trust",
+                smallText("Entry date: " + value(p.entryDate)),
+                smallText("Created by: " + value(p.createdBy)),
+                smallText("Updated by: " + value(p.updatedBy)),
+                smallText("Cloud status: " + value(lastSyncText)),
+                chip(p.recordLocked ? "Locked after final visit" : "Open for follow-up", p.recordLocked ? ACCENT : WARNING, Color.WHITE)
+        ));
         page.addView(section("Visit Timeline", visitTimeline(p)));
 
         LinearLayout actions = new LinearLayout(this);
@@ -1147,13 +1215,14 @@ public class MainActivity extends Activity {
         if (adminMode && isAdmin()) {
             actions.addView(button("Unlock", v -> {
                 p.recordLocked = false;
+                p.updatedBy = currentUser;
                 firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
                     if (error != null) {
                         p.recordLocked = true;
                         toast("Unlock sync failed: " + error.getMessage());
                         return;
                     }
-                    db.unlockPatient(p.id);
+                    db.savePatient(p);
                     db.logActivity("PATIENT_UNLOCK", p.patientId, currentUser);
                     showPatientDetail(db.getPatient(p.id), true);
                 }));
@@ -1516,9 +1585,15 @@ public class MainActivity extends Activity {
                 toast("Backup exported");
             } else if (requestCode == REQ_EXPORT_EXCEL) {
                 writePatientsXlsx(out, pendingExportPatients());
+                if (status != null) {
+                    status.setText("Excel export saved | " + exportStamp());
+                }
                 toast("Excel export saved");
             } else if (requestCode == REQ_EXPORT_PDF) {
                 writePatientsPdf(out, pendingExportPatients());
+                if (status != null) {
+                    status.setText("PDF export saved | " + exportStamp());
+                }
                 toast("PDF export saved");
             }
             shareExport(uri, requestCode);
@@ -1590,7 +1665,7 @@ public class MainActivity extends Activity {
             try (FileOutputStream out = new FileOutputStream(target)) {
                 out.write(csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             }
-            status.setText("Export created: " + target.getAbsolutePath());
+            status.setText("CSV export created | " + exportStamp() + " | " + target.getAbsolutePath());
             toast("CSV exported");
         } catch (Exception ex) {
             toast("Export failed: " + ex.getMessage());
@@ -1695,16 +1770,21 @@ public class MainActivity extends Activity {
     private int drawPdfHeader(PdfDocument.Page page, Paint titlePaint, Paint textPaint, int margin, int pageNo) {
         page.getCanvas().drawText(HOSPITAL_NAME, margin, 36, titlePaint);
         page.getCanvas().drawText(APP_NAME + " | Patient Export | Page " + pageNo, margin, 54, textPaint);
-        page.getCanvas().drawLine(margin, 66, 565, 66, textPaint);
-        return 86;
+        page.getCanvas().drawText(exportStamp(), margin, 68, textPaint);
+        page.getCanvas().drawLine(margin, 78, 565, 78, textPaint);
+        return 98;
     }
 
     private String[] patientExportHeaders() {
-        return new String[]{"Serial", "Entry Date", "Patient Name", "Patient ID", "State", "District", "Block", "Village", "Mobile", "Motivator", "Doctor", "LMP", "EDD", "1st Visit", "2nd Visit", "3rd Visit", "Final Visit", "Locked"};
+        return new String[]{"Serial", "Entry Date", "Patient Name", "Patient ID", "State", "District", "Block", "Village", "Mobile", "Motivator", "Doctor", "LMP", "EDD", "1st Visit", "2nd Visit", "3rd Visit", "Final Visit", "Locked", "Exported At", "Exported By"};
     }
 
     private String[] patientExportValues(Patient p) {
-        return new String[]{String.valueOf(p.serialNumber), value(p.entryDate), value(p.patientName), value(p.patientId), value(p.stateName), value(p.districtName), value(p.localBodyName), value(p.villageName), value(p.mobileNumber), value(p.motivatorName), value(p.doctorName), value(p.lmpDate), value(p.eddDate), value(p.visit1), value(p.visit2), value(p.visit3), value(p.finalVisit), p.recordLocked ? "1" : "0"};
+        return new String[]{String.valueOf(p.serialNumber), value(p.entryDate), value(p.patientName), value(p.patientId), value(p.stateName), value(p.districtName), value(p.localBodyName), value(p.villageName), value(p.mobileNumber), value(p.motivatorName), value(p.doctorName), value(p.lmpDate), value(p.eddDate), value(p.visit1), value(p.visit2), value(p.visit3), value(p.finalVisit), p.recordLocked ? "1" : "0", LocalDateTime.now().format(TIME_FMT), value(currentUser)};
+    }
+
+    private String exportStamp() {
+        return "Exported " + LocalDateTime.now().format(TIME_FMT) + " by " + value(currentUser);
     }
 
     private void createBackupNow() {

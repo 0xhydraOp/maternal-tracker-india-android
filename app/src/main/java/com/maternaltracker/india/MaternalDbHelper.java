@@ -15,7 +15,7 @@ import java.util.Map;
 
 final class MaternalDbHelper extends SQLiteOpenHelper {
     static final String DB_NAME = "maternal_tracker_india.db";
-    static final int DB_VERSION = 3;
+    static final int DB_VERSION = 4;
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("MM");
     private static final DateTimeFormatter YEAR_FMT = DateTimeFormatter.ofPattern("yyyy");
 
@@ -48,6 +48,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
                 "final_visit TEXT," +
                 "entry_date TEXT," +
                 "created_by TEXT," +
+                "updated_by TEXT," +
                 "record_locked INTEGER NOT NULL DEFAULT 0," +
                 "remarks TEXT," +
                 "created_at TEXT NOT NULL DEFAULT (datetime('now'))" +
@@ -73,6 +74,9 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         }
         if (oldVersion < 3) {
             ensureColumn(db, "patients", "created_by", "TEXT");
+        }
+        if (oldVersion < 4) {
+            ensureColumn(db, "patients", "updated_by", "TEXT");
         }
     }
 
@@ -193,6 +197,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         values.put("final_visit", patient.finalVisit);
         values.put("entry_date", patient.entryDate);
         values.put("created_by", patient.createdBy);
+        values.put("updated_by", patient.updatedBy);
         values.put("record_locked", patient.recordLocked ? 1 : 0);
         values.put("remarks", patient.remarks);
         return values;
@@ -317,7 +322,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     Patient getPatient(long id) {
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, created_by, remarks, record_locked FROM patients WHERE id = ?",
+                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, created_by, updated_by, remarks, record_locked FROM patients WHERE id = ?",
                 new String[]{String.valueOf(id)})) {
             return c.moveToFirst() ? patientFromCursor(c) : null;
         }
@@ -345,7 +350,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
             }
         }
         try (Cursor c = db.rawQuery(
-                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, created_by, remarks, record_locked " +
+                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, created_by, updated_by, remarks, record_locked " +
                         "FROM patients WHERE " + where + " ORDER BY entry_date DESC, serial_number DESC",
                 args.toArray(new String[0]))) {
             while (c.moveToNext()) {
@@ -357,12 +362,6 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     void deletePatient(long id) {
         getWritableDatabase().delete("patients", "id = ?", new String[]{String.valueOf(id)});
-    }
-
-    void unlockPatient(long id) {
-        ContentValues values = new ContentValues();
-        values.put("record_locked", 0);
-        getWritableDatabase().update("patients", values, "id = ?", new String[]{String.valueOf(id)});
     }
 
     int countPatients(String where, String[] args) {
@@ -470,8 +469,9 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         p.finalVisit = c.getString(19);
         p.entryDate = c.getString(20);
         p.createdBy = c.getString(21);
-        p.remarks = c.getString(22);
-        p.recordLocked = c.getInt(23) == 1;
+        p.updatedBy = c.getString(22);
+        p.remarks = c.getString(23);
+        p.recordLocked = c.getInt(24) == 1;
         return p;
     }
 

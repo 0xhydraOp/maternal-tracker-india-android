@@ -23,6 +23,7 @@ final class Patient {
     String finalVisit;
     String entryDate;
     String createdBy;
+    String updatedBy;
     String remarks;
     boolean recordLocked;
 }
