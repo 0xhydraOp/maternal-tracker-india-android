@@ -15,7 +15,7 @@ import java.util.Map;
 
 final class MaternalDbHelper extends SQLiteOpenHelper {
     static final String DB_NAME = "maternal_tracker_india.db";
-    static final int DB_VERSION = 2;
+    static final int DB_VERSION = 3;
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("MM");
     private static final DateTimeFormatter YEAR_FMT = DateTimeFormatter.ofPattern("yyyy");
 
@@ -47,6 +47,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
                 "visit3 TEXT," +
                 "final_visit TEXT," +
                 "entry_date TEXT," +
+                "created_by TEXT," +
                 "record_locked INTEGER NOT NULL DEFAULT 0," +
                 "remarks TEXT," +
                 "created_at TEXT NOT NULL DEFAULT (datetime('now'))" +
@@ -69,6 +70,9 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) {
             ensureUpgradeTables(db);
+        }
+        if (oldVersion < 3) {
+            ensureColumn(db, "patients", "created_by", "TEXT");
         }
     }
 
@@ -188,6 +192,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         values.put("visit3", patient.visit3);
         values.put("final_visit", patient.finalVisit);
         values.put("entry_date", patient.entryDate);
+        values.put("created_by", patient.createdBy);
         values.put("record_locked", patient.recordLocked ? 1 : 0);
         values.put("remarks", patient.remarks);
         return values;
@@ -312,7 +317,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     Patient getPatient(long id) {
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, remarks, record_locked FROM patients WHERE id = ?",
+                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, created_by, remarks, record_locked FROM patients WHERE id = ?",
                 new String[]{String.valueOf(id)})) {
             return c.moveToFirst() ? patientFromCursor(c) : null;
         }
@@ -340,7 +345,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
             }
         }
         try (Cursor c = db.rawQuery(
-                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, remarks, record_locked " +
+                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, created_by, remarks, record_locked " +
                         "FROM patients WHERE " + where + " ORDER BY entry_date DESC, serial_number DESC",
                 args.toArray(new String[0]))) {
             while (c.moveToNext()) {
@@ -403,12 +408,25 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
     }
 
     List<String[]> upcomingEddRows(int limit) {
+        return upcomingEddRows(null, null, limit);
+    }
+
+    List<String[]> upcomingEddRows(String where, String[] args, int limit) {
         List<String[]> rows = new ArrayList<>();
+        String finalWhere = appendWhere(where, "edd_date IS NOT NULL AND edd_date != '' AND edd_date >= ?");
+        List<String> finalArgs = new ArrayList<>();
+        if (args != null) {
+            for (String arg : args) {
+                finalArgs.add(arg);
+            }
+        }
+        finalArgs.add(LocalDate.now().toString());
+        finalArgs.add(String.valueOf(limit));
         try (Cursor c = getReadableDatabase().rawQuery(
                 "SELECT patient_id, patient_name, edd_date, mobile_number, village_name FROM patients " +
-                        "WHERE edd_date IS NOT NULL AND edd_date != '' AND edd_date >= ? " +
+                        "WHERE " + finalWhere + " " +
                         "ORDER BY edd_date ASC LIMIT ?",
-                new String[]{LocalDate.now().toString(), String.valueOf(limit)})) {
+                finalArgs.toArray(new String[0]))) {
             while (c.moveToNext()) {
                 rows.add(new String[]{c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4)});
             }
@@ -451,9 +469,21 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         p.visit3 = c.getString(18);
         p.finalVisit = c.getString(19);
         p.entryDate = c.getString(20);
-        p.remarks = c.getString(21);
-        p.recordLocked = c.getInt(22) == 1;
+        p.createdBy = c.getString(21);
+        p.remarks = c.getString(22);
+        p.recordLocked = c.getInt(23) == 1;
         return p;
+    }
+
+    private void ensureColumn(SQLiteDatabase db, String table, String column, String type) {
+        try (Cursor c = db.rawQuery("PRAGMA table_info(" + table + ")", null)) {
+            while (c.moveToNext()) {
+                if (column.equalsIgnoreCase(c.getString(1))) {
+                    return;
+                }
+            }
+        }
+        db.execSQL("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
     }
 
     private int nextSerial(SQLiteDatabase db) {

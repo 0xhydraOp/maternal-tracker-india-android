@@ -77,6 +77,7 @@ public class MainActivity extends Activity {
     private String currentUser = "";
     private String currentRole = "";
     private String currentPage = "Dashboard";
+    private boolean dashboardDetailed = false;
 
     private EditText patientId;
     private EditText patientName;
@@ -118,6 +119,7 @@ public class MainActivity extends Activity {
         db = new MaternalDbHelper(this);
         firebase = new FirebaseGateway(this);
         db.ensureCoreData();
+        dashboardDetailed = getPreferences(MODE_PRIVATE).getBoolean("dashboard_detailed", false);
         LocationImporter.importBundledLgd(this, db);
         restoreOrShowLogin();
     }
@@ -511,24 +513,35 @@ public class MainActivity extends Activity {
         scroll.addView(box);
         content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
 
-        int total = db.countPatients(null, null);
-        int today = db.countPatients("entry_date = ?", new String[]{LocalDate.now().toString()});
-        int edd30 = db.countPatients("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()});
-        int locked = db.countPatients("record_locked = 1", null);
+        String scopeWhere = dashboardScopeWhere();
+        String[] scopeArgs = dashboardScopeArgs();
+        int total = db.countPatients(scopeWhere, scopeArgs);
+        int today = db.countPatients(appendWhere(scopeWhere, "entry_date = ?"), appendArgs(scopeArgs, LocalDate.now().toString()));
+        int dueWeek = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
+        int edd30 = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()));
+        int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
         int pending = Math.max(0, total - locked);
+        int needsCompletion = db.countPatients(appendWhere(scopeWhere, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = '')"), scopeArgs);
         box.addView(dashboardStatusStrip(total));
-        box.addView(section("Today's Work",
-                compactTwoColumn(workTile("Today's Entries", today, "New records added today", v -> showPatientList(false, "entry_date = ?", new String[]{LocalDate.now().toString()})),
-                        workTile("Pending Follow-up", pending, "Open patient records", v -> showPatientList(false, "record_locked = 0", null)))
+        box.addView(dashboardDensityToggle());
+        box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, pending, needsCompletion)));
+        box.addView(compactKpiRow(
+                compactKpi("Total", total, "Patients", v -> showScopedPatientList(null, null)),
+                compactKpi("Due Week", dueWeek, "EDD within 7 days", v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
+                compactKpi("Pending", pending, "Follow-up", v -> showScopedPatientList("record_locked = 0", null)),
+                compactKpi("Done", locked, "Completed", v -> showScopedPatientList("record_locked = 1", null))
         ));
-        box.addView(statGrid(
-                stat("Total Patients", total, v -> showPatientList(false)),
-                stat("Today's Entries", today, v -> showPatientList(false, "entry_date = ?", new String[]{LocalDate.now().toString()})),
-                stat("EDD Within 30 Days", edd30, v -> showPatientList(false, "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()})),
-                stat("Completed / Locked", locked, v -> showPatientList(false, "record_locked = 1", null))
-        ));
-        box.addView(syncOverview(total));
-        box.addView(compactTwoColumn(section("Upcoming EDD", upcomingEddView()), section("Recent Patients", recentPatientsView())));
+        box.addView(section("Needs Attention", needsAttentionView(scopeWhere, scopeArgs)));
+        box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
+        if (dashboardDetailed) {
+            box.addView(section("30 Day Overview",
+                    progressRow("EDD within 30 days", edd30, Math.max(total, 1), total == 0 ? 0 : Math.round(edd30 * 100f / total)),
+                    progressRow("Follow-up pending", pending, Math.max(total, 1), total == 0 ? 0 : Math.round(pending * 100f / total)),
+                    progressRow("Completed", locked, Math.max(total, 1), total == 0 ? 0 : Math.round(locked * 100f / total))
+            ));
+            box.addView(syncOverview(total));
+            box.addView(section("Recent Patients", recentPatientsView(scopeWhere, scopeArgs)));
+        }
     }
 
     private View dashboardStatusStrip(int total) {
@@ -536,7 +549,7 @@ public class MainActivity extends Activity {
         box.setPadding(dp(10), dp(8), dp(10), dp(8));
         TextView title = label("Blue Bird Maternal Follow-up", 14, true);
         title.setTextColor(PRIMARY_DARK);
-        TextView context = label(isAdmin() ? "Admin sees all hospital records" : "Online hospital records", 11, false);
+        TextView context = label(isAdmin() ? "Admin view: all Blue Bird records" : "Staff view: records created by you", 11, false);
         context.setTextColor(MUTED);
         context.setPadding(0, dp(1), 0, dp(3));
         LinearLayout chips = new LinearLayout(this);
@@ -550,26 +563,127 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    private View upcomingEddView() {
+    private View dashboardDensityToggle() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, 0, 0, dp(5));
+        Button compact = dashboardToggleButton("Compact", !dashboardDetailed);
+        compact.setOnClickListener(v -> setDashboardDetailed(false));
+        Button detailed = dashboardToggleButton("Detailed", dashboardDetailed);
+        detailed.setOnClickListener(v -> setDashboardDetailed(true));
+        row.addView(compact, new LinearLayout.LayoutParams(0, dp(38), 1));
+        row.addView(detailed, new LinearLayout.LayoutParams(0, dp(38), 1));
+        return row;
+    }
+
+    private Button dashboardToggleButton(String text, boolean active) {
+        Button b = button(text, v -> {
+        });
+        b.setTextColor(active ? Color.WHITE : PRIMARY_DARK);
+        b.setBackground(active ? gradient(PRIMARY, ACCENT, dp(16)) : rounded(Color.argb(120, 255, 255, 255), dp(16), dp(1), BORDER));
+        b.setMinHeight(dp(38));
+        b.setMinimumHeight(dp(38));
+        return b;
+    }
+
+    private void setDashboardDetailed(boolean detailed) {
+        if (dashboardDetailed == detailed) {
+            return;
+        }
+        dashboardDetailed = detailed;
+        getPreferences(MODE_PRIVATE).edit().putBoolean("dashboard_detailed", dashboardDetailed).apply();
+        showDashboard();
+    }
+
+    private View priorityQueue(int today, int dueWeek, int pending, int needsCompletion) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        List<String[]> rows = db.upcomingEddRows(5);
+        list.addView(priorityItem("EDD due this week", dueWeek, "Review patients with delivery dates in the next 7 days", "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
+        list.addView(priorityItem("Follow-up pending", pending, "Open records that still need visit tracking", "record_locked = 0", null));
+        list.addView(priorityItem("Records needing completion", needsCompletion, "Open records missing later visit dates", "record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = '')", null));
+        list.addView(priorityItem("New entries today", today, "Patients registered today", "entry_date = ?", new String[]{LocalDate.now().toString()}));
+        return list;
+    }
+
+    private View priorityItem(String title, int count, String detail, String where, String[] args) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(2), dp(5), dp(2), dp(5));
+        row.setOnClickListener(v -> showScopedPatientList(where, args));
+        TextView countView = label(String.valueOf(count), 18, true);
+        countView.setGravity(Gravity.CENTER);
+        countView.setTextColor(Color.WHITE);
+        countView.setBackground(gradient(count > 0 ? WARNING : ACCENT, PRIMARY, dp(18)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(10), 0, 0, 0);
+        TextView titleView = label(title, 13, true);
+        titleView.setTextColor(PRIMARY_DARK);
+        TextView detailView = smallText(detail);
+        detailView.setTextColor(MUTED);
+        copy.addView(titleView);
+        copy.addView(detailView);
+        row.addView(countView, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        return row;
+    }
+
+    private View needsAttentionView(String scopeWhere, String[] scopeArgs) {
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        int noSecondVisit = db.countPatients(appendWhere(scopeWhere, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '')"), scopeArgs);
+        int edd7 = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
+        int missingDoctor = db.countPatients(appendWhere(scopeWhere, "doctor_name IS NULL OR doctor_name = ''"), scopeArgs);
+        int invalidMobile = db.countPatients(appendWhere(scopeWhere, "mobile_number IS NULL OR length(trim(mobile_number)) != 10"), scopeArgs);
+        int totalAttention = noSecondVisit + edd7 + missingDoctor + invalidMobile;
+        if (totalAttention == 0) {
+            list.addView(emptyState("No attention flags", "Current dashboard records are complete for the tracked checks."));
+            return list;
+        }
+        list.addView(attentionItem("No 2nd visit recorded", noSecondVisit, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '')", null));
+        list.addView(attentionItem("EDD within 7 days", edd7, "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
+        list.addView(attentionItem("Missing doctor", missingDoctor, "doctor_name IS NULL OR doctor_name = ''", null));
+        list.addView(attentionItem("Mobile needs review", invalidMobile, "mobile_number IS NULL OR length(trim(mobile_number)) != 10", null));
+        return list;
+    }
+
+    private View attentionItem(String title, int count, String where, String[] args) {
+        TextView item = smallText(title + ": " + count);
+        item.setTextColor(count > 0 ? WARNING : MUTED);
+        item.setTypeface(item.getTypeface(), count > 0 ? Typeface.BOLD : Typeface.NORMAL);
+        item.setOnClickListener(v -> showScopedPatientList(where, args));
+        return item;
+    }
+
+    private View upcomingEddView(String where, String[] args) {
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        List<String[]> rows = db.upcomingEddRows(where, args, dashboardDetailed ? 6 : 3);
         if (rows.isEmpty()) {
             list.addView(emptyState("No upcoming EDD", "Upcoming delivery dates will appear here after patient records are saved."));
             return list;
         }
         for (String[] row : rows) {
-            TextView item = smallText(row[2] + " | " + value(row[1]) + " | " + value(row[4]) + " | " + value(row[3]));
-            item.setTextColor(TEXT);
+            LinearLayout item = new LinearLayout(this);
+            item.setOrientation(LinearLayout.HORIZONTAL);
+            item.setGravity(Gravity.CENTER_VERTICAL);
+            item.setPadding(0, dp(4), 0, dp(4));
+            TextView date = chip(value(row[2]), PRIMARY_SOFT, PRIMARY_DARK);
+            TextView detail = smallText(value(row[1]) + " | " + value(row[4]) + " | " + value(row[3]));
+            detail.setTextColor(TEXT);
+            item.addView(date);
+            item.addView(detail, new LinearLayout.LayoutParams(0, -2, 1));
             list.addView(item);
         }
         return list;
     }
 
-    private View recentPatientsView() {
+    private View recentPatientsView(String where, String[] args) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        List<Patient> patients = db.listPatients("");
+        List<Patient> patients = db.listPatients("", where, args);
         if (patients.isEmpty()) {
             list.addView(emptyActionState("No patient records yet", "Create the first synced patient record for Blue Bird Hospital.", "Add Patient", v -> showPatientForm(null)));
             return list;
@@ -584,6 +698,38 @@ public class MainActivity extends Activity {
         }
         list.addView(navButton("Open Search", v -> showPatientList(false)));
         return list;
+    }
+
+    private View compactKpiRow(View... stats) {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, 0, 0, dp(4));
+        for (View stat : stats) {
+            row.addView(stat);
+        }
+        scroll.addView(row);
+        return scroll;
+    }
+
+    private View compactKpi(String title, int value, String caption, View.OnClickListener click) {
+        LinearLayout box = card();
+        box.setOnClickListener(click);
+        box.setPadding(dp(9), dp(7), dp(9), dp(7));
+        TextView count = label(String.valueOf(value), 22, true);
+        count.setTextColor(PRIMARY);
+        TextView titleView = label(title, 11, true);
+        titleView.setTextColor(PRIMARY_DARK);
+        TextView captionView = label(caption, 9, false);
+        captionView.setTextColor(MUTED);
+        box.addView(count);
+        box.addView(titleView);
+        box.addView(captionView);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(132), -2);
+        lp.setMargins(0, 0, dp(7), dp(7));
+        box.setLayoutParams(lp);
+        return box;
     }
 
     private View statGrid(View... stats) {
@@ -788,6 +934,7 @@ public class MainActivity extends Activity {
         p.visit3 = text(visit3);
         p.finalVisit = text(finalVisit);
         p.entryDate = p.entryDate == null ? LocalDate.now().toString() : p.entryDate;
+        p.createdBy = old == null || empty(old.createdBy) ? currentUser : old.createdBy;
         p.remarks = "";
 
         String validation = validatePatient(p);
@@ -892,6 +1039,9 @@ public class MainActivity extends Activity {
 
     private void showPatientList(boolean adminMode, String extraWhere, String[] extraArgs) {
         setPage(adminMode ? "Patient Management" : "Patient Search");
+        boolean fullAccess = adminMode && isAdmin();
+        String visibleWhere = fullAccess ? extraWhere : scopedWhere(extraWhere);
+        String[] visibleArgs = fullAccess ? extraArgs : scopedArgs(extraArgs);
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         content.addView(page, new LinearLayout.LayoutParams(-1, -1));
@@ -899,9 +1049,9 @@ public class MainActivity extends Activity {
         search.setHint("Search name, ID, mobile, village, block, doctor");
         page.addView(search);
         page.addView(scrollingActions(
-                button("Export CSV", v -> exportPatientsCsv(text(search), extraWhere, extraArgs)),
-                button("Excel", v -> startListExport(text(search), extraWhere, extraArgs, REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                button("PDF", v -> startListExport(text(search), extraWhere, extraArgs, REQ_EXPORT_PDF, "patients.pdf", "application/pdf")),
+                button("Export CSV", v -> exportPatientsCsv(text(search), visibleWhere, visibleArgs)),
+                button("Excel", v -> startListExport(text(search), visibleWhere, visibleArgs, REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                button("PDF", v -> startListExport(text(search), visibleWhere, visibleArgs, REQ_EXPORT_PDF, "patients.pdf", "application/pdf")),
                 button("New Patient", v -> showPatientForm(null))
         ));
         ScrollView scroll = new ScrollView(this);
@@ -909,7 +1059,7 @@ public class MainActivity extends Activity {
         list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        Runnable reload = () -> renderPatientRows(list, db.listPatients(text(search), extraWhere, extraArgs), adminMode);
+        Runnable reload = () -> renderPatientRows(list, db.listPatients(text(search), visibleWhere, visibleArgs), adminMode);
         search.addTextChangedListener(simpleWatcher(s -> reload.run()));
         reload.run();
     }
@@ -1192,6 +1342,26 @@ public class MainActivity extends Activity {
         }
         System.arraycopy(extra, 0, out, base == null ? 0 : base.length, extra.length);
         return out;
+    }
+
+    private String dashboardScopeWhere() {
+        return isAdmin() ? null : "created_by = ?";
+    }
+
+    private String[] dashboardScopeArgs() {
+        return isAdmin() ? null : new String[]{currentUser};
+    }
+
+    private String scopedWhere(String where) {
+        return isAdmin() ? where : appendWhere(where, "created_by = ?");
+    }
+
+    private String[] scopedArgs(String[] args) {
+        return isAdmin() ? args : appendArgs(args, currentUser);
+    }
+
+    private void showScopedPatientList(String where, String[] args) {
+        showPatientList(false, where, args);
     }
 
     private Map<String, Integer> monthlySummary(String where, String[] args) {
