@@ -530,7 +530,7 @@ public class MainActivity extends Activity {
         int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
         int pending = Math.max(0, total - locked);
         int needsCompletion = db.countPatients(appendWhere(scopeWhere, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = '')"), scopeArgs);
-        int todayFocus = dueWeek + needsCompletion;
+        int todayFocus = db.countPatients(appendWhere(scopeWhere, "(edd_date BETWEEN ? AND ?) OR (record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = ''))"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
         box.addView(dashboardStatusStrip(total));
         box.addView(dashboardDensityToggle());
         box.addView(todayFocusBanner(total, todayFocus));
@@ -1303,13 +1303,15 @@ public class MainActivity extends Activity {
         scroll.addView(page);
         content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
 
-        int total = db.countPatients(null, null);
-        int locked = db.countPatients("record_locked = 1", null);
+        String exportWhere = scopedWhere(null);
+        String[] exportArgs = scopedArgs(null);
+        int total = db.countPatients(exportWhere, exportArgs);
+        int locked = db.countPatients(appendWhere(exportWhere, "record_locked = 1"), exportArgs);
         page.addView(section("Export Records",
                 emptyState(total + " records ready", "Save Excel or PDF directly through Android's file picker, then share it from the system sheet."),
                 scrollingActions(
-                        button("Excel", v -> startExport("", REQ_EXPORT_EXCEL, "blue_bird_patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                        button("PDF", v -> startExport("", REQ_EXPORT_PDF, "blue_bird_patients.pdf", "application/pdf")),
+                        button("Excel", v -> startExport("", exportWhere, exportArgs, REQ_EXPORT_EXCEL, "blue_bird_patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                        button("PDF", v -> startExport("", exportWhere, exportArgs, REQ_EXPORT_PDF, "blue_bird_patients.pdf", "application/pdf")),
                         button("Search Filtered Export", v -> showPatientList(false))
                 )
         ));
@@ -1329,8 +1331,8 @@ public class MainActivity extends Activity {
     private void renderReports(LinearLayout page, String from, String to, String block, String village, String motivatorName, String statusName) {
         page.removeAllViews();
         ReportFilter filter = reportWhere(from, to, block, village, motivatorName, statusName);
-        String where = filter.where;
-        String[] args = filter.args;
+        String where = scopedWhere(filter.where);
+        String[] args = scopedArgs(filter.args);
         int total = db.countPatients(where, args);
         int locked = db.countPatients(appendWhere(where, "record_locked = 1"), appendArgs(args));
         int edd30 = db.countPatients(appendWhere(where, "edd_date BETWEEN ? AND ?"), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()));
@@ -1492,9 +1494,13 @@ public class MainActivity extends Activity {
     }
 
     private void startExport(String filter, int requestCode, String fileName, String mimeType) {
+        startExport(filter, null, null, requestCode, fileName, mimeType);
+    }
+
+    private void startExport(String filter, String where, String[] args, int requestCode, String fileName, String mimeType) {
         pendingExportFilter = value(filter);
-        pendingExportWhere = null;
-        pendingExportArgs = null;
+        pendingExportWhere = where;
+        pendingExportArgs = args;
         pendingExportPatientId = -1;
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -1510,8 +1516,8 @@ public class MainActivity extends Activity {
     private void startFilteredExport(String from, String to, String block, String village, String motivatorName, String statusName, int requestCode, String fileName, String mimeType) {
         ReportFilter filter = reportWhere(from, to, block, village, motivatorName, statusName);
         pendingExportFilter = "";
-        pendingExportWhere = filter.where;
-        pendingExportArgs = filter.args;
+        pendingExportWhere = scopedWhere(filter.where);
+        pendingExportArgs = scopedArgs(filter.args);
         pendingExportPatientId = -1;
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
