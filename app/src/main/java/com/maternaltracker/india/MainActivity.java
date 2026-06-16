@@ -61,6 +61,7 @@ public class MainActivity extends Activity {
     private static final int MUTED = Color.rgb(100, 116, 139);
     private static final int BORDER = Color.argb(210, 255, 255, 255);
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("hh:mm a");
+    private static final DateTimeFormatter DASHBOARD_CLOCK_FMT = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy | hh:mm a");
     private static final String HOSPITAL_NAME = "BLUE BIRD A GENERAL HOSPITAL";
     private static final String APP_NAME = "Maternal Care Registry";
     private static final String DEFAULT_STATE = "West Bengal";
@@ -79,6 +80,8 @@ public class MainActivity extends Activity {
     private TextView headerTitle;
     private TextView syncBadge;
     private TextView backButton;
+    private TextView dashboardClock;
+    private Runnable dashboardClockTicker;
     private String currentUser = "";
     private String currentRole = "";
     private String currentPage = "Dashboard";
@@ -132,6 +135,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        stopDashboardClock();
         if (firebase != null) {
             firebase.stopPatientListener();
         }
@@ -465,6 +469,9 @@ public class MainActivity extends Activity {
     }
 
     private void setPage(String title) {
+        if (!"Dashboard".equals(title)) {
+            stopDashboardClock();
+        }
         currentPage = title;
         closeProfileMenu();
         content.animate().cancel();
@@ -562,10 +569,18 @@ public class MainActivity extends Activity {
     }
 
     private View dashboardStatusStrip(int total) {
+        stopDashboardClock();
         LinearLayout box = card();
         box.setPadding(dp(10), dp(8), dp(10), dp(8));
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = label(isAdmin() ? "Hospital Overview" : "Your Follow-up Work", 14, true);
         title.setTextColor(PRIMARY_DARK);
+        dashboardClock = label("", 11, true);
+        dashboardClock.setTextColor(PRIMARY_DARK);
+        dashboardClock.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        dashboardClock.setPadding(dp(8), 0, 0, 0);
         TextView context = label(isAdmin() ? "Admin view: all Blue Bird records" : "Staff view: records created by you", 11, false);
         context.setTextColor(MUTED);
         context.setPadding(0, dp(1), 0, dp(3));
@@ -578,10 +593,38 @@ public class MainActivity extends Activity {
         chips.addView(chip(total + " records", ACCENT, Color.WHITE));
         chips.addView(chip(lastSyncText, PRIMARY_SOFT, PRIMARY_DARK));
         chipScroll.addView(chips);
-        box.addView(title);
+        head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        head.addView(dashboardClock, new LinearLayout.LayoutParams(0, -2, 1));
+        box.addView(head);
         box.addView(context);
         box.addView(chipScroll);
+        startDashboardClock();
         return box;
+    }
+
+    private void startDashboardClock() {
+        if (dashboardClock == null) {
+            return;
+        }
+        dashboardClockTicker = new Runnable() {
+            @Override
+            public void run() {
+                if (dashboardClock == null || !"Dashboard".equals(currentPage)) {
+                    return;
+                }
+                dashboardClock.setText(LocalDateTime.now().format(DASHBOARD_CLOCK_FMT));
+                dashboardClock.postDelayed(this, 1000);
+            }
+        };
+        dashboardClockTicker.run();
+    }
+
+    private void stopDashboardClock() {
+        if (dashboardClock != null && dashboardClockTicker != null) {
+            dashboardClock.removeCallbacks(dashboardClockTicker);
+        }
+        dashboardClockTicker = null;
+        dashboardClock = null;
     }
 
     private View todayFocusBanner(int total, int actionCount) {
