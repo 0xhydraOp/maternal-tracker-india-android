@@ -542,7 +542,10 @@ public class MainActivity extends Activity {
         box.addView(dashboardDensityToggle());
         box.addView(todayFocusBanner(total, todayFocus));
         if (total == 0) {
-            box.addView(emptyDashboardState());
+            box.addView(zeroDashboardWorkspace());
+            box.addView(operationalChecklist());
+            box.addView(systemReadinessStrip());
+            box.addView(dashboardPreviewState());
             if (dashboardDetailed) {
                 box.addView(syncOverview(total));
             }
@@ -642,10 +645,131 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    private View emptyDashboardState() {
+    private View zeroDashboardWorkspace() {
         return section("Start Registry",
-                emptyActionState("No patient records yet", "Add the first patient to activate dashboard priorities, EDD tracking, reports, and exports.", "Add First Patient", v -> showPatientForm(null))
+                compactTwoColumn(
+                        zeroActionPanel("Add First Patient", "Create the first synced maternal record for Blue Bird.", "Add Patient", v -> showPatientForm(null), ACCENT),
+                        zeroActionPanel("Patient Records", "Search and exports will activate after records are saved.", "Open Search", v -> showPatientList(false), PRIMARY)
+                )
         );
+    }
+
+    private View zeroActionPanel(String title, String message, String action, View.OnClickListener listener, int color) {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(10), dp(9), dp(10), dp(9));
+        panel.setBackground(rounded(Color.argb(86, Color.red(color), Color.green(color), Color.blue(color)), dp(10), dp(1), Color.argb(140, Color.red(color), Color.green(color), Color.blue(color))));
+        TextView heading = label(title, 14, true);
+        heading.setTextColor(color);
+        TextView body = smallText(message);
+        body.setTextColor(MUTED);
+        panel.addView(heading);
+        panel.addView(body);
+        panel.addView(navButton(action, listener));
+        return panel;
+    }
+
+    private View operationalChecklist() {
+        return section("Operational Checklist",
+                checklistItem("Firebase sync", "Online listener active for hospital records", ACCENT),
+                checklistItem("Admin account", isAdmin() ? "Current login has administration access" : "Current login has staff access", isAdmin() ? ACCENT : PRIMARY),
+                checklistItem("Murshidabad blocks", "District and block selection is ready", ACCENT),
+                checklistItem("Export system", "Excel, PDF, CSV, and backup flows are available", ACCENT)
+        );
+    }
+
+    private View checklistItem(String title, String detail, int color) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(5), 0, dp(5));
+        TextView mark = label("✓", 15, true);
+        mark.setTextColor(Color.WHITE);
+        mark.setGravity(Gravity.CENTER);
+        mark.setBackground(rounded(color, dp(14), 0, color));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(9), 0, 0, 0);
+        TextView name = label(title, 13, true);
+        name.setTextColor(PRIMARY_DARK);
+        TextView desc = smallText(detail);
+        desc.setTextColor(MUTED);
+        copy.addView(name);
+        copy.addView(desc);
+        row.addView(mark, new LinearLayout.LayoutParams(dp(28), dp(28)));
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        return row;
+    }
+
+    private View systemReadinessStrip() {
+        return section("System Readiness",
+                readinessRow(
+                        readinessPill("Sync", value(syncBadge == null ? "SYNCING" : syncBadge.getText().toString()), ACCENT),
+                        readinessPill("Role", value(currentRole), PRIMARY),
+                        readinessPill("Location", DEFAULT_DISTRICT, SLATE),
+                        readinessPill("Export", "Ready", ACCENT)
+                )
+        );
+    }
+
+    private View readinessRow(View... pills) {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (View pill : pills) {
+            row.addView(pill);
+        }
+        scroll.addView(row);
+        return scroll;
+    }
+
+    private View readinessPill(String title, String value, int color) {
+        LinearLayout pill = new LinearLayout(this);
+        pill.setOrientation(LinearLayout.VERTICAL);
+        pill.setPadding(dp(11), dp(7), dp(11), dp(7));
+        pill.setBackground(rounded(Color.argb(72, Color.red(color), Color.green(color), Color.blue(color)), dp(16), dp(1), Color.argb(130, Color.red(color), Color.green(color), Color.blue(color))));
+        TextView t = label(title, 10, true);
+        t.setTextColor(MUTED);
+        TextView v = label(value, 12, true);
+        v.setTextColor(color);
+        pill.addView(t);
+        pill.addView(v);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(118), -2);
+        lp.setMargins(0, 0, dp(7), 0);
+        pill.setLayoutParams(lp);
+        return pill;
+    }
+
+    private View dashboardPreviewState() {
+        return section("Dashboard Preview",
+                compactKpiRow(
+                        previewMetric("EDD Week", "0", "Waiting for records"),
+                        previewMetric("Pending", "0", "No follow-up yet"),
+                        previewMetric("Attention", "0", "No flags yet"),
+                        previewMetric("Recent", "0", "No patients yet")
+                )
+        );
+    }
+
+    private View previewMetric(String title, String value, String caption) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(9), dp(7), dp(9), dp(7));
+        box.setBackground(rounded(Color.argb(118, 255, 255, 255), dp(10), dp(1), BORDER));
+        TextView number = label(value, 22, true);
+        number.setTextColor(MUTED);
+        TextView label = label(title, 11, true);
+        label.setTextColor(PRIMARY_DARK);
+        TextView note = label(caption, 9, false);
+        note.setTextColor(MUTED);
+        box.addView(number);
+        box.addView(label);
+        box.addView(note);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(132), -2);
+        lp.setMargins(0, 0, dp(7), 0);
+        box.setLayoutParams(lp);
+        return box;
     }
 
     private View dashboardDensityToggle() {
