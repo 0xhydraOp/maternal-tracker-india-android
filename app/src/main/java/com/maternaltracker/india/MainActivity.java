@@ -538,7 +538,7 @@ public class MainActivity extends Activity {
         int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
         int pending = Math.max(0, total - locked);
         int needsCompletion = db.countPatients(appendWhere(scopeWhere, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = '')"), scopeArgs);
-        int todayFocus = db.countPatients(appendWhere(scopeWhere, "(edd_date BETWEEN ? AND ?) OR (record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = ''))"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
+        int todayFocus = dueWeek;
         box.setPadding(0, 0, 0, dp(8));
         box.addView(dashboardStatusStrip(total));
         box.addView(dashboardDensityToggle());
@@ -635,9 +635,9 @@ public class MainActivity extends Activity {
     private View todayFocusBanner(int total, int actionCount) {
         LinearLayout box = card(actionCount > 0 ? Color.rgb(255, 248, 237) : Color.rgb(237, 250, 247), 1, actionCount > 0 ? WARNING : ACCENT);
         box.setPadding(dp(12), dp(9), dp(12), dp(9));
-        TextView title = label(total == 0 ? "Ready for first patient entry" : (actionCount > 0 ? actionCount + " record(s) need action today" : "All clear for today"), 15, true);
+        TextView title = label(total == 0 ? "Ready for first patient entry" : (actionCount > 0 ? actionCount + " EDD due within 7 days" : "No EDD due this week"), 15, true);
         title.setTextColor(actionCount > 0 ? WARNING : ACCENT);
-        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Review due EDD and incomplete follow-up records first." : "No urgent dashboard flags in the current view."));
+        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Review patients whose expected delivery date is in the next 7 days." : "No patient EDD falls within the next 7 days."));
         sub.setTextColor(MUTED);
         box.addView(title);
         box.addView(sub);
@@ -1585,7 +1585,7 @@ public class MainActivity extends Activity {
                 )
         ));
         page.addView(section("Export Tips",
-                smallText("Use Reports for date, block, village, motivator, or lock-status filtered Excel/PDF exports."),
+                smallText("Use Reports for date, village, block filter, or lock-status filtered Excel/PDF exports."),
                 smallText("Use Patient Detail when one patient's PDF or Excel file is needed.")
         ));
     }
@@ -1622,9 +1622,7 @@ public class MainActivity extends Activity {
             visits.addView(progressRow(row[0], done, total, pct));
         }
         page.addView(section("Visit Completion", visits));
-        page.addView(reportMap("Motivator Performance", db.countBy("motivator_name", where, args)));
         page.addView(reportMap("Patients by Village", db.countBy("village_name", where, args)));
-        page.addView(reportMap("Patients by Block", db.countBy("local_body_name", where, args)));
         page.addView(reportMap("Monthly Summary", monthlySummary(where, args)));
     }
 
