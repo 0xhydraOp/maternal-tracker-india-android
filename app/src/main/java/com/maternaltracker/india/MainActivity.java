@@ -82,6 +82,7 @@ public class MainActivity extends Activity {
     private TextView backButton;
     private TextView dashboardClock;
     private Runnable dashboardClockTicker;
+    private ScrollView patientFormScroll;
     private String currentUser = "";
     private String currentRole = "";
     private String currentPage = "Dashboard";
@@ -1023,12 +1024,16 @@ public class MainActivity extends Activity {
         selectedDistrictCode = null;
         selectedSubdistrictCode = null;
         selectedLocalBodyCode = null;
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        content.addView(screen, new LinearLayout.LayoutParams(-1, -1));
         ScrollView scroll = new ScrollView(this);
+        patientFormScroll = scroll;
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(0, 0, 0, dp(20));
+        form.setPadding(0, 0, 0, dp(8));
         scroll.addView(form);
-        content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+        screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         patientId = readOnlyInput(patient == null ? db.nextPatientId() : patient.patientId);
         patientName = input(value(patient == null ? null : patient.patientName));
@@ -1049,12 +1054,10 @@ public class MainActivity extends Activity {
         localBody = auto(murshidabadBlocks());
         localBody.setHint("Select block");
         localBody.setThreshold(0);
+        localBody.setInputType(InputType.TYPE_NULL);
+        localBody.setKeyListener(null);
+        localBody.setFocusable(false);
         localBody.setOnClickListener(v -> localBody.showDropDown());
-        localBody.setOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus) {
-                localBody.showDropDown();
-            }
-        });
         ward = auto(db.listWards(selectedLocalBodyCode));
         village = auto(list());
         village.setHint("Type village name");
@@ -1067,6 +1070,7 @@ public class MainActivity extends Activity {
         eddDate.setHint("YYYY-MM-DD");
         motivator.setHint("Optional");
         doctor.setHint("Doctor name");
+        doctor.setThreshold(Integer.MAX_VALUE);
         visit1 = readOnlyInput(patient == null ? LocalDate.now().toString() : value(patient.visit1));
         visit2 = input(value(patient == null ? null : patient.visit2));
         visit3 = input(value(patient == null ? null : patient.visit3));
@@ -1098,8 +1102,12 @@ public class MainActivity extends Activity {
         }
 
         lmpDate.addTextChangedListener(simpleWatcher(s -> updateEdd()));
+        addPatientValidationWatchers();
         subdistrict.setOnItemClickListener((parent, view, position, id) -> localBody.setText(text(subdistrict), false));
-        localBody.setOnItemClickListener((parent, view, position, id) -> subdistrict.setText(text(localBody), false));
+        localBody.setOnItemClickListener((parent, view, position, id) -> {
+            subdistrict.setText(text(localBody), false);
+            localBody.clearFocus();
+        });
 
         boolean lockedForStaff = patient != null && patient.recordLocked && !isAdmin();
         form.addView(formStep("1", "Basic Info", true,
@@ -1127,14 +1135,28 @@ public class MainActivity extends Activity {
         ));
 
         LinearLayout actions = new LinearLayout(this);
+        actions.setPadding(dp(10), dp(8), dp(10), dp(8));
         actions.setGravity(Gravity.END);
+        actions.setBackground(glassPanel(dp(12)));
         actions.addView(button("Clear", v -> showPatientForm(null)));
         savePatientButton = button(patient == null ? "Save Patient" : "Update Patient", v -> savePatient());
         savePatientButton.setEnabled(!lockedForStaff);
         actions.addView(savePatientButton);
-        form.addView(actions);
+        screen.addView(actions, new LinearLayout.LayoutParams(-1, -2));
         if (lockedForStaff) {
             status.setText("This record is locked after final visit. Admin can unlock it.");
+        }
+    }
+
+    private void addPatientValidationWatchers() {
+        TextView[] fields = {patientName, mobile, localBody, village, lmpDate, eddDate, doctor, visit2, visit3, finalVisit};
+        for (TextView field : fields) {
+            field.addTextChangedListener(simpleWatcher(s -> {
+                field.setError(null);
+                if (status != null) {
+                    status.setText("");
+                }
+            }));
         }
     }
 
@@ -1166,7 +1188,7 @@ public class MainActivity extends Activity {
 
         String validation = validatePatient(p);
         if (validation != null) {
-            toast(validation);
+            showPatientValidationError(p, validation);
             return;
         }
         boolean shouldLockAfterSave = shouldConfirmFinalLock(old, p);
@@ -1244,6 +1266,64 @@ public class MainActivity extends Activity {
         return PatientRules.validate(p, LocalDate.now());
     }
 
+    private void showPatientValidationError(Patient p, String fallback) {
+        TextView target = null;
+        String message = fallback;
+        if (empty(p.patientName)) {
+            target = patientName;
+            message = "Patient name is required";
+        } else if (empty(p.mobileNumber)) {
+            target = mobile;
+            message = "Mobile number is required";
+        } else if (p.mobileNumber.replaceAll("\\D", "").length() != 10) {
+            target = mobile;
+            message = "Enter a 10 digit mobile number";
+        } else if (empty(p.localBodyName)) {
+            target = localBody;
+            message = "Select block name";
+        } else if (empty(p.villageName)) {
+            target = village;
+            message = "Village name is required";
+        } else if (empty(p.lmpDate) || !PatientRules.validDate(p.lmpDate) || LocalDate.parse(p.lmpDate).isAfter(LocalDate.now())) {
+            target = lmpDate;
+        } else if (empty(p.eddDate) || !PatientRules.validDate(p.eddDate)) {
+            target = eddDate;
+        } else if (empty(p.doctorName)) {
+            target = doctor;
+            message = "Doctor name is required";
+        } else if (!PatientRules.validDate(p.visit2)) {
+            target = visit2;
+        } else if (!PatientRules.validDate(p.visit3)) {
+            target = visit3;
+        } else if (!PatientRules.validDate(p.finalVisit)) {
+            target = finalVisit;
+        }
+        toast(message);
+        if (target != null) {
+            target.setError(message);
+            target.requestFocus();
+            scrollPatientFieldIntoView(target);
+        }
+    }
+
+    private void scrollPatientFieldIntoView(View target) {
+        if (patientFormScroll == null || target == null) {
+            return;
+        }
+        patientFormScroll.post(() -> {
+            int y = target.getTop();
+            View parent = (View) target.getParent();
+            while (parent != null && parent != patientFormScroll) {
+                y += parent.getTop();
+                if (!(parent.getParent() instanceof View)) {
+                    break;
+                }
+                parent = (View) parent.getParent();
+            }
+            patientFormScroll.smoothScrollTo(0, Math.max(0, y - dp(80)));
+        });
+    }
+
     private void logPatientDiff(Patient old, Patient p) {
         db.logChange(p.patientId, "patient_name", old.patientName, p.patientName, currentUser);
         db.logChange(p.patientId, "mobile_number", old.mobileNumber, p.mobileNumber, currentUser);
@@ -1265,10 +1345,14 @@ public class MainActivity extends Activity {
     }
 
     private void showPatientList(boolean adminMode, String extraWhere, String[] extraArgs) {
+        showPatientList(adminMode, extraWhere, extraArgs, adminMode && isAdmin());
+    }
+
+    private void showPatientList(boolean adminMode, String extraWhere, String[] extraArgs, boolean alreadyScoped) {
         setPage(adminMode ? "Patient Management" : "Patient Search");
         boolean fullAccess = adminMode && isAdmin();
-        String visibleWhere = fullAccess ? extraWhere : scopedWhere(extraWhere);
-        String[] visibleArgs = fullAccess ? extraArgs : scopedArgs(extraArgs);
+        String visibleWhere = fullAccess || alreadyScoped ? extraWhere : scopedWhere(extraWhere);
+        String[] visibleArgs = fullAccess || alreadyScoped ? extraArgs : scopedArgs(extraArgs);
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         content.addView(page, new LinearLayout.LayoutParams(-1, -1));
@@ -1505,10 +1589,10 @@ public class MainActivity extends Activity {
         int edd30 = db.countPatients(appendWhere(where, "edd_date BETWEEN ? AND ?"), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()));
         int today = db.countPatients(appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()));
         page.addView(statGrid(
-                stat("Filtered Records", total, v -> showPatientList(false, where, args)),
-                stat("Today's Entries", today, v -> showPatientList(false, appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()))),
-                stat("EDD 30 Days", edd30, v -> showPatientList(false, appendWhere(where, "edd_date BETWEEN ? AND ?"), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()))),
-                stat("Locked", locked, v -> showPatientList(false, appendWhere(where, "record_locked = 1"), args))
+                stat("Filtered Records", total, v -> showPatientList(false, where, args, true)),
+                stat("Today's Entries", today, v -> showPatientList(false, appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()), true)),
+                stat("EDD 30 Days", edd30, v -> showPatientList(false, appendWhere(where, "edd_date BETWEEN ? AND ?"), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()), true)),
+                stat("Locked", locked, v -> showPatientList(false, appendWhere(where, "record_locked = 1"), args, true))
         ));
         page.addView(section("Report Snapshot",
                 progressRow("Open records", Math.max(0, total - locked), Math.max(total, 1), total == 0 ? 0 : Math.round((total - locked) * 100f / total)),
@@ -2588,6 +2672,7 @@ public class MainActivity extends Activity {
         return b;
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private Button button(String text, View.OnClickListener listener) {
         Button b = new Button(this) {
             @Override
@@ -2614,11 +2699,8 @@ public class MainActivity extends Activity {
                 view.animate().scaleX(0.97f).scaleY(0.97f).setDuration(80).start();
             } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
                 view.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
-                if (event.getAction() == MotionEvent.ACTION_UP) {
-                    view.performClick();
-                }
             }
-            return true;
+            return false;
         });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(42));
         lp.setMargins(dp(4), dp(4), dp(4), dp(4));

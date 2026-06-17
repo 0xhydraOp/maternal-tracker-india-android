@@ -37,8 +37,8 @@ service cloud.firestore {
           'stateName', 'districtName', 'subdistrictName', 'localBodyType',
           'localBodyName', 'wardName', 'villageName', 'lmpDate', 'eddDate',
           'motivatorName', 'doctorName', 'visit1', 'visit2', 'visit3',
-          'finalVisit', 'entryDate', 'recordLocked', 'remarks', 'updatedAt',
-          'updatedBy'
+          'finalVisit', 'entryDate', 'createdBy', 'recordLocked', 'remarks',
+          'updatedAt', 'updatedBy'
         ])
         && request.resource.data.patientId == patientId
         && request.resource.data.updatedBy == email();

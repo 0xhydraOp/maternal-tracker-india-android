@@ -19,8 +19,8 @@ final class PatientRules {
             return "Fill all required fields. Motivator and later visits are optional";
         }
         String digits = p.mobileNumber.replaceAll("\\D", "");
-        if (digits.length() < 10 || digits.length() > 15) {
-            return "Mobile number must contain 10 to 15 digits";
+        if (digits.length() != 10) {
+            return "Mobile number must contain exactly 10 digits";
         }
         if (!validDate(p.lmpDate) || !validDate(p.eddDate) || !validDate(p.visit1) || !validDate(p.visit2) || !validDate(p.visit3) || !validDate(p.finalVisit)) {
             return "Use date format YYYY-MM-DD";

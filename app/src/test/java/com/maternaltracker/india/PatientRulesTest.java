@@ -24,7 +24,7 @@ public class PatientRulesTest {
     public void validationRejectsBadMobile() {
         Patient p = validPatient();
         p.mobileNumber = "12345";
-        assertEquals("Mobile number must contain 10 to 15 digits", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+        assertEquals("Mobile number must contain exactly 10 digits", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
     @Test
