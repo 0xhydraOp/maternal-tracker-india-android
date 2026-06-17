@@ -86,7 +86,6 @@ public class MainActivity extends Activity {
     private String currentUser = "";
     private String currentRole = "";
     private String currentPage = "Dashboard";
-    private boolean dashboardDetailed = false;
     private String lastSyncText = "Not synced yet";
 
     private EditText patientId;
@@ -129,7 +128,6 @@ public class MainActivity extends Activity {
         db = new MaternalDbHelper(this);
         firebase = new FirebaseGateway(this);
         db.ensureCoreData();
-        dashboardDetailed = getPreferences(MODE_PRIVATE).getBoolean("dashboard_detailed", false);
         LocationImporter.importBundledLgd(this, db);
         restoreOrShowLogin();
     }
@@ -534,23 +532,18 @@ public class MainActivity extends Activity {
         int total = db.countPatients(scopeWhere, scopeArgs);
         int today = db.countPatients(appendWhere(scopeWhere, "entry_date = ?"), appendArgs(scopeArgs, LocalDate.now().toString()));
         int dueWeek = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
-        int edd30 = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()));
         int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
         int pending = Math.max(0, total - locked);
         int needsCompletion = db.countPatients(appendWhere(scopeWhere, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = '')"), scopeArgs);
         int todayFocus = dueWeek;
         box.setPadding(0, 0, 0, dp(8));
         box.addView(dashboardStatusStrip(total));
-        box.addView(dashboardDensityToggle());
         box.addView(todayFocusBanner(total, todayFocus));
         if (total == 0) {
             box.addView(zeroDashboardWorkspace());
             box.addView(operationalChecklist());
             box.addView(systemReadinessStrip());
             box.addView(dashboardPreviewState());
-            if (dashboardDetailed) {
-                box.addView(syncOverview(total));
-            }
             return;
         }
         box.addView(compactKpiRow(
@@ -562,15 +555,6 @@ public class MainActivity extends Activity {
         box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, pending, needsCompletion)));
         box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
         box.addView(section("Data Quality Alerts", needsAttentionView(scopeWhere, scopeArgs)));
-        if (dashboardDetailed) {
-            box.addView(section("30 Day Overview",
-                    progressRow("EDD within 30 days", edd30, Math.max(total, 1), total == 0 ? 0 : Math.round(edd30 * 100f / total)),
-                    progressRow("Follow-up pending", pending, Math.max(total, 1), total == 0 ? 0 : Math.round(pending * 100f / total)),
-                    progressRow("Completed", locked, Math.max(total, 1), total == 0 ? 0 : Math.round(locked * 100f / total))
-            ));
-            box.addView(syncOverview(total));
-            box.addView(section("Recent Patients", recentPatientsView(scopeWhere, scopeArgs)));
-        }
     }
 
     private View dashboardStatusStrip(int total) {
@@ -774,39 +758,6 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    private View dashboardDensityToggle() {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, 0, 0, dp(5));
-        Button compact = dashboardToggleButton("Compact", !dashboardDetailed);
-        compact.setOnClickListener(v -> setDashboardDetailed(false));
-        Button detailed = dashboardToggleButton("Detailed", dashboardDetailed);
-        detailed.setOnClickListener(v -> setDashboardDetailed(true));
-        row.addView(compact, new LinearLayout.LayoutParams(0, dp(38), 1));
-        row.addView(detailed, new LinearLayout.LayoutParams(0, dp(38), 1));
-        return row;
-    }
-
-    private Button dashboardToggleButton(String text, boolean active) {
-        Button b = button(text, v -> {
-        });
-        b.setTextColor(active ? Color.WHITE : PRIMARY_DARK);
-        b.setBackground(active ? gradient(PRIMARY, ACCENT, dp(16)) : rounded(Color.argb(120, 255, 255, 255), dp(16), dp(1), BORDER));
-        b.setMinHeight(dp(38));
-        b.setMinimumHeight(dp(38));
-        return b;
-    }
-
-    private void setDashboardDetailed(boolean detailed) {
-        if (dashboardDetailed == detailed) {
-            return;
-        }
-        dashboardDetailed = detailed;
-        getPreferences(MODE_PRIVATE).edit().putBoolean("dashboard_detailed", dashboardDetailed).apply();
-        showDashboard();
-    }
-
     private View priorityQueue(int today, int dueWeek, int pending, int needsCompletion) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
@@ -884,7 +835,7 @@ public class MainActivity extends Activity {
     private View upcomingEddView(String where, String[] args) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        List<String[]> rows = db.upcomingEddRows(where, args, dashboardDetailed ? 6 : 3);
+        List<String[]> rows = db.upcomingEddRows(where, args, 3);
         if (rows.isEmpty()) {
             list.addView(emptyState("No upcoming EDD", "Upcoming delivery dates will appear here after patient records are saved."));
             return list;
@@ -1546,11 +1497,13 @@ public class MainActivity extends Activity {
 
         Runnable[] render = new Runnable[1];
         render[0] = () -> renderReports(reportBody, text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter));
-        page.addView(scrollingActions(
-                button("Apply", v -> render[0].run()),
-                button("Search", v -> openFilteredPatientSearch(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter))),
-                button("Excel", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                button("PDF", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_PDF, "patients.pdf", "application/pdf"))
+        page.addView(section("Report Actions",
+                scrollingActions(
+                    button("Apply", v -> render[0].run()),
+                    button("Search", v -> openFilteredPatientSearch(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter))),
+                    button("Excel", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                    button("PDF", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_PDF, "patients.pdf", "application/pdf"))
+            )
         ));
         page.addView(collapsibleSection("Filters", false, filters));
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -2134,22 +2087,35 @@ public class MainActivity extends Activity {
         content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
         int total = db.countPatients(null, null);
         int locked = db.countPatients("record_locked = 1", null);
-        page.addView(section("Admin Control Panel",
-                compactTwoColumn(stat("Records", total, v -> showPatientList(true)), stat("Locked", locked, v -> showPatientList(true, "record_locked = 1", null)))
+        int doctors = db.listNames("custom_doctors").size();
+        int motivators = db.listNames("custom_motivators").size();
+        page.addView(statGrid(
+                stat("Records", total, v -> showPatientList(true)),
+                stat("Locked", locked, v -> showPatientList(true, "record_locked = 1", null)),
+                stat("Doctors", doctors, v -> showAdmin()),
+                stat("Motivators", motivators, v -> showAdmin())
         ));
-        page.addView(section("Users",
+        page.addView(section("Admin Actions",
+                scrollingActions(
+                        button("Patient Management", v -> showPatientList(true)),
+                        button("Reports", v -> showReports()),
+                        button("Export Center", v -> showExportCenter()),
+                        button("Backup", v -> showBackup())
+                )
+        ));
+        page.addView(section("Access Management",
                 usersView(),
                 navButton("Add User", v -> addUserDialog())
         ));
-        page.addView(section("Motivator Names",
-                namesView("custom_motivators"),
-                navButton("Add Motivator", v -> addNameDialog("custom_motivators", "Motivator Name"))
-        ));
-        page.addView(section("Doctor Names",
+        page.addView(collapsibleSection("Doctor Names", false,
                 namesView("custom_doctors"),
                 navButton("Add Doctor", v -> addNameDialog("custom_doctors", "Doctor Name"))
         ));
-        page.addView(section("Change Logs", changeLogView()));
+        page.addView(collapsibleSection("Motivator Names", false,
+                namesView("custom_motivators"),
+                navButton("Add Motivator", v -> addNameDialog("custom_motivators", "Motivator Name"))
+        ));
+        page.addView(collapsibleSection("Audit Trail", false, changeLogView()));
     }
 
     private View usersView() {
