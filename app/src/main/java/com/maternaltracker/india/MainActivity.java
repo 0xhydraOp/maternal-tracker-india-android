@@ -533,8 +533,6 @@ public class MainActivity extends Activity {
         int today = db.countPatients(appendWhere(scopeWhere, "entry_date = ?"), appendArgs(scopeArgs, LocalDate.now().toString()));
         int dueWeek = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
         int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
-        int pending = Math.max(0, total - locked);
-        int needsCompletion = db.countPatients(appendWhere(scopeWhere, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = '')"), scopeArgs);
         int todayFocus = dueWeek;
         box.setPadding(0, 0, 0, dp(8));
         box.addView(dashboardStatusStrip(total));
@@ -549,10 +547,10 @@ public class MainActivity extends Activity {
         box.addView(compactKpiRow(
                 compactKpi("Total", total, "Patients", v -> showScopedPatientList(null, null)),
                 compactKpi("Due Week", dueWeek, "EDD within 7 days", v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
-                compactKpi("Pending", pending, "Follow-up", v -> showScopedPatientList("record_locked = 0", null)),
+                compactKpi("Today", today, "New entries", v -> showScopedPatientList("entry_date = ?", new String[]{LocalDate.now().toString()})),
                 compactKpi("Done", locked, "Completed", v -> showScopedPatientList("record_locked = 1", null))
         ));
-        box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, pending, needsCompletion)));
+        box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek)));
         box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
         box.addView(section("Data Quality Alerts", needsAttentionView(scopeWhere, scopeArgs)));
     }
@@ -758,12 +756,10 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    private View priorityQueue(int today, int dueWeek, int pending, int needsCompletion) {
+    private View priorityQueue(int today, int dueWeek) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.addView(priorityItem("EDD due this week", dueWeek, "Review patients with delivery dates in the next 7 days", "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
-        list.addView(priorityItem("Follow-up pending", pending, "Open records that still need visit tracking", "record_locked = 0", null));
-        list.addView(priorityItem("Records needing completion", needsCompletion, "Open records missing later visit dates", "record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = '')", null));
         list.addView(priorityItem("New entries today", today, "Patients registered today", "entry_date = ?", new String[]{LocalDate.now().toString()}));
         return list;
     }
@@ -1474,21 +1470,16 @@ public class MainActivity extends Activity {
         filters.setOrientation(LinearLayout.VERTICAL);
         EditText from = input("");
         EditText to = input("");
-        AutoCompleteTextView block = auto(murshidabadBlocks());
         AutoCompleteTextView villageFilter = auto(list());
-        AutoCompleteTextView motivatorFilter = auto(db.listNames("custom_motivators"));
         AutoCompleteTextView statusFilter = auto(list("All", "Open", "Locked"));
         from.setHint("From YYYY-MM-DD");
         to.setHint("To YYYY-MM-DD");
-        block.setHint("All blocks");
         villageFilter.setHint("Village");
-        motivatorFilter.setHint("Motivator");
         statusFilter.setText("All", false);
         attachDatePicker(from);
         attachDatePicker(to);
         filters.addView(compactTwoColumn(row("From", from), row("To", to)));
-        filters.addView(compactTwoColumn(row("Block", block), row("Village", villageFilter)));
-        filters.addView(compactTwoColumn(row("Motivator", motivatorFilter), row("Status", statusFilter)));
+        filters.addView(compactTwoColumn(row("Village", villageFilter), row("Status", statusFilter)));
 
         LinearLayout reportBody = new LinearLayout(this);
         reportBody.setOrientation(LinearLayout.VERTICAL);
@@ -1496,13 +1487,13 @@ public class MainActivity extends Activity {
         scroll.addView(reportBody);
 
         Runnable[] render = new Runnable[1];
-        render[0] = () -> renderReports(reportBody, text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter));
+        render[0] = () -> renderReports(reportBody, text(from), text(to), text(villageFilter), text(statusFilter));
         page.addView(section("Report Actions",
                 scrollingActions(
                     button("Apply", v -> render[0].run()),
-                    button("Search", v -> openFilteredPatientSearch(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter))),
-                    button("Excel", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                    button("PDF", v -> startFilteredExport(text(from), text(to), text(block), text(villageFilter), text(motivatorFilter), text(statusFilter), REQ_EXPORT_PDF, "patients.pdf", "application/pdf"))
+                    button("Search", v -> openFilteredPatientSearch(text(from), text(to), text(villageFilter), text(statusFilter))),
+                    button("Excel", v -> startFilteredExport(text(from), text(to), text(villageFilter), text(statusFilter), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                    button("PDF", v -> startFilteredExport(text(from), text(to), text(villageFilter), text(statusFilter), REQ_EXPORT_PDF, "patients.pdf", "application/pdf"))
             )
         ));
         page.addView(collapsibleSection("Filters", false, filters));
@@ -1538,14 +1529,14 @@ public class MainActivity extends Activity {
                 )
         ));
         page.addView(section("Export Tips",
-                smallText("Use Reports for date, village, block filter, or lock-status filtered Excel/PDF exports."),
+                smallText("Use Reports for date, village, or lock-status filtered Excel/PDF exports."),
                 smallText("Use Patient Detail when one patient's PDF or Excel file is needed.")
         ));
     }
 
-    private void renderReports(LinearLayout page, String from, String to, String block, String village, String motivatorName, String statusName) {
+    private void renderReports(LinearLayout page, String from, String to, String village, String statusName) {
         page.removeAllViews();
-        ReportFilter filter = reportWhere(from, to, block, village, motivatorName, statusName);
+        ReportFilter filter = reportWhere(from, to, village, statusName);
         String where = scopedWhere(filter.where);
         String[] args = scopedArgs(filter.args);
         int total = db.countPatients(where, args);
@@ -1579,7 +1570,7 @@ public class MainActivity extends Activity {
         page.addView(reportMap("Monthly Summary", monthlySummary(where, args)));
     }
 
-    private ReportFilter reportWhere(String from, String to, String block, String village, String motivatorName, String statusName) {
+    private ReportFilter reportWhere(String from, String to, String village, String statusName) {
         List<String> clauses = new java.util.ArrayList<>();
         List<String> args = new java.util.ArrayList<>();
         if (!empty(from)) {
@@ -1590,17 +1581,9 @@ public class MainActivity extends Activity {
             clauses.add("entry_date <= ?");
             args.add(to);
         }
-        if (!empty(block)) {
-            clauses.add("local_body_name = ?");
-            args.add(block);
-        }
         if (!empty(village)) {
             clauses.add("village_name LIKE ?");
             args.add("%" + village + "%");
-        }
-        if (!empty(motivatorName)) {
-            clauses.add("motivator_name = ?");
-            args.add(motivatorName);
         }
         if ("Locked".equalsIgnoreCase(value(statusName))) {
             clauses.add("record_locked = 1");
@@ -1610,8 +1593,8 @@ public class MainActivity extends Activity {
         return new ReportFilter(clauses.isEmpty() ? null : String.join(" AND ", clauses), args);
     }
 
-    private void openFilteredPatientSearch(String from, String to, String block, String village, String motivatorName, String statusName) {
-        ReportFilter filter = reportWhere(from, to, block, village, motivatorName, statusName);
+    private void openFilteredPatientSearch(String from, String to, String village, String statusName) {
+        ReportFilter filter = reportWhere(from, to, village, statusName);
         showPatientList(false, filter.where, filter.args);
     }
 
@@ -1726,8 +1709,8 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void startFilteredExport(String from, String to, String block, String village, String motivatorName, String statusName, int requestCode, String fileName, String mimeType) {
-        ReportFilter filter = reportWhere(from, to, block, village, motivatorName, statusName);
+    private void startFilteredExport(String from, String to, String village, String statusName, int requestCode, String fileName, String mimeType) {
+        ReportFilter filter = reportWhere(from, to, village, statusName);
         pendingExportFilter = "";
         pendingExportWhere = scopedWhere(filter.where);
         pendingExportArgs = scopedArgs(filter.args);

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.1 - 2026-06-18
+
+- Removed Report dashboard Block and Motivator filters; Reports now filter by date, village, and status only.
+- Removed Home dashboard follow-up pending and records-needing-completion notifications.
+- Reorganized Home dashboard cards around Total, Due Week, Today, Done, EDD priorities, upcoming EDD, and data quality.
+- Bumped Android app version to `1.1.1` / versionCode `9`.
+
 ## v1.0.5 - 2026-05-31
 
 - Cleared stale screen references when returning to login so detached status labels cannot be updated after logout.
