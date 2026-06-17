@@ -1367,8 +1367,7 @@ public class MainActivity extends Activity {
         content.addView(page, new LinearLayout.LayoutParams(-1, -1));
         EditText search = input("");
         search.setHint("Search existing patient by name, mobile, ID, village, block, doctor");
-        page.addView(search);
-        page.addView(smallText("For 2nd, 3rd, or final visit, search the existing patient and use Update Visits."));
+        page.addView(searchPanel(search));
         page.addView(scrollingActions(
                 button("Export CSV", v -> exportPatientsCsv(text(search), visibleWhere, visibleArgs)),
                 button("Excel", v -> startListExport(text(search), visibleWhere, visibleArgs, REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
@@ -2637,6 +2636,60 @@ public class MainActivity extends Activity {
         return tv;
     }
 
+    private View searchPanel(EditText search) {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(14), dp(12), dp(14), dp(14));
+        panel.setBackground(prominentPanel());
+        panel.setElevation(dp(4));
+        LinearLayout.LayoutParams panelLp = new LinearLayout.LayoutParams(-1, -2);
+        panelLp.setMargins(0, 0, 0, dp(8));
+        panel.setLayoutParams(panelLp);
+
+        LinearLayout heading = new LinearLayout(this);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = label("Find Existing Patient", 18, true);
+        title.setTextColor(Color.WHITE);
+        heading.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView badge = label("SEARCH", 11, true);
+        badge.setTextColor(Color.WHITE);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(10), dp(4), dp(10), dp(4));
+        badge.setBackground(rounded(Color.argb(74, 255, 255, 255), dp(14), dp(1), Color.argb(110, 255, 255, 255)));
+        heading.addView(badge);
+        panel.addView(heading);
+
+        TextView helper = label("Type patient name or mobile number, then use Update Visits for follow-up dates.", 13, false);
+        helper.setTextColor(Color.argb(230, 255, 255, 255));
+        helper.setPadding(0, dp(4), 0, dp(10));
+        panel.addView(helper);
+
+        LinearLayout searchBox = new LinearLayout(this);
+        searchBox.setGravity(Gravity.CENTER_VERTICAL);
+        searchBox.setPadding(dp(12), 0, dp(8), 0);
+        searchBox.setBackground(rounded(Color.argb(245, 255, 255, 255), dp(14), dp(2), Color.argb(235, 255, 255, 255)));
+        searchBox.setClickable(true);
+        searchBox.setOnClickListener(v -> {
+            search.requestFocus();
+            android.view.inputmethod.InputMethodManager imm =
+                    (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.showSoftInput(search, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+            }
+        });
+        TextView icon = label("Search", 13, true);
+        icon.setTextColor(PRIMARY);
+        icon.setGravity(Gravity.CENTER);
+        icon.setPadding(0, 0, dp(10), 0);
+        searchBox.addView(icon);
+        search.setTextSize(16);
+        search.setBackgroundColor(Color.TRANSPARENT);
+        search.setPadding(dp(4), 0, dp(6), 0);
+        searchBox.addView(search, new LinearLayout.LayoutParams(0, dp(56), 1));
+        panel.addView(searchBox, new LinearLayout.LayoutParams(-1, dp(58)));
+        return panel;
+    }
+
     private EditText input(String value) {
         EditText edit = new EditText(this);
         edit.setSingleLine(true);
@@ -2775,6 +2828,19 @@ public class MainActivity extends Activity {
         );
         drawable.setCornerRadius(radius);
         drawable.setStroke(dp(1), Color.argb(230, 255, 255, 255));
+        return drawable;
+    }
+
+    private GradientDrawable prominentPanel() {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{
+                        Color.rgb(0, 85, 118),
+                        Color.rgb(0, 143, 132)
+                }
+        );
+        drawable.setCornerRadius(dp(16));
+        drawable.setStroke(dp(1), Color.argb(95, 255, 255, 255));
         return drawable;
     }
 
