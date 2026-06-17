@@ -1018,6 +1018,10 @@ public class MainActivity extends Activity {
     }
 
     private void showPatientForm(Patient patient) {
+        showPatientForm(patient, false);
+    }
+
+    private void showPatientForm(Patient patient, boolean jumpToVisits) {
         setPage(patient == null ? "Patient Entry" : "Edit Patient");
         editingPatient = patient;
         selectedStateCode = null;
@@ -1145,6 +1149,11 @@ public class MainActivity extends Activity {
         screen.addView(actions, new LinearLayout.LayoutParams(-1, -2));
         if (lockedForStaff) {
             status.setText("This record is locked after final visit. Admin can unlock it.");
+        } else if (jumpToVisits) {
+            status.setText("Update visit dates for the existing patient record.");
+            TextView nextVisitField = empty(value(patient.visit2)) ? visit2 :
+                    (empty(value(patient.visit3)) ? visit3 : finalVisit);
+            scrollPatientFieldIntoView(nextVisitField);
         }
     }
 
@@ -1357,8 +1366,9 @@ public class MainActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         content.addView(page, new LinearLayout.LayoutParams(-1, -1));
         EditText search = input("");
-        search.setHint("Search name, ID, mobile, village, block, doctor");
+        search.setHint("Search existing patient by name, mobile, ID, village, block, doctor");
         page.addView(search);
+        page.addView(smallText("For 2nd, 3rd, or final visit, search the existing patient and use Update Visits."));
         page.addView(scrollingActions(
                 button("Export CSV", v -> exportPatientsCsv(text(search), visibleWhere, visibleArgs)),
                 button("Excel", v -> startListExport(text(search), visibleWhere, visibleArgs, REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
@@ -1400,10 +1410,14 @@ public class MainActivity extends Activity {
                 TextView locked = chip("Locked after final visit", ACCENT, Color.WHITE);
                 card.addView(locked);
             }
-            LinearLayout actions = new LinearLayout(this);
-            actions.addView(button("View", v -> showPatientDetail(db.getPatient(p.id), adminMode)));
+            card.setOnClickListener(v -> showPatientDetail(db.getPatient(p.id), adminMode));
+            List<View> rowActions = new java.util.ArrayList<>();
+            rowActions.add(button("View", v -> showPatientDetail(db.getPatient(p.id), adminMode)));
+            if (!p.recordLocked || isAdmin()) {
+                rowActions.add(button("Update Visits", v -> showPatientForm(db.getPatient(p.id), true)));
+            }
             if (adminMode && isAdmin()) {
-                actions.addView(button("Unlock", v -> {
+                rowActions.add(button("Unlock", v -> {
                     p.recordLocked = false;
                     p.updatedBy = currentUser;
                     firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
@@ -1417,9 +1431,9 @@ public class MainActivity extends Activity {
                         showPatientList(true);
                     }));
                 }));
-                actions.addView(button("Delete", v -> confirmDeletePatient(p)));
+                rowActions.add(button("Delete", v -> confirmDeletePatient(p)));
             }
-            card.addView(actions);
+            card.addView(scrollingActions(rowActions.toArray(new View[0])));
             list.addView(card);
         }
     }
@@ -1456,6 +1470,7 @@ public class MainActivity extends Activity {
         actions.setOrientation(LinearLayout.VERTICAL);
         actions.addView(navButton("Back to Search", v -> showPatientList(adminMode)));
         if (!p.recordLocked || isAdmin()) {
+            actions.addView(button("Update Visit Dates", v -> showPatientForm(db.getPatient(p.id), true)));
             actions.addView(button("Edit Patient", v -> showPatientForm(db.getPatient(p.id))));
         }
         actions.addView(button("Export Single Excel", v -> startPatientExport(p.id, REQ_EXPORT_EXCEL, value(p.patientId) + ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")));
