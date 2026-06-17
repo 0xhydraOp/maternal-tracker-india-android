@@ -45,8 +45,8 @@ import java.util.zip.ZipOutputStream;
 
 @SuppressLint("SetTextI18n")
 public class MainActivity extends Activity {
-    private static final int BG_TOP = Color.rgb(238, 246, 248);
-    private static final int BG_BOTTOM = Color.rgb(250, 252, 251);
+    private static final int BG_TOP = Color.rgb(211, 240, 255);
+    private static final int BG_BOTTOM = Color.rgb(236, 250, 255);
     private static final int SURFACE = Color.argb(188, 255, 255, 255);
     private static final int SURFACE_ALT = Color.argb(146, 255, 255, 255);
     private static final int SURFACE_WARM = Color.rgb(255, 252, 247);
@@ -539,6 +539,7 @@ public class MainActivity extends Activity {
         int pending = Math.max(0, total - locked);
         int needsCompletion = db.countPatients(appendWhere(scopeWhere, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = '')"), scopeArgs);
         int todayFocus = db.countPatients(appendWhere(scopeWhere, "(edd_date BETWEEN ? AND ?) OR (record_locked = 0 AND (visit2 IS NULL OR visit2 = '' OR visit3 IS NULL OR visit3 = '' OR final_visit IS NULL OR final_visit = ''))"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
+        box.setPadding(0, 0, 0, dp(8));
         box.addView(dashboardStatusStrip(total));
         box.addView(dashboardDensityToggle());
         box.addView(todayFocusBanner(total, todayFocus));
@@ -552,15 +553,15 @@ public class MainActivity extends Activity {
             }
             return;
         }
-        box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, pending, needsCompletion)));
         box.addView(compactKpiRow(
                 compactKpi("Total", total, "Patients", v -> showScopedPatientList(null, null)),
                 compactKpi("Due Week", dueWeek, "EDD within 7 days", v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
                 compactKpi("Pending", pending, "Follow-up", v -> showScopedPatientList("record_locked = 0", null)),
                 compactKpi("Done", locked, "Completed", v -> showScopedPatientList("record_locked = 1", null))
         ));
-        box.addView(section("Needs Attention", needsAttentionView(scopeWhere, scopeArgs)));
+        box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, pending, needsCompletion)));
         box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
+        box.addView(section("Data Quality Alerts", needsAttentionView(scopeWhere, scopeArgs)));
         if (dashboardDetailed) {
             box.addView(section("30 Day Overview",
                     progressRow("EDD within 30 days", edd30, Math.max(total, 1), total == 0 ? 0 : Math.round(edd30 * 100f / total)),
@@ -843,17 +844,13 @@ public class MainActivity extends Activity {
     private View needsAttentionView(String scopeWhere, String[] scopeArgs) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        int noSecondVisit = db.countPatients(appendWhere(scopeWhere, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '')"), scopeArgs);
-        int edd7 = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
         int missingDoctor = db.countPatients(appendWhere(scopeWhere, "doctor_name IS NULL OR doctor_name = ''"), scopeArgs);
         int invalidMobile = db.countPatients(appendWhere(scopeWhere, "mobile_number IS NULL OR length(trim(mobile_number)) != 10"), scopeArgs);
-        int totalAttention = noSecondVisit + edd7 + missingDoctor + invalidMobile;
+        int totalAttention = missingDoctor + invalidMobile;
         if (totalAttention == 0) {
-            list.addView(emptyState("No attention flags", "Current dashboard records are complete for the tracked checks."));
+            list.addView(emptyState("No data quality alerts", "Doctor names and mobile numbers look complete."));
             return list;
         }
-        list.addView(attentionItem("EDD within 7 days", edd7, "Urgent", URGENT, "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
-        list.addView(attentionItem("No 2nd visit recorded", noSecondVisit, "Attention", WARNING, "record_locked = 0 AND (visit2 IS NULL OR visit2 = '')", null));
         list.addView(attentionItem("Missing doctor", missingDoctor, "Review", SLATE, "doctor_name IS NULL OR doctor_name = ''", null));
         list.addView(attentionItem("Mobile needs review", invalidMobile, "Review", SLATE, "mobile_number IS NULL OR length(trim(mobile_number)) != 10", null));
         return list;
