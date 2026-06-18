@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.3 - 2026-06-18
+
+- Fixed Firebase patient writes to include `createdBy`, preserving staff-scoped patient ownership after cloud sync and admin edits.
+- Bumped Android app version to `1.1.3` / versionCode `11`.
+
 ## v1.1.2 - 2026-06-18
 
 - Added optional Scheduled Delivery Date to patient records.

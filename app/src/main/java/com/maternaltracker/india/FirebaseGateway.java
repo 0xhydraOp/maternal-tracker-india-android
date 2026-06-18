@@ -275,6 +275,7 @@ final class FirebaseGateway {
         values.put("visit3", p.visit3);
         values.put("finalVisit", p.finalVisit);
         values.put("entryDate", p.entryDate);
+        values.put("createdBy", p.createdBy);
         values.put("updatedBy", currentEmail());
         values.put("recordLocked", p.recordLocked);
         values.put("remarks", p.remarks);
