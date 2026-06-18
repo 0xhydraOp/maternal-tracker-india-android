@@ -76,6 +76,15 @@ public class PatientRulesTest {
     }
 
     @Test
+    public void validationAcceptsPastScheduledDeliveryWhenCompleted() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-14";
+        p.scheduledDeliveryCalledAt = null;
+        p.recordLocked = true;
+        assertNull(PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
     public void validationRejectsScheduledDeliveryBeforeLmp() {
         Patient p = validPatient();
         p.scheduledDeliveryDate = "2026-05-31";

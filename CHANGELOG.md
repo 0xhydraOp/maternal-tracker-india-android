@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.8 - 2026-06-18
+
+- Added scheduled-delivery completion workflow after doctor-given delivery dates pass.
+- Overdue scheduled-delivery patients now remain visible as completion-required notifications until an operator marks them completed.
+- Marking scheduled delivery completed sets the final visit date when missing, locks the record, syncs it online, and moves the patient to the completed list.
+- Bumped Android app version to `1.1.8` / versionCode `16`.
+
 ## v1.1.7 - 2026-06-18
 
 - Unified card spacing, button sizing, section title treatment, chip styling, and alert colors across the app.

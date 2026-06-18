@@ -34,7 +34,7 @@ final class PatientRules {
             }
             if (!empty(p.scheduledDeliveryDate)) {
                 LocalDate scheduled = LocalDate.parse(p.scheduledDeliveryDate);
-                if (empty(p.scheduledDeliveryCalledAt) && scheduled.isBefore(today)) {
+                if (!p.recordLocked && empty(p.scheduledDeliveryCalledAt) && scheduled.isBefore(today)) {
                     return "Scheduled delivery date cannot be in the past";
                 }
                 if (!empty(p.lmpDate) && scheduled.isBefore(LocalDate.parse(p.lmpDate))) {
