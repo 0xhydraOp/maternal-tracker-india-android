@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.5 - 2026-06-18
+
+- Final polish pass for Home dashboard, Search, Reports, Admin, and shared visual styling.
+- Added a compact Home priority strip so urgent scheduled-delivery work is immediately visible.
+- Redesigned patient search result cards with clearer call/update actions and visible status chips.
+- Reorganized Reports into cleaner metric cards, quick filters, scheduled-delivery access, and filtered exports.
+- Reorganized Administration into control sections with clearer account, data, support, and app-status areas.
+- Bumped Android app version to `1.1.5` / versionCode `13`.
+
 ## v1.1.4 - 2026-06-18
 
 - Made scheduled delivery dates within the next 7 days the highest-attention dashboard priority.
