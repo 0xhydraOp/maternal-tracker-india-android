@@ -60,11 +60,11 @@ public class PatientRulesTest {
     }
 
     @Test
-    public void validationRejectsPendingPastScheduledDelivery() {
+    public void validationAcceptsPastScheduledDeliveryForCompletionWorkflow() {
         Patient p = validPatient();
         p.scheduledDeliveryDate = "2026-06-14";
         p.scheduledDeliveryCalledAt = null;
-        assertEquals("Scheduled delivery date cannot be in the past", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+        assertNull(PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
     @Test

@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.9 - 2026-06-18
+
+- Reviewed scheduled-delivery workflow, dashboard filters, report filters, and patient validation for behavior/query mismatches.
+- Allowed past scheduled-delivery dates so overdue records can correctly enter the completion-required workflow instead of being blocked during save.
+- Excluded locked/completed records from pending scheduled-call counts and lists.
+- Limited the Home scheduled-call panel to actionable upcoming call-pending records.
+- Added completion-due metrics/actions to Reports so scheduled records are separated into notified, call-pending, and completion-required states.
+- Bumped Android app version to `1.1.9` / versionCode `17`.
+
 ## v1.1.8 - 2026-06-18
 
 - Added scheduled-delivery completion workflow after doctor-given delivery dates pass.

@@ -85,7 +85,7 @@ public class MainActivity extends Activity {
     private static final int REQ_EXPORT_PDF = 502;
     private static final int REQ_EXPORT_BACKUP = 503;
     private static final String SCHEDULED_WHERE = "scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != ''";
-    private static final String SCHEDULED_PENDING_WHERE = SCHEDULED_WHERE + " AND (scheduled_delivery_called_at IS NULL OR scheduled_delivery_called_at = '')";
+    private static final String SCHEDULED_PENDING_WHERE = SCHEDULED_WHERE + " AND record_locked = 0 AND (scheduled_delivery_called_at IS NULL OR scheduled_delivery_called_at = '')";
     private static final String SCHEDULED_WEEK_WHERE = SCHEDULED_PENDING_WHERE + " AND scheduled_delivery_date BETWEEN ? AND ?";
     private static final String SCHEDULED_CALL_PENDING_WHERE = SCHEDULED_PENDING_WHERE + " AND scheduled_delivery_date >= ?";
     private static final String SCHEDULED_COMPLETION_DUE_WHERE = SCHEDULED_WHERE + " AND scheduled_delivery_date < ? AND record_locked = 0";
@@ -931,7 +931,7 @@ public class MainActivity extends Activity {
     private View scheduledDeliveryView(String where, String[] args) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        List<String[]> rows = db.scheduledDeliveryRows(where, args, 6);
+        List<String[]> rows = db.scheduledDeliveryRows(appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()), 6);
         if (rows.isEmpty()) {
             list.addView(emptyState("No scheduled delivery dates", "Doctor-given delivery dates will appear here when entered on patient records."));
             return list;
@@ -942,11 +942,7 @@ public class MainActivity extends Activity {
             item.addView(label(value(row[1]), 14, true));
             item.addView(smallText("Scheduled: " + value(row[2]) + " | Village: " + value(row[4])));
             item.addView(smallText("Mobile: " + value(row[3])));
-            boolean notified = !empty(row[5]);
-            item.addView(chip(notified ? "Patient notified" : "Call pending", notified ? ACCENT : WARNING, Color.WHITE));
-            if (notified) {
-                item.addView(smallText("Called " + value(row[5]) + " by " + value(row[6])));
-            }
+            item.addView(chip("Call pending", WARNING, Color.WHITE));
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
             actions.addView(button("Call Mobile", v -> callPatient(db.getPatientByPatientId(row[0]))));
@@ -1394,9 +1390,6 @@ public class MainActivity extends Activity {
             message = "EDD date cannot be before LMP";
         } else if (!PatientRules.validDate(p.scheduledDeliveryDate)) {
             target = scheduledDeliveryDate;
-        } else if (!p.recordLocked && !empty(p.scheduledDeliveryDate) && empty(p.scheduledDeliveryCalledAt) && LocalDate.parse(p.scheduledDeliveryDate).isBefore(LocalDate.now())) {
-            target = scheduledDeliveryDate;
-            message = "Scheduled delivery date cannot be in the past";
         } else if (!empty(p.scheduledDeliveryDate) && LocalDate.parse(p.scheduledDeliveryDate).isBefore(LocalDate.parse(p.lmpDate))) {
             target = scheduledDeliveryDate;
             message = "Scheduled delivery date cannot be before LMP";
@@ -1886,6 +1879,8 @@ public class MainActivity extends Activity {
         int edd30 = db.countPatients(appendWhere(where, "edd_date BETWEEN ? AND ?"), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()));
         int scheduled = db.countPatients(appendWhere(where, SCHEDULED_WHERE), args);
         int scheduledPending = db.countPatients(appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()));
+        int scheduledCompletionDue = db.countPatients(appendWhere(where, SCHEDULED_COMPLETION_DUE_WHERE), appendArgs(args, LocalDate.now().toString()));
+        int scheduledNotified = Math.max(0, scheduled - scheduledPending - scheduledCompletionDue);
         int today = db.countPatients(appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()));
         page.addView(section("Report Overview",
                 statGrid(
@@ -1894,16 +1889,19 @@ public class MainActivity extends Activity {
                         stat("EDD 30", edd30, v -> showPatientList(false, appendWhere(where, "edd_date BETWEEN ? AND ?"), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()), true)),
                         stat("Scheduled", scheduled, v -> showPatientList(false, appendWhere(where, SCHEDULED_WHERE), args, true)),
                         stat("Call Pending", scheduledPending, v -> showPatientList(false, appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()), true)),
+                        stat("Complete Due", scheduledCompletionDue, v -> showPatientList(false, appendWhere(where, SCHEDULED_COMPLETION_DUE_WHERE), appendArgs(args, LocalDate.now().toString()), true)),
                         stat("Completed", locked, v -> showPatientList(false, appendWhere(where, "record_locked = 1"), args, true))
                 )
         ));
         page.addView(section("Active Filters", reportFilterSummary(from, to, village, statusName)));
         page.addView(section("Scheduled Delivery Report",
-                progressRow("Notified", Math.max(0, scheduled - scheduledPending), scheduled, scheduled == 0 ? 0 : Math.round((scheduled - scheduledPending) * 100f / scheduled)),
+                progressRow("Notified", scheduledNotified, scheduled, scheduled == 0 ? 0 : Math.round(scheduledNotified * 100f / scheduled)),
                 progressRow("Call pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled)),
+                progressRow("Completion due", scheduledCompletionDue, scheduled, scheduled == 0 ? 0 : Math.round(scheduledCompletionDue * 100f / scheduled)),
                 scrollingActions(
                         navButton("Scheduled Records", v -> showPatientList(false, appendWhere(where, SCHEDULED_WHERE), args, true)),
                         navButton("Pending Calls", v -> showPatientList(false, appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()), true)),
+                        navButton("Completion Due", v -> showPatientList(false, appendWhere(where, SCHEDULED_COMPLETION_DUE_WHERE), appendArgs(args, LocalDate.now().toString()), true)),
                         button("Export Excel", v -> startExport("", appendWhere(where, SCHEDULED_WHERE), args, REQ_EXPORT_EXCEL, "scheduled_delivery.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
                         button("Export PDF", v -> startExport("", appendWhere(where, SCHEDULED_WHERE), args, REQ_EXPORT_PDF, "scheduled_delivery.pdf", "application/pdf"))
                 )
@@ -1913,7 +1911,8 @@ public class MainActivity extends Activity {
                 progressRow("Locked records", locked, total, total == 0 ? 0 : Math.round(locked * 100f / total)),
                 progressRow("EDD within 30 days", edd30, total, total == 0 ? 0 : Math.round(edd30 * 100f / total)),
                 progressRow("Scheduled delivery", scheduled, total, total == 0 ? 0 : Math.round(scheduled * 100f / total)),
-                progressRow("Scheduled calls pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled))
+                progressRow("Scheduled calls pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled)),
+                progressRow("Delivery completion due", scheduledCompletionDue, scheduled, scheduled == 0 ? 0 : Math.round(scheduledCompletionDue * 100f / scheduled))
         ));
         if (total == 0) {
             page.addView(section("Report Result", emptyActionState("No records match these filters", "Change the filters or create a patient record first.", "New Patient", v -> showPatientForm(null))));
