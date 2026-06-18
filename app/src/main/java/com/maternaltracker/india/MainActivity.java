@@ -60,6 +60,21 @@ public class MainActivity extends Activity {
     private static final int TEXT = Color.rgb(23, 43, 58);
     private static final int MUTED = Color.rgb(100, 116, 139);
     private static final int BORDER = Color.argb(210, 255, 255, 255);
+    private static final int ALERT_INFO_BG = Color.rgb(237, 250, 247);
+    private static final int ALERT_WARN_BG = Color.rgb(255, 248, 237);
+    private static final int SPACE_XS = 4;
+    private static final int SPACE_SM = 8;
+    private static final int SPACE_MD = 10;
+    private static final int SPACE_LG = 14;
+    private static final int CARD_RADIUS = 12;
+    private static final int CARD_GAP = 8;
+    private static final int BUTTON_RADIUS = 10;
+    private static final int BUTTON_HEIGHT = 42;
+    private static final int CHIP_RADIUS = 14;
+    private static final int CHIP_PAD_X = 10;
+    private static final int CHIP_PAD_Y = 5;
+    private static final int SECTION_ACCENT_WIDTH = 4;
+    private static final int SECTION_ACCENT_HEIGHT = 22;
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("hh:mm a");
     private static final DateTimeFormatter DASHBOARD_CLOCK_FMT = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy | hh:mm a");
     private static final String HOSPITAL_NAME = "BLUE BIRD A GENERAL HOSPITAL";
@@ -273,7 +288,7 @@ public class MainActivity extends Activity {
         bottomNav = new LinearLayout(this);
         bottomNav.setOrientation(LinearLayout.HORIZONTAL);
         bottomNav.setGravity(Gravity.CENTER);
-        bottomNav.setBackground(glassPanel(dp(14)));
+        bottomNav.setBackground(glassPanel(dp(CARD_RADIUS)));
         bottomNav.setElevation(dp(4));
         bottomNav.setPadding(dp(3), dp(3), dp(3), dp(3));
         root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(50)));
@@ -289,7 +304,7 @@ public class MainActivity extends Activity {
                     lastSyncText = "Last synced " + LocalDateTime.now().format(TIME_FMT);
                     if (syncBadge != null) {
                         syncBadge.setText("ONLINE");
-                        syncBadge.setBackground(rounded(ACCENT, dp(12), 0, ACCENT));
+                        syncBadge.setBackground(rounded(ACCENT, dp(CHIP_RADIUS), 0, ACCENT));
                     }
                     if ("Dashboard".equals(currentPage)) {
                         showDashboard();
@@ -306,7 +321,7 @@ public class MainActivity extends Activity {
                     lastSyncText = "Last sync failed " + LocalDateTime.now().format(TIME_FMT);
                     if (syncBadge != null) {
                         syncBadge.setText("SYNC ERROR");
-                        syncBadge.setBackground(rounded(WARNING, dp(12), 0, WARNING));
+                        syncBadge.setBackground(rounded(WARNING, dp(CHIP_RADIUS), 0, WARNING));
                     }
                     if ("Dashboard".equals(currentPage)) {
                         showDashboard();
@@ -323,8 +338,8 @@ public class MainActivity extends Activity {
     private View header() {
         LinearLayout box = card(PRIMARY_DARK, 0, PRIMARY_DARK);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackground(gradient(PRIMARY_DARK, ACCENT, dp(8)));
-        box.setPadding(dp(10), dp(8), dp(10), dp(8));
+        box.setBackground(gradient(PRIMARY_DARK, ACCENT, dp(CARD_RADIUS)));
+        box.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
 
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
@@ -395,7 +410,7 @@ public class MainActivity extends Activity {
     private LinearLayout profileMenu() {
         LinearLayout menu = card();
         menu.setOrientation(LinearLayout.VERTICAL);
-        menu.setPadding(dp(10), dp(10), dp(10), dp(10));
+        menu.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
         TextView avatar = brandMark();
         TextView title = label("Blue Bird Profile", 15, true);
         title.setTextColor(PRIMARY_DARK);
@@ -664,8 +679,8 @@ public class MainActivity extends Activity {
     }
 
     private View todayFocusBanner(int total, int actionCount) {
-        LinearLayout box = card(actionCount > 0 ? Color.rgb(255, 248, 237) : Color.rgb(237, 250, 247), 1, actionCount > 0 ? WARNING : ACCENT);
-        box.setPadding(dp(12), dp(9), dp(12), dp(9));
+        LinearLayout box = card(actionCount > 0 ? ALERT_WARN_BG : ALERT_INFO_BG, 1, actionCount > 0 ? WARNING : ACCENT);
+        box.setPadding(dp(SPACE_LG), dp(SPACE_MD), dp(SPACE_LG), dp(SPACE_MD));
         TextView title = label(total == 0 ? "Ready for first patient entry" : (actionCount > 0 ? actionCount + " priority item(s) need attention" : "No EDD or scheduled calls due"), 15, true);
         title.setTextColor(actionCount > 0 ? WARNING : ACCENT);
         TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Handle scheduled deliveries inside 7 days first, then EDD and call reminders." : "No patient EDD falls within 7 days and no scheduled-delivery calls are pending."));
@@ -690,8 +705,8 @@ public class MainActivity extends Activity {
     private View zeroActionPanel(String title, String message, String action, View.OnClickListener listener, int color) {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(10), dp(9), dp(10), dp(9));
-        panel.setBackground(rounded(Color.argb(86, Color.red(color), Color.green(color), Color.blue(color)), dp(10), dp(1), Color.argb(140, Color.red(color), Color.green(color), Color.blue(color))));
+        panel.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
+        panel.setBackground(rounded(Color.argb(86, Color.red(color), Color.green(color), Color.blue(color)), dp(CARD_RADIUS), dp(1), Color.argb(140, Color.red(color), Color.green(color), Color.blue(color))));
         TextView heading = label(title, 14, true);
         heading.setTextColor(color);
         TextView body = smallText(message);
@@ -760,8 +775,8 @@ public class MainActivity extends Activity {
     private View readinessPill(String title, String value, int color) {
         LinearLayout pill = new LinearLayout(this);
         pill.setOrientation(LinearLayout.VERTICAL);
-        pill.setPadding(dp(11), dp(7), dp(11), dp(7));
-        pill.setBackground(rounded(Color.argb(72, Color.red(color), Color.green(color), Color.blue(color)), dp(16), dp(1), Color.argb(130, Color.red(color), Color.green(color), Color.blue(color))));
+        pill.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
+        pill.setBackground(rounded(Color.argb(72, Color.red(color), Color.green(color), Color.blue(color)), dp(CHIP_RADIUS), dp(1), Color.argb(130, Color.red(color), Color.green(color), Color.blue(color))));
         TextView t = label(title, 10, true);
         t.setTextColor(MUTED);
         TextView v = label(value, 12, true);
@@ -859,7 +874,7 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(9), dp(7), dp(9), dp(7));
-        row.setBackground(rounded(Color.argb(count > 0 ? 72 : 34, Color.red(color), Color.green(color), Color.blue(color)), dp(10), dp(1), Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))));
+        row.setBackground(rounded(Color.argb(count > 0 ? 72 : 34, Color.red(color), Color.green(color), Color.blue(color)), dp(CARD_RADIUS), dp(1), Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))));
         row.setOnClickListener(v -> showScopedPatientList(where, args));
         TextView badge = chip(severity, count > 0 ? color : PRIMARY_SOFT, count > 0 ? Color.WHITE : MUTED);
         LinearLayout copy = new LinearLayout(this);
@@ -914,7 +929,7 @@ public class MainActivity extends Activity {
         }
         for (String[] row : rows) {
             LinearLayout item = card();
-            item.setPadding(dp(9), dp(7), dp(9), dp(7));
+            item.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
             item.addView(label(value(row[1]), 14, true));
             item.addView(smallText("Scheduled: " + value(row[2]) + " | Village: " + value(row[4])));
             item.addView(smallText("Mobile: " + value(row[3])));
@@ -1004,8 +1019,8 @@ public class MainActivity extends Activity {
     private View stat(String title, int value, View.OnClickListener click) {
         LinearLayout box = card();
         box.setOnClickListener(click);
-        box.setBackground(glassPanel(dp(14)));
-        box.setPadding(dp(10), dp(9), dp(10), dp(9));
+        box.setBackground(glassPanel(dp(CARD_RADIUS)));
+        box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
         TextView number = label(String.valueOf(value), 23, true);
         number.setTextColor(PRIMARY);
         TextView caption = label(title, 11, true);
@@ -1171,7 +1186,7 @@ public class MainActivity extends Activity {
         ));
 
         LinearLayout actions = new LinearLayout(this);
-        actions.setPadding(dp(10), dp(8), dp(10), dp(8));
+        actions.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
         actions.setGravity(Gravity.END);
         actions.setBackground(glassPanel(dp(12)));
         actions.addView(button("Clear", v -> showPatientForm(null)));
@@ -1513,7 +1528,7 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.HORIZONTAL);
         box.setGravity(Gravity.CENTER_VERTICAL);
         box.setPadding(dp(10), dp(7), dp(10), dp(7));
-        box.setBackground(rounded(Color.argb(88, 255, 255, 255), dp(12), dp(1), Color.argb(180, 255, 255, 255)));
+        box.setBackground(rounded(Color.argb(88, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(180, 255, 255, 255)));
         TextView title = label("Search Results", 14, true);
         title.setTextColor(PRIMARY_DARK);
         TextView countChip = chip(count + " found", count == 0 ? WARNING : ACCENT, Color.WHITE);
@@ -2380,7 +2395,7 @@ public class MainActivity extends Activity {
         ));
         page.addView(section("App Support",
                 readinessRow(
-                        readinessPill("Version", "1.1.5", ACCENT),
+                        readinessPill("Version", BuildConfig.VERSION_NAME, ACCENT),
                         readinessPill("Sync", value(syncBadge == null ? "SYNCING" : syncBadge.getText().toString()), PRIMARY),
                         readinessPill("Role", value(currentRole), SLATE)
                 ),
@@ -2627,14 +2642,14 @@ public class MainActivity extends Activity {
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
         TextView accent = new TextView(this);
-        accent.setBackground(rounded(ACCENT, dp(2), 0, ACCENT));
-        LinearLayout.LayoutParams accentLp = new LinearLayout.LayoutParams(dp(4), dp(20));
-        accentLp.setMargins(0, 0, dp(8), 0);
+        accent.setBackground(rounded(ACCENT, dp(SECTION_ACCENT_WIDTH), 0, ACCENT));
+        LinearLayout.LayoutParams accentLp = new LinearLayout.LayoutParams(dp(SECTION_ACCENT_WIDTH), dp(SECTION_ACCENT_HEIGHT));
+        accentLp.setMargins(0, 0, dp(SPACE_SM), 0);
         head.addView(accent, accentLp);
         TextView heading = label(title, 14, true);
         heading.setTextColor(PRIMARY_DARK);
         head.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
-        head.setPadding(0, 0, 0, dp(7));
+        head.setPadding(0, 0, 0, dp(SPACE_SM));
         box.addView(head);
         for (View row : rows) {
             box.addView(row);
@@ -2647,7 +2662,7 @@ public class MainActivity extends Activity {
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView heading = label(title, 15, true);
+        TextView heading = label(title, 14, true);
         heading.setTextColor(PRIMARY_DARK);
         TextView indicator = label(expanded ? "-" : "+", 18, true);
         indicator.setTextColor(PRIMARY);
@@ -2682,15 +2697,15 @@ public class MainActivity extends Activity {
         TextView badge = label(number, 13, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
-        badge.setBackground(gradient(PRIMARY, ACCENT, dp(15)));
-        TextView heading = label(title, 15, true);
+        badge.setBackground(gradient(PRIMARY, ACCENT, dp(CHIP_RADIUS)));
+        TextView heading = label(title, 14, true);
         heading.setTextColor(PRIMARY_DARK);
         TextView state = chip("Visit Tracking".equals(title) ? "Optional dates" : ("Pregnancy Dates".equals(title) ? "Required + optional" : "Required"), "Visit Tracking".equals(title) ? PRIMARY_SOFT : ACCENT, "Visit Tracking".equals(title) ? PRIMARY_DARK : Color.WHITE);
         TextView indicator = label(expanded ? "-" : "+", 18, true);
         indicator.setTextColor(PRIMARY);
         indicator.setGravity(Gravity.CENTER);
         head.addView(badge, new LinearLayout.LayoutParams(dp(30), dp(30)));
-        heading.setPadding(dp(9), 0, 0, 0);
+        heading.setPadding(dp(SPACE_SM), 0, 0, 0);
         head.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
         head.addView(state);
         head.addView(indicator, new LinearLayout.LayoutParams(dp(34), dp(34)));
@@ -2768,7 +2783,7 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(4), 0, dp(6));
+        row.setPadding(0, dp(SPACE_XS), 0, dp(SPACE_SM));
         for (View action : actions) {
             row.addView(action);
         }
@@ -2782,7 +2797,7 @@ public class MainActivity extends Activity {
         item.setGravity(Gravity.CENTER);
         item.setSingleLine(false);
         item.setTextColor(active ? Color.WHITE : PRIMARY_DARK);
-        item.setBackground(rounded(active ? PRIMARY : Color.TRANSPARENT, dp(8), 0, Color.TRANSPARENT));
+        item.setBackground(rounded(active ? PRIMARY : Color.TRANSPARENT, dp(BUTTON_RADIUS), 0, Color.TRANSPARENT));
         item.setOnClickListener(listener);
         return item;
     }
@@ -2790,8 +2805,8 @@ public class MainActivity extends Activity {
     private View emptyState(String title, String message) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(10), dp(8), dp(10), dp(8));
-        box.setBackground(rounded(Color.argb(70, 255, 255, 255), dp(10), dp(1), Color.argb(140, 255, 255, 255)));
+        box.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
+        box.setBackground(rounded(Color.argb(70, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(140, 255, 255, 255)));
         TextView t = label(title, 14, true);
         t.setTextColor(PRIMARY_DARK);
         TextView m = smallText(message);
@@ -2804,8 +2819,8 @@ public class MainActivity extends Activity {
     private View emptyActionState(String title, String message, String action, View.OnClickListener listener) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(10), dp(8), dp(10), dp(8));
-        box.setBackground(rounded(Color.argb(76, 255, 255, 255), dp(10), dp(1), Color.argb(150, 255, 255, 255)));
+        box.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
+        box.setBackground(rounded(Color.argb(76, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(150, 255, 255, 255)));
         TextView t = label(title, 14, true);
         t.setTextColor(PRIMARY_DARK);
         TextView m = smallText(message);
@@ -2819,7 +2834,7 @@ public class MainActivity extends Activity {
     private View progressRow(String title, int done, int total, int pct) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(0, dp(5), 0, dp(5));
+        box.setPadding(0, dp(SPACE_XS), 0, dp(SPACE_XS));
         TextView label = smallText(title + "  " + done + " / " + total + "  (" + pct + "%)");
         label.setTextColor(TEXT);
         TextView bar = new TextView(this);
@@ -2853,11 +2868,11 @@ public class MainActivity extends Activity {
     private LinearLayout row(String label, View input) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(dp(2), dp(4), dp(2), dp(5));
+        row.setPadding(dp(2), dp(SPACE_XS), dp(2), dp(SPACE_XS));
         TextView tv = label(label, 12, true);
         tv.setTextColor(MUTED);
         row.addView(tv);
-        row.addView(input, new LinearLayout.LayoutParams(-1, dp(42)));
+        row.addView(input, new LinearLayout.LayoutParams(-1, dp(BUTTON_HEIGHT)));
         return row;
     }
 
@@ -2869,15 +2884,15 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         if (color == SURFACE) {
-            box.setBackground(glassPanel(dp(10)));
+            box.setBackground(glassPanel(dp(CARD_RADIUS)));
         } else {
             int border = strokeWidth == 0 ? 0 : Color.argb(170, Color.red(strokeColor), Color.green(strokeColor), Color.blue(strokeColor));
-            box.setBackground(rounded(color, dp(10), strokeWidth == 0 ? 0 : dp(strokeWidth), border));
+            box.setBackground(rounded(color, dp(CARD_RADIUS), strokeWidth == 0 ? 0 : dp(strokeWidth), border));
         }
-        box.setPadding(dp(10), dp(10), dp(10), dp(10));
+        box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
         box.setElevation(dp(4));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(7));
+        lp.setMargins(0, 0, 0, dp(CARD_GAP));
         box.setLayoutParams(lp);
         animateIn(box);
         return box;
@@ -2915,11 +2930,11 @@ public class MainActivity extends Activity {
     private View searchPanel(EditText search) {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(14), dp(12), dp(14), dp(14));
+        panel.setPadding(dp(SPACE_LG), dp(SPACE_MD), dp(SPACE_LG), dp(SPACE_LG));
         panel.setBackground(prominentPanel());
         panel.setElevation(dp(4));
         LinearLayout.LayoutParams panelLp = new LinearLayout.LayoutParams(-1, -2);
-        panelLp.setMargins(0, 0, 0, dp(8));
+        panelLp.setMargins(0, 0, 0, dp(CARD_GAP));
         panel.setLayoutParams(panelLp);
 
         LinearLayout heading = new LinearLayout(this);
@@ -2930,20 +2945,20 @@ public class MainActivity extends Activity {
         TextView badge = label("SEARCH", 11, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
-        badge.setPadding(dp(10), dp(4), dp(10), dp(4));
-        badge.setBackground(rounded(Color.argb(74, 255, 255, 255), dp(14), dp(1), Color.argb(110, 255, 255, 255)));
+        badge.setPadding(dp(CHIP_PAD_X), dp(SPACE_XS), dp(CHIP_PAD_X), dp(SPACE_XS));
+        badge.setBackground(rounded(Color.argb(74, 255, 255, 255), dp(CHIP_RADIUS), dp(1), Color.argb(110, 255, 255, 255)));
         heading.addView(badge);
         panel.addView(heading);
 
         TextView helper = label("Type patient name or mobile number, then use Update Visits for follow-up dates.", 13, false);
         helper.setTextColor(Color.argb(230, 255, 255, 255));
-        helper.setPadding(0, dp(4), 0, dp(10));
+        helper.setPadding(0, dp(SPACE_XS), 0, dp(SPACE_MD));
         panel.addView(helper);
 
         LinearLayout searchBox = new LinearLayout(this);
         searchBox.setGravity(Gravity.CENTER_VERTICAL);
-        searchBox.setPadding(dp(12), 0, dp(8), 0);
-        searchBox.setBackground(rounded(Color.argb(245, 255, 255, 255), dp(14), dp(2), Color.argb(235, 255, 255, 255)));
+        searchBox.setPadding(dp(SPACE_MD), 0, dp(SPACE_SM), 0);
+        searchBox.setBackground(rounded(Color.argb(245, 255, 255, 255), dp(CARD_RADIUS), dp(2), Color.argb(235, 255, 255, 255)));
         searchBox.setClickable(true);
         searchBox.setOnClickListener(v -> {
             search.requestFocus();
@@ -2956,11 +2971,11 @@ public class MainActivity extends Activity {
         TextView icon = label("Search", 13, true);
         icon.setTextColor(PRIMARY);
         icon.setGravity(Gravity.CENTER);
-        icon.setPadding(0, 0, dp(10), 0);
+        icon.setPadding(0, 0, dp(SPACE_MD), 0);
         searchBox.addView(icon);
         search.setTextSize(16);
         search.setBackgroundColor(Color.TRANSPARENT);
-        search.setPadding(dp(4), 0, dp(6), 0);
+        search.setPadding(dp(SPACE_XS), 0, dp(SPACE_SM), 0);
         searchBox.addView(search, new LinearLayout.LayoutParams(0, dp(56), 1));
         panel.addView(searchBox, new LinearLayout.LayoutParams(-1, dp(58)));
         return panel;
@@ -2974,7 +2989,7 @@ public class MainActivity extends Activity {
         edit.setTextColor(TEXT);
         edit.setHintTextColor(Color.rgb(135, 151, 166));
         edit.setBackground(glassInput(false));
-        edit.setPadding(dp(12), 0, dp(12), 0);
+        edit.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
         edit.setOnFocusChangeListener((v, hasFocus) ->
                 edit.setBackground(glassInput(hasFocus)));
         return edit;
@@ -2984,7 +2999,7 @@ public class MainActivity extends Activity {
         EditText edit = input(value);
         edit.setEnabled(false);
         edit.setTextColor(MUTED);
-        edit.setBackground(rounded(Color.rgb(235, 241, 246), dp(8), dp(1), BORDER));
+        edit.setBackground(rounded(Color.rgb(235, 241, 246), dp(BUTTON_RADIUS), dp(1), BORDER));
         return edit;
     }
 
@@ -2996,7 +3011,7 @@ public class MainActivity extends Activity {
         view.setTextColor(TEXT);
         view.setHintTextColor(Color.rgb(135, 151, 166));
         view.setBackground(glassInput(false));
-        view.setPadding(dp(12), 0, dp(12), 0);
+        view.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
         view.setOnFocusChangeListener((v, hasFocus) ->
                 view.setBackground(glassInput(hasFocus)));
         setAdapter(view, values);
@@ -3011,7 +3026,7 @@ public class MainActivity extends Activity {
         Button b = button(text, listener);
         b.setAllCaps(false);
         b.setTextColor(PRIMARY);
-        b.setBackground(rounded(PRIMARY_SOFT, dp(18), dp(1), Color.rgb(184, 207, 225)));
+        b.setBackground(rounded(PRIMARY_SOFT, dp(BUTTON_RADIUS), dp(1), Color.rgb(184, 207, 225)));
         b.setElevation(dp(1));
         return b;
     }
@@ -3032,12 +3047,12 @@ public class MainActivity extends Activity {
         b.setAllCaps(false);
         b.setMinWidth(0);
         b.setMinimumWidth(0);
-        b.setMinHeight(dp(42));
-        b.setMinimumHeight(dp(42));
-        b.setPadding(dp(12), 0, dp(12), 0);
+        b.setMinHeight(dp(BUTTON_HEIGHT));
+        b.setMinimumHeight(dp(BUTTON_HEIGHT));
+        b.setPadding(dp(SPACE_LG), 0, dp(SPACE_LG), 0);
         int start = buttonStartColor(text);
         int end = buttonEndColor(text);
-        b.setBackground(gradient(start, end, dp(8)));
+        b.setBackground(gradient(start, end, dp(BUTTON_RADIUS)));
         b.setElevation(dp(2));
         b.setOnClickListener(listener);
         b.setOnTouchListener((view, event) -> {
@@ -3048,8 +3063,8 @@ public class MainActivity extends Activity {
             }
             return false;
         });
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(42));
-        lp.setMargins(dp(4), dp(4), dp(4), dp(4));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(BUTTON_HEIGHT));
+        lp.setMargins(dp(SPACE_XS), dp(SPACE_XS), dp(SPACE_XS), dp(SPACE_XS));
         b.setLayoutParams(lp);
         return b;
     }
@@ -3086,10 +3101,10 @@ public class MainActivity extends Activity {
         TextView chip = label(text, 12, true);
         chip.setTextColor(fg);
         chip.setGravity(Gravity.CENTER);
-        chip.setPadding(dp(10), dp(5), dp(10), dp(5));
-        chip.setBackground(rounded(bg, dp(14), 0, bg));
+        chip.setPadding(dp(CHIP_PAD_X), dp(CHIP_PAD_Y), dp(CHIP_PAD_X), dp(CHIP_PAD_Y));
+        chip.setBackground(rounded(bg, dp(CHIP_RADIUS), 0, bg));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-        lp.setMargins(0, dp(6), 0, dp(2));
+        lp.setMargins(0, dp(SPACE_XS), 0, dp(2));
         chip.setLayoutParams(lp);
         return chip;
     }
@@ -3145,7 +3160,7 @@ public class MainActivity extends Activity {
                         Color.rgb(0, 135, 129)
                 }
         );
-        drawable.setCornerRadius(dp(16));
+        drawable.setCornerRadius(dp(CARD_RADIUS));
         drawable.setStroke(dp(1), Color.argb(95, 255, 255, 255));
         return drawable;
     }
@@ -3158,7 +3173,7 @@ public class MainActivity extends Activity {
                         focused ? Color.argb(210, 238, 249, 255) : Color.argb(108, 226, 242, 250)
                 }
         );
-        drawable.setCornerRadius(dp(10));
+        drawable.setCornerRadius(dp(BUTTON_RADIUS));
         drawable.setStroke(dp(1), focused ? PRIMARY : Color.argb(210, 255, 255, 255));
         return drawable;
     }

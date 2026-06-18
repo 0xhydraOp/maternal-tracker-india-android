@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.7 - 2026-06-18
+
+- Unified card spacing, button sizing, section title treatment, chip styling, and alert colors across the app.
+- Standardized shared UI dimensions through common spacing/radius constants.
+- Fixed the Admin support version display to use the current app build version.
+- Bumped Android app version to `1.1.7` / versionCode `15`.
+
 ## v1.1.6 - 2026-06-18
 
 - Fixed Home dashboard priority count so scheduled delivery within 7 days is not double-counted against pending scheduled calls.
