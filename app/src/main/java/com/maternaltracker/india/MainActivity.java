@@ -69,6 +69,9 @@ public class MainActivity extends Activity {
     private static final int REQ_EXPORT_EXCEL = 501;
     private static final int REQ_EXPORT_PDF = 502;
     private static final int REQ_EXPORT_BACKUP = 503;
+    private static final String SCHEDULED_WHERE = "scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != ''";
+    private static final String SCHEDULED_PENDING_WHERE = SCHEDULED_WHERE + " AND (scheduled_delivery_called_at IS NULL OR scheduled_delivery_called_at = '')";
+    private static final String SCHEDULED_WEEK_WHERE = SCHEDULED_PENDING_WHERE + " AND scheduled_delivery_date BETWEEN ? AND ?";
 
     private MaternalDbHelper db;
     private FirebaseGateway firebase;
@@ -533,7 +536,8 @@ public class MainActivity extends Activity {
         int total = db.countPatients(scopeWhere, scopeArgs);
         int today = db.countPatients(appendWhere(scopeWhere, "entry_date = ?"), appendArgs(scopeArgs, LocalDate.now().toString()));
         int dueWeek = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
-        int scheduledPending = db.countPatients(appendWhere(scopeWhere, "scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != '' AND (scheduled_delivery_called_at IS NULL OR scheduled_delivery_called_at = '')"), scopeArgs);
+        int scheduledPending = db.countPatients(appendWhere(scopeWhere, SCHEDULED_PENDING_WHERE), scopeArgs);
+        int scheduledWeek = db.countPatients(appendWhere(scopeWhere, SCHEDULED_WEEK_WHERE), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
         int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
         int todayFocus = dueWeek + scheduledPending;
         box.setPadding(0, 0, 0, dp(8));
@@ -549,15 +553,16 @@ public class MainActivity extends Activity {
         box.addView(compactKpiRow(
                 compactKpi("Total", total, "Patients", v -> showScopedPatientList(null, null)),
                 compactKpi("Due Week", dueWeek, "EDD within 7 days", v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
-                compactKpi("Calls", scheduledPending, "Scheduled", v -> showScopedPatientList("scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != '' AND (scheduled_delivery_called_at IS NULL OR scheduled_delivery_called_at = '')", null)),
+                compactKpi("Urgent", scheduledWeek, "Scheduled 7 days", v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
+                compactKpi("Calls", scheduledPending, "Scheduled", v -> showScopedPatientList(SCHEDULED_PENDING_WHERE, null)),
                 compactKpi("Today", today, "New entries", v -> showScopedPatientList("entry_date = ?", new String[]{LocalDate.now().toString()})),
                 compactKpi("Done", locked, "Completed", v -> showScopedPatientList("record_locked = 1", null))
         ));
-        if (scheduledPending > 0) {
+        if (scheduledWeek > 0 || scheduledPending > 0) {
             box.addView(section("Scheduled Delivery Calls", scheduledDeliveryView(scopeWhere, scopeArgs)));
-            box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, scheduledPending)));
+            box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, scheduledPending, scheduledWeek)));
         } else {
-            box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, scheduledPending)));
+            box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, scheduledPending, scheduledWeek)));
             box.addView(section("Scheduled Delivery Calls", scheduledDeliveryView(scopeWhere, scopeArgs)));
         }
         box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
@@ -628,7 +633,7 @@ public class MainActivity extends Activity {
         box.setPadding(dp(12), dp(9), dp(12), dp(9));
         TextView title = label(total == 0 ? "Ready for first patient entry" : (actionCount > 0 ? actionCount + " priority item(s) need attention" : "No EDD or scheduled calls due"), 15, true);
         title.setTextColor(actionCount > 0 ? WARNING : ACCENT);
-        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Review EDD due patients and scheduled-delivery call reminders." : "No patient EDD falls within 7 days and no scheduled-delivery calls are pending."));
+        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Scheduled deliveries inside 7 days need the first call follow-up." : "No patient EDD falls within 7 days and no scheduled-delivery calls are pending."));
         sub.setTextColor(MUTED);
         box.addView(title);
         box.addView(sub);
@@ -765,11 +770,12 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    private View priorityQueue(int today, int dueWeek, int scheduledPending) {
+    private View priorityQueue(int today, int dueWeek, int scheduledPending, int scheduledWeek) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
+        list.addView(priorityItem("Scheduled delivery within 7 days", scheduledWeek, "Highest attention: call these doctor-scheduled delivery patients first", SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
         list.addView(priorityItem("EDD due this week", dueWeek, "Review patients with delivery dates in the next 7 days", "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
-        list.addView(priorityItem("Scheduled delivery calls", scheduledPending, "Call patients with doctor-given delivery dates", "scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != '' AND (scheduled_delivery_called_at IS NULL OR scheduled_delivery_called_at = '')", null));
+        list.addView(priorityItem("Scheduled delivery calls", scheduledPending, "Call patients with doctor-given delivery dates", SCHEDULED_PENDING_WHERE, null));
         list.addView(priorityItem("New entries today", today, "Patients registered today", "entry_date = ?", new String[]{LocalDate.now().toString()}));
         return list;
     }
@@ -889,7 +895,7 @@ public class MainActivity extends Activity {
             item.addView(actions);
             list.addView(item);
         }
-        list.addView(navButton("View All Scheduled", v -> showScopedPatientList("scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != ''", null)));
+        list.addView(navButton("View All Scheduled", v -> showScopedPatientList(SCHEDULED_WHERE, null)));
         return list;
     }
 
@@ -1372,8 +1378,8 @@ public class MainActivity extends Activity {
         search.setHint("Search existing patient by name, mobile, ID, village, block, doctor");
         page.addView(searchPanel(search));
         page.addView(scrollingActions(
-                navButton("Scheduled", v -> showPatientList(adminMode, appendWhere(visibleWhere, "scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != ''"), visibleArgs, true)),
-                navButton("Call Pending", v -> showPatientList(adminMode, appendWhere(visibleWhere, "scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != '' AND (scheduled_delivery_called_at IS NULL OR scheduled_delivery_called_at = '')"), visibleArgs, true)),
+                navButton("Scheduled", v -> showPatientList(adminMode, appendWhere(visibleWhere, SCHEDULED_WHERE), visibleArgs, true)),
+                navButton("Call Pending", v -> showPatientList(adminMode, appendWhere(visibleWhere, SCHEDULED_PENDING_WHERE), visibleArgs, true)),
                 navButton("EDD 30 Days", v -> showPatientList(adminMode, appendWhere(visibleWhere, "edd_date BETWEEN ? AND ?"), appendArgs(visibleArgs, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()), true)),
                 navButton("Locked", v -> showPatientList(adminMode, appendWhere(visibleWhere, "record_locked = 1"), visibleArgs, true))
         ));
@@ -1540,6 +1546,7 @@ public class MainActivity extends Activity {
                 p.updatedBy = currentUser;
                 db.savePatient(p);
                 db.logActivity("SCHEDULED_DELIVERY_CALL", p.patientId + " " + digits, currentUser);
+                toast("Patient marked notified");
                 firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
                     if (error != null) {
                         toast("Call marked locally, cloud sync failed: " + error.getMessage());
@@ -1605,6 +1612,12 @@ public class MainActivity extends Activity {
                     button("Excel", v -> startFilteredExport(text(from), text(to), text(villageFilter), text(statusFilter), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
                     button("PDF", v -> startFilteredExport(text(from), text(to), text(villageFilter), text(statusFilter), REQ_EXPORT_PDF, "patients.pdf", "application/pdf"))
             )
+        ));
+        page.addView(section("Quick Report Filters",
+                scrollingActions(
+                        navButton("Scheduled only", v -> openQuickReportFilter(text(from), text(to), text(villageFilter), text(statusFilter), SCHEDULED_WHERE, null)),
+                        navButton("Call pending only", v -> openQuickReportFilter(text(from), text(to), text(villageFilter), text(statusFilter), SCHEDULED_PENDING_WHERE, null))
+                )
         ));
         page.addView(collapsibleSection("Filters", false, filters));
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -1735,6 +1748,11 @@ public class MainActivity extends Activity {
     private void openFilteredPatientSearch(String from, String to, String village, String statusName) {
         ReportFilter filter = reportWhere(from, to, village, statusName);
         showPatientList(false, filter.where, filter.args);
+    }
+
+    private void openQuickReportFilter(String from, String to, String village, String statusName, String extraWhere, String[] extraArgs) {
+        ReportFilter filter = reportWhere(from, to, village, statusName);
+        showPatientList(false, appendWhere(scopedWhere(filter.where), extraWhere), appendArgs(scopedArgs(filter.args), extraArgs), true);
     }
 
     private String appendWhere(String where, String extra) {

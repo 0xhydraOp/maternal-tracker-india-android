@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.4 - 2026-06-18
+
+- Made scheduled delivery dates within the next 7 days the highest-attention dashboard priority.
+- Added Reports quick filter chips for `Scheduled only` and `Call pending only`.
+- Added a `Patient marked notified` confirmation toast after scheduled-delivery call marking.
+- Bumped Android app version to `1.1.4` / versionCode `12`.
+
 ## v1.1.3 - 2026-06-18
 
 - Fixed Firebase patient writes to include `createdBy`, preserving staff-scoped patient ownership after cloud sync and admin edits.
