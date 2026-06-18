@@ -22,7 +22,7 @@ final class PatientRules {
         if (digits.length() != 10) {
             return "Mobile number must contain exactly 10 digits";
         }
-        if (!validDate(p.lmpDate) || !validDate(p.eddDate) || !validDate(p.visit1) || !validDate(p.visit2) || !validDate(p.visit3) || !validDate(p.finalVisit)) {
+        if (!validDate(p.lmpDate) || !validDate(p.eddDate) || !validDate(p.visit1) || !validDate(p.visit2) || !validDate(p.visit3) || !validDate(p.finalVisit) || !validDate(p.scheduledDeliveryDate)) {
             return "Use date format YYYY-MM-DD";
         }
         try {

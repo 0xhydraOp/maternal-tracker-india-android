@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.2 - 2026-06-18
+
+- Added optional Scheduled Delivery Date to patient records.
+- Added Home dashboard Scheduled Delivery Calls list with pending/notified status.
+- Added scheduled-delivery metrics and direct access list to the Reports dashboard.
+- Added call actions from scheduled-delivery rows, upcoming EDD rows, patient search rows, and patient detail.
+- Mark scheduled-delivery patients as notified when the operator taps the app call action.
+- Reset scheduled-delivery call status when the scheduled delivery date changes.
+- Added scheduled-delivery fields to Firebase sync, Firestore rules, local database migration, Excel export, and PDF export.
+- Added `PROJECT_PROGRESS.md` with the project progress and current handoff notes.
+- Polished navigation, action buttons, dashboard ordering, search quick filters, report filter summaries, admin grouping, and status badges.
+- Replaced fragile symbol icons with Android-safe text labels to avoid broken characters in the UI.
+
 ## v1.1.1 - 2026-06-18
 
 - Removed Report dashboard Block and Motivator filters; Reports now filter by date, village, and status only.

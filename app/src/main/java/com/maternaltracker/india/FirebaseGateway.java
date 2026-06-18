@@ -233,6 +233,9 @@ final class FirebaseGateway {
         p.villageName = string(doc, "villageName", "");
         p.lmpDate = string(doc, "lmpDate", "");
         p.eddDate = string(doc, "eddDate", "");
+        p.scheduledDeliveryDate = string(doc, "scheduledDeliveryDate", "");
+        p.scheduledDeliveryCalledAt = string(doc, "scheduledDeliveryCalledAt", "");
+        p.scheduledDeliveryCalledBy = string(doc, "scheduledDeliveryCalledBy", "");
         p.motivatorName = string(doc, "motivatorName", "");
         p.doctorName = string(doc, "doctorName", "");
         p.visit1 = string(doc, "visit1", "");
@@ -262,6 +265,9 @@ final class FirebaseGateway {
         values.put("villageName", p.villageName);
         values.put("lmpDate", p.lmpDate);
         values.put("eddDate", p.eddDate);
+        values.put("scheduledDeliveryDate", p.scheduledDeliveryDate);
+        values.put("scheduledDeliveryCalledAt", p.scheduledDeliveryCalledAt);
+        values.put("scheduledDeliveryCalledBy", p.scheduledDeliveryCalledBy);
         values.put("motivatorName", p.motivatorName);
         values.put("doctorName", p.doctorName);
         values.put("visit1", p.visit1);

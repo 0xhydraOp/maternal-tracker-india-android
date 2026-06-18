@@ -21,6 +21,9 @@ final class Patient {
     String visit2;
     String visit3;
     String finalVisit;
+    String scheduledDeliveryDate;
+    String scheduledDeliveryCalledAt;
+    String scheduledDeliveryCalledBy;
     String entryDate;
     String createdBy;
     String updatedBy;
