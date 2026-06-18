@@ -29,8 +29,26 @@ final class PatientRules {
             if (!empty(p.lmpDate) && LocalDate.parse(p.lmpDate).isAfter(today)) {
                 return "LMP date cannot be in the future";
             }
+            if (!empty(p.lmpDate) && !empty(p.eddDate) && LocalDate.parse(p.eddDate).isBefore(LocalDate.parse(p.lmpDate))) {
+                return "EDD date cannot be before LMP";
+            }
+            if (!empty(p.scheduledDeliveryDate)) {
+                LocalDate scheduled = LocalDate.parse(p.scheduledDeliveryDate);
+                if (empty(p.scheduledDeliveryCalledAt) && scheduled.isBefore(today)) {
+                    return "Scheduled delivery date cannot be in the past";
+                }
+                if (!empty(p.lmpDate) && scheduled.isBefore(LocalDate.parse(p.lmpDate))) {
+                    return "Scheduled delivery date cannot be before LMP";
+                }
+            }
+            if (LocalDate.parse(p.visit1).isAfter(today)) {
+                return "1st visit cannot be in the future";
+            }
             if (!empty(p.visit2) && empty(p.visit1)) {
                 return "1st visit is required before 2nd visit";
+            }
+            if (!empty(p.visit2) && LocalDate.parse(p.visit2).isAfter(today)) {
+                return "2nd visit cannot be in the future";
             }
             if (!empty(p.visit2) && LocalDate.parse(p.visit2).isBefore(LocalDate.parse(p.visit1))) {
                 return "2nd visit cannot be before 1st visit";
@@ -38,10 +56,16 @@ final class PatientRules {
             if (!empty(p.visit3) && empty(p.visit1) && empty(p.visit2)) {
                 return "Previous visit is required before 3rd visit";
             }
+            if (!empty(p.visit3) && LocalDate.parse(p.visit3).isAfter(today)) {
+                return "3rd visit cannot be in the future";
+            }
             if (!empty(p.visit3) && LocalDate.parse(p.visit3).isBefore(LocalDate.parse(empty(p.visit2) ? p.visit1 : p.visit2))) {
                 return "3rd visit cannot be before previous visit";
             }
             if (!empty(p.finalVisit)) {
+                if (LocalDate.parse(p.finalVisit).isAfter(today)) {
+                    return "Final visit cannot be in the future";
+                }
                 String previous = !empty(p.visit3) ? p.visit3 : (!empty(p.visit2) ? p.visit2 : p.visit1);
                 if (empty(previous)) {
                     return "Previous visit is required before final visit";

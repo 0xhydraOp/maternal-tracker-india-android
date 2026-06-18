@@ -540,7 +540,7 @@ public class MainActivity extends Activity {
         int scheduledWeek = db.countPatients(appendWhere(scopeWhere, SCHEDULED_WEEK_WHERE), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
         int edd30 = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()));
         int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
-        int todayFocus = scheduledWeek + dueWeek + scheduledPending;
+        int todayFocus = dueWeek + scheduledPending;
         box.setPadding(0, 0, 0, dp(8));
         box.addView(dashboardStatusStrip(total));
         box.addView(todayFocusBanner(total, todayFocus));
@@ -1337,17 +1337,38 @@ public class MainActivity extends Activity {
             target = lmpDate;
         } else if (empty(p.eddDate) || !PatientRules.validDate(p.eddDate)) {
             target = eddDate;
+        } else if (LocalDate.parse(p.eddDate).isBefore(LocalDate.parse(p.lmpDate))) {
+            target = eddDate;
+            message = "EDD date cannot be before LMP";
         } else if (!PatientRules.validDate(p.scheduledDeliveryDate)) {
             target = scheduledDeliveryDate;
+        } else if (!empty(p.scheduledDeliveryDate) && empty(p.scheduledDeliveryCalledAt) && LocalDate.parse(p.scheduledDeliveryDate).isBefore(LocalDate.now())) {
+            target = scheduledDeliveryDate;
+            message = "Scheduled delivery date cannot be in the past";
+        } else if (!empty(p.scheduledDeliveryDate) && LocalDate.parse(p.scheduledDeliveryDate).isBefore(LocalDate.parse(p.lmpDate))) {
+            target = scheduledDeliveryDate;
+            message = "Scheduled delivery date cannot be before LMP";
         } else if (empty(p.doctorName)) {
             target = doctor;
             message = "Doctor name is required";
+        } else if (LocalDate.parse(p.visit1).isAfter(LocalDate.now())) {
+            target = visit1;
+            message = "1st visit cannot be in the future";
         } else if (!PatientRules.validDate(p.visit2)) {
             target = visit2;
+        } else if (!empty(p.visit2) && LocalDate.parse(p.visit2).isAfter(LocalDate.now())) {
+            target = visit2;
+            message = "2nd visit cannot be in the future";
         } else if (!PatientRules.validDate(p.visit3)) {
             target = visit3;
+        } else if (!empty(p.visit3) && LocalDate.parse(p.visit3).isAfter(LocalDate.now())) {
+            target = visit3;
+            message = "3rd visit cannot be in the future";
         } else if (!PatientRules.validDate(p.finalVisit)) {
             target = finalVisit;
+        } else if (!empty(p.finalVisit) && LocalDate.parse(p.finalVisit).isAfter(LocalDate.now())) {
+            target = finalVisit;
+            message = "Final visit cannot be in the future";
         }
         toast(message);
         if (target != null) {

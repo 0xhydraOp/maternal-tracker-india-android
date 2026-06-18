@@ -59,6 +59,44 @@ public class PatientRulesTest {
         assertNull(PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
+    @Test
+    public void validationRejectsPendingPastScheduledDelivery() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-14";
+        p.scheduledDeliveryCalledAt = null;
+        assertEquals("Scheduled delivery date cannot be in the past", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationAcceptsPastScheduledDeliveryWhenNotified() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-14";
+        p.scheduledDeliveryCalledAt = "2026-06-14T10:00:00";
+        assertNull(PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationRejectsScheduledDeliveryBeforeLmp() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-05-31";
+        p.scheduledDeliveryCalledAt = "2026-06-01T10:00:00";
+        assertEquals("Scheduled delivery date cannot be before LMP", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationRejectsEddBeforeLmp() {
+        Patient p = validPatient();
+        p.eddDate = "2026-05-31";
+        assertEquals("EDD date cannot be before LMP", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationRejectsFutureVisitDate() {
+        Patient p = validPatient();
+        p.visit2 = "2026-06-16";
+        assertEquals("2nd visit cannot be in the future", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
     private Patient validPatient() {
         Patient p = new Patient();
         p.patientId = "PT01-06-2026";
@@ -71,11 +109,12 @@ public class PatientRulesTest {
         p.villageName = "Test Village";
         p.lmpDate = "2026-06-01";
         p.eddDate = "2027-03-08";
+        p.scheduledDeliveryDate = "2027-02-28";
         p.doctorName = "Test Doctor";
-        p.visit1 = "2026-06-15";
-        p.visit2 = "2026-06-20";
-        p.visit3 = "2026-06-25";
-        p.finalVisit = "2026-07-01";
+        p.visit1 = "2026-06-01";
+        p.visit2 = "2026-06-05";
+        p.visit3 = "2026-06-10";
+        p.finalVisit = "2026-06-15";
         return p;
     }
 }

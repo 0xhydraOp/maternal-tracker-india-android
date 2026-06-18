@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.6 - 2026-06-18
+
+- Fixed Home dashboard priority count so scheduled delivery within 7 days is not double-counted against pending scheduled calls.
+- Added validation for scheduled delivery dates so pending call reminders cannot be saved in the past.
+- Added validation to prevent scheduled delivery before LMP, EDD before LMP, and future actual visit dates.
+- Added unit tests for scheduled-delivery and visit-date validation behavior.
+- Bumped Android app version to `1.1.6` / versionCode `14`.
+
 ## v1.1.5 - 2026-06-18
 
 - Final polish pass for Home dashboard, Search, Reports, Admin, and shared visual styling.
