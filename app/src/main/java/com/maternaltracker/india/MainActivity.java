@@ -33,7 +33,12 @@ import android.widget.Toast;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -42,6 +47,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 @SuppressLint("SetTextI18n")
 public class MainActivity extends Activity {
@@ -89,6 +97,9 @@ public class MainActivity extends Activity {
     private static final String SCHEDULED_WEEK_WHERE = SCHEDULED_PENDING_WHERE + " AND scheduled_delivery_date BETWEEN ? AND ?";
     private static final String SCHEDULED_CALL_PENDING_WHERE = SCHEDULED_PENDING_WHERE + " AND scheduled_delivery_date >= ?";
     private static final String SCHEDULED_COMPLETION_DUE_WHERE = SCHEDULED_WHERE + " AND scheduled_delivery_date < ? AND record_locked = 0";
+    private static final String FOLLOWUP_WEEK_WHERE = "record_locked = 0 AND ((visit2 IS NOT NULL AND visit2 != '' AND visit2 BETWEEN ? AND ?) OR (visit3 IS NOT NULL AND visit3 != '' AND visit3 BETWEEN ? AND ?) OR (final_visit IS NOT NULL AND final_visit != '' AND final_visit BETWEEN ? AND ?))";
+    private static final String UPDATE_API_URL = "https://api.github.com/repos/0xhydraOp/maternal-tracker-india-android/releases/latest";
+    private static final String UPDATE_RELEASES_URL = "https://github.com/0xhydraOp/maternal-tracker-india-android/releases/latest";
 
     private MaternalDbHelper db;
     private FirebaseGateway firebase;
@@ -432,6 +443,7 @@ public class MainActivity extends Activity {
         menu.addView(menuItem("Find", "Search Patients", v -> showPatientList(false)));
         menu.addView(menuItem("Rpt", "Reports", v -> showReports()));
         menu.addView(menuItem("Save", "Export Center", v -> showExportCenter()));
+        menu.addView(menuItem("Upd", "Check for Updates", v -> checkForAppUpdate()));
         if (isAdmin()) {
             menu.addView(menuItem("Admin", "Administration", v -> showAdmin()));
             menu.addView(menuItem("Bak", "Backup Manager", v -> showBackup()));
@@ -558,7 +570,8 @@ public class MainActivity extends Activity {
         int scheduledCompletionDue = db.countPatients(appendWhere(scopeWhere, SCHEDULED_COMPLETION_DUE_WHERE), appendArgs(scopeArgs, LocalDate.now().toString()));
         int edd30 = db.countPatients(appendWhere(scopeWhere, "edd_date BETWEEN ? AND ?"), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()));
         int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
-        int todayFocus = scheduledCompletionDue + dueWeek + scheduledPending;
+        int followupWeek = db.countPatients(appendWhere(scopeWhere, FOLLOWUP_WEEK_WHERE), appendArgs(scopeArgs, followupWeekArgs()));
+        int todayFocus = scheduledCompletionDue + dueWeek + scheduledPending + followupWeek;
         box.setPadding(0, 0, 0, dp(8));
         box.addView(dashboardStatusStrip(total));
         box.addView(todayFocusBanner(total, todayFocus));
@@ -569,35 +582,40 @@ public class MainActivity extends Activity {
             box.addView(dashboardPreviewState());
             return;
         }
-        box.addView(todayPriorityStrip(scheduledCompletionDue, scheduledWeek, dueWeek, scheduledPending, edd30));
+        box.addView(todayPriorityStrip(scheduledCompletionDue, scheduledWeek, dueWeek, scheduledPending, followupWeek, edd30));
         box.addView(compactKpiRow(
                 compactKpi("Total", total, "Patients", v -> showScopedPatientList(null, null)),
                 compactKpi("Due Week", dueWeek, "EDD within 7 days", v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
                 compactKpi("Urgent", scheduledWeek, "Scheduled 7 days", v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
                 compactKpi("Complete", scheduledCompletionDue, "Delivery done", v -> showScopedPatientList(SCHEDULED_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString()})),
                 compactKpi("Calls", scheduledPending, "Scheduled", v -> showScopedPatientList(SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()})),
+                compactKpi("Visits", followupWeek, "Next 7 days", v -> showScopedPatientList(FOLLOWUP_WEEK_WHERE, followupWeekArgs())),
                 compactKpi("Today", today, "New entries", v -> showScopedPatientList("entry_date = ?", new String[]{LocalDate.now().toString()})),
                 compactKpi("Done", locked, "Completed", v -> showScopedPatientList("record_locked = 1", null))
         ));
+        if (followupWeek > 0) {
+            box.addView(section("Upcoming Visit Follow-ups", followupWeekView(scopeWhere, scopeArgs)));
+        }
         if (scheduledCompletionDue > 0) {
             box.addView(section("Delivery Completion Required", scheduledCompletionDueView(scopeWhere, scopeArgs)));
         }
         if (scheduledWeek > 0 || scheduledPending > 0) {
             box.addView(section("Scheduled Delivery Calls", scheduledDeliveryView(scopeWhere, scopeArgs)));
-            box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, scheduledPending, scheduledWeek, scheduledCompletionDue)));
+            box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, scheduledPending, scheduledWeek, scheduledCompletionDue, followupWeek)));
         } else {
-            box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, scheduledPending, scheduledWeek, scheduledCompletionDue)));
+            box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, scheduledPending, scheduledWeek, scheduledCompletionDue, followupWeek)));
             box.addView(section("Scheduled Delivery Calls", scheduledDeliveryView(scopeWhere, scopeArgs)));
         }
         box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
         box.addView(section("Data Quality Alerts", needsAttentionView(scopeWhere, scopeArgs)));
     }
 
-    private View todayPriorityStrip(int scheduledCompletionDue, int scheduledWeek, int dueWeek, int scheduledPending, int edd30) {
+    private View todayPriorityStrip(int scheduledCompletionDue, int scheduledWeek, int dueWeek, int scheduledPending, int followupWeek, int edd30) {
         return section("Today at a Glance",
                 compactKpiRow(
                         focusCard("Complete", scheduledCompletionDue, "Scheduled delivery date passed", URGENT, v -> showScopedPatientList(SCHEDULED_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString()})),
                         focusCard("Highest", scheduledWeek, "Scheduled delivery in 7 days", URGENT, v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
+                        focusCard("Visits", followupWeek, "Follow-up within 7 days", WARNING, v -> showScopedPatientList(FOLLOWUP_WEEK_WHERE, followupWeekArgs())),
                         focusCard("EDD Week", dueWeek, "Delivery dates in 7 days", WARNING, v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
                         focusCard("Call Pending", scheduledPending, "Scheduled delivery calls", ACCENT, v -> showScopedPatientList(SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()})),
                         focusCard("EDD 30", edd30, "Next 30 days", PRIMARY, v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()}))
@@ -691,7 +709,7 @@ public class MainActivity extends Activity {
         box.setPadding(dp(SPACE_LG), dp(SPACE_MD), dp(SPACE_LG), dp(SPACE_MD));
         TextView title = label(total == 0 ? "Ready for first patient entry" : (actionCount > 0 ? actionCount + " priority item(s) need attention" : "No EDD or scheduled calls due"), 15, true);
         title.setTextColor(actionCount > 0 ? WARNING : ACCENT);
-        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Complete overdue scheduled-delivery records first, then scheduled calls and EDD reminders." : "No patient EDD falls within 7 days and no scheduled-delivery calls are pending."));
+        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Complete overdue scheduled-delivery records first, then scheduled calls, visit follow-ups, and EDD reminders." : "No patient EDD, scheduled call, or visit follow-up falls within 7 days."));
         sub.setTextColor(MUTED);
         box.addView(title);
         box.addView(sub);
@@ -828,11 +846,12 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    private View priorityQueue(int today, int dueWeek, int scheduledPending, int scheduledWeek, int scheduledCompletionDue) {
+    private View priorityQueue(int today, int dueWeek, int scheduledPending, int scheduledWeek, int scheduledCompletionDue, int followupWeek) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.addView(priorityItem("Scheduled delivery completion due", scheduledCompletionDue, "Delivery date has passed; mark completed after operator confirmation", SCHEDULED_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString()}));
         list.addView(priorityItem("Scheduled delivery within 7 days", scheduledWeek, "Highest attention: call these doctor-scheduled delivery patients first", SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
+        list.addView(priorityItem("Visit follow-ups within 7 days", followupWeek, "Patients with planned 2nd, 3rd, or final visit dates", FOLLOWUP_WEEK_WHERE, followupWeekArgs()));
         list.addView(priorityItem("EDD due this week", dueWeek, "Review patients with delivery dates in the next 7 days", "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
         list.addView(priorityItem("Scheduled delivery calls", scheduledPending, "Call patients with doctor-given delivery dates", SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()}));
         list.addView(priorityItem("New entries today", today, "Patients registered today", "entry_date = ?", new String[]{LocalDate.now().toString()}));
@@ -979,6 +998,35 @@ public class MainActivity extends Activity {
             list.addView(item);
         }
         list.addView(navButton("View Completion Due", v -> showScopedPatientList(SCHEDULED_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString()})));
+        return list;
+    }
+
+    private View followupWeekView(String where, String[] args) {
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        List<Patient> patients = db.listPatients("", appendWhere(where, FOLLOWUP_WEEK_WHERE), appendArgs(args, followupWeekArgs()));
+        if (patients.isEmpty()) {
+            list.addView(emptyState("No visit follow-ups due", "Planned 2nd, 3rd, or final visit dates appear here when they fall within 7 days."));
+            return list;
+        }
+        int limit = Math.min(6, patients.size());
+        for (int i = 0; i < limit; i++) {
+            Patient p = patients.get(i);
+            String[] next = nextFollowupVisit(p);
+            LinearLayout item = card(ALERT_WARN_BG, 1, WARNING);
+            item.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
+            item.addView(label(value(p.patientName), 14, true));
+            item.addView(smallText(value(next[0]) + ": " + value(next[1]) + " | Village: " + value(p.villageName)));
+            item.addView(smallText("Mobile: " + value(p.mobileNumber)));
+            item.addView(chip("Visit follow-up due", WARNING, Color.WHITE));
+            item.addView(scrollingActions(
+                    button("Call", v -> callPatient(db.getPatient(p.id))),
+                    button("Update Visits", v -> showPatientForm(db.getPatient(p.id), true)),
+                    button("Open Record", v -> showPatientDetail(db.getPatient(p.id), false))
+            ));
+            list.addView(item);
+        }
+        list.addView(navButton("View Visit Follow-ups", v -> showScopedPatientList(FOLLOWUP_WEEK_WHERE, followupWeekArgs())));
         return list;
     }
 
@@ -1306,7 +1354,10 @@ public class MainActivity extends Activity {
     }
 
     private boolean shouldConfirmFinalLock(Patient old, Patient p) {
-        return !empty(p.finalVisit) && (old == null || empty(old.finalVisit));
+        if (empty(p.finalVisit) || !PatientRules.validDate(p.finalVisit) || LocalDate.parse(p.finalVisit).isAfter(LocalDate.now())) {
+            return false;
+        }
+        return old == null || empty(old.finalVisit) || (PatientRules.validDate(old.finalVisit) && LocalDate.parse(old.finalVisit).isAfter(LocalDate.now()));
     }
 
     private void persistPatient(Patient p, Patient old) {
@@ -1401,19 +1452,10 @@ public class MainActivity extends Activity {
             message = "1st visit cannot be in the future";
         } else if (!PatientRules.validDate(p.visit2)) {
             target = visit2;
-        } else if (!empty(p.visit2) && LocalDate.parse(p.visit2).isAfter(LocalDate.now())) {
-            target = visit2;
-            message = "2nd visit cannot be in the future";
         } else if (!PatientRules.validDate(p.visit3)) {
             target = visit3;
-        } else if (!empty(p.visit3) && LocalDate.parse(p.visit3).isAfter(LocalDate.now())) {
-            target = visit3;
-            message = "3rd visit cannot be in the future";
         } else if (!PatientRules.validDate(p.finalVisit)) {
             target = finalVisit;
-        } else if (!empty(p.finalVisit) && LocalDate.parse(p.finalVisit).isAfter(LocalDate.now())) {
-            target = finalVisit;
-            message = "Final visit cannot be in the future";
         }
         toast(message);
         if (target != null) {
@@ -1481,6 +1523,7 @@ public class MainActivity extends Activity {
         page.addView(scrollingActions(
                 navButton("Scheduled", v -> showPatientList(adminMode, appendWhere(visibleWhere, SCHEDULED_WHERE), visibleArgs, true)),
                 navButton("Call Pending", v -> showPatientList(adminMode, appendWhere(visibleWhere, SCHEDULED_CALL_PENDING_WHERE), appendArgs(visibleArgs, LocalDate.now().toString()), true)),
+                navButton("Visit Follow-ups", v -> showPatientList(adminMode, appendWhere(visibleWhere, FOLLOWUP_WEEK_WHERE), appendArgs(visibleArgs, followupWeekArgs()), true)),
                 navButton("EDD 30 Days", v -> showPatientList(adminMode, appendWhere(visibleWhere, "edd_date BETWEEN ? AND ?"), appendArgs(visibleArgs, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()), true)),
                 navButton("Locked", v -> showPatientList(adminMode, appendWhere(visibleWhere, "record_locked = 1"), visibleArgs, true))
         ));
@@ -1697,6 +1740,39 @@ public class MainActivity extends Activity {
         return LocalDate.parse(p.scheduledDeliveryDate).isBefore(LocalDate.now());
     }
 
+    private String[] followupWeekArgs() {
+        String today = LocalDate.now().toString();
+        String week = LocalDate.now().plusDays(7).toString();
+        return new String[]{today, week, today, week, today, week};
+    }
+
+    private String[] nextFollowupVisit(Patient p) {
+        LocalDate today = LocalDate.now();
+        LocalDate week = today.plusDays(7);
+        String[] best = new String[]{"Follow-up", ""};
+        LocalDate bestDate = null;
+        bestDate = chooseFollowup("2nd Visit", p.visit2, today, week, best, bestDate);
+        bestDate = chooseFollowup("3rd Visit", p.visit3, today, week, best, bestDate);
+        chooseFollowup("Final Visit", p.finalVisit, today, week, best, bestDate);
+        return best;
+    }
+
+    private LocalDate chooseFollowup(String label, String value, LocalDate today, LocalDate week, String[] best, LocalDate bestDate) {
+        if (empty(value) || !PatientRules.validDate(value)) {
+            return bestDate;
+        }
+        LocalDate date = LocalDate.parse(value);
+        if (date.isBefore(today) || date.isAfter(week)) {
+            return bestDate;
+        }
+        if (bestDate == null || date.isBefore(bestDate)) {
+            best[0] = label;
+            best[1] = value;
+            return date;
+        }
+        return bestDate;
+    }
+
     private void confirmScheduledDeliveryCompleted(Patient p) {
         if (p == null) {
             toast("Patient not found");
@@ -1881,6 +1957,7 @@ public class MainActivity extends Activity {
         int scheduledPending = db.countPatients(appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()));
         int scheduledCompletionDue = db.countPatients(appendWhere(where, SCHEDULED_COMPLETION_DUE_WHERE), appendArgs(args, LocalDate.now().toString()));
         int scheduledNotified = Math.max(0, scheduled - scheduledPending - scheduledCompletionDue);
+        int followupWeek = db.countPatients(appendWhere(where, FOLLOWUP_WEEK_WHERE), appendArgs(args, followupWeekArgs()));
         int today = db.countPatients(appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()));
         page.addView(section("Report Overview",
                 statGrid(
@@ -1889,6 +1966,7 @@ public class MainActivity extends Activity {
                         stat("EDD 30", edd30, v -> showPatientList(false, appendWhere(where, "edd_date BETWEEN ? AND ?"), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()), true)),
                         stat("Scheduled", scheduled, v -> showPatientList(false, appendWhere(where, SCHEDULED_WHERE), args, true)),
                         stat("Call Pending", scheduledPending, v -> showPatientList(false, appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()), true)),
+                        stat("Visit Follow-ups", followupWeek, v -> showPatientList(false, appendWhere(where, FOLLOWUP_WEEK_WHERE), appendArgs(args, followupWeekArgs()), true)),
                         stat("Complete Due", scheduledCompletionDue, v -> showPatientList(false, appendWhere(where, SCHEDULED_COMPLETION_DUE_WHERE), appendArgs(args, LocalDate.now().toString()), true)),
                         stat("Completed", locked, v -> showPatientList(false, appendWhere(where, "record_locked = 1"), args, true))
                 )
@@ -1910,6 +1988,7 @@ public class MainActivity extends Activity {
                 progressRow("Open records", Math.max(0, total - locked), total, total == 0 ? 0 : Math.round((total - locked) * 100f / total)),
                 progressRow("Locked records", locked, total, total == 0 ? 0 : Math.round(locked * 100f / total)),
                 progressRow("EDD within 30 days", edd30, total, total == 0 ? 0 : Math.round(edd30 * 100f / total)),
+                progressRow("Visit follow-ups within 7 days", followupWeek, total, total == 0 ? 0 : Math.round(followupWeek * 100f / total)),
                 progressRow("Scheduled delivery", scheduled, total, total == 0 ? 0 : Math.round(scheduled * 100f / total)),
                 progressRow("Scheduled calls pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled)),
                 progressRow("Delivery completion due", scheduledCompletionDue, scheduled, scheduled == 0 ? 0 : Math.round(scheduledCompletionDue * 100f / scheduled))
@@ -1919,6 +1998,7 @@ public class MainActivity extends Activity {
             return;
         }
         page.addView(section("Scheduled Delivery Access", scheduledDeliveryView(where, args)));
+        page.addView(section("Visit Follow-up Access", followupWeekView(where, args)));
         LinearLayout visits = new LinearLayout(this);
         visits.setOrientation(LinearLayout.VERTICAL);
         for (String[] row : db.visitCompletionRows(where, args)) {
@@ -2465,6 +2545,7 @@ public class MainActivity extends Activity {
                         button("Patient Management", v -> showPatientList(true)),
                         button("Reports", v -> showReports()),
                         button("Scheduled Calls", v -> showPatientList(true, SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()})),
+                        button("Visit Follow-ups", v -> showPatientList(true, FOLLOWUP_WEEK_WHERE, followupWeekArgs())),
                         button("Export Center", v -> showExportCenter())
                 )
         ));
@@ -2496,7 +2577,11 @@ public class MainActivity extends Activity {
                         readinessPill("Sync", value(syncBadge == null ? "SYNCING" : syncBadge.getText().toString()), PRIMARY),
                         readinessPill("Role", value(currentRole), SLATE)
                 ),
-                smallText("Support note: " + lastSyncText)
+                smallText("Support note: " + lastSyncText),
+                scrollingActions(
+                        button("Check for Updates", v -> checkForAppUpdate()),
+                        button("Open Releases", v -> openUrl(UPDATE_RELEASES_URL))
+                )
         ));
         page.addView(collapsibleSection("Audit Trail", false, changeLogView()));
     }
@@ -2510,6 +2595,131 @@ public class MainActivity extends Activity {
                         focusCard("Calls", callPending, "Pending scheduled calls", URGENT, v -> showPatientList(true, SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()}))
                 )
         );
+    }
+
+    private void checkForAppUpdate() {
+        toast("Checking for update...");
+        new Thread(() -> {
+            try {
+                UpdateInfo update = fetchLatestUpdate();
+                runOnUiThread(() -> showUpdateResult(update));
+            } catch (Exception ex) {
+                runOnUiThread(() -> toast("Update check failed: " + ex.getMessage()));
+            }
+        }).start();
+    }
+
+    private UpdateInfo fetchLatestUpdate() throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(UPDATE_API_URL).openConnection();
+        connection.setConnectTimeout(10000);
+        connection.setReadTimeout(15000);
+        connection.setRequestProperty("Accept", "application/vnd.github+json");
+        connection.setRequestProperty("User-Agent", "BlueBirdHospital/" + BuildConfig.VERSION_NAME);
+        int statusCode = connection.getResponseCode();
+        InputStream stream = statusCode >= 200 && statusCode < 300 ? connection.getInputStream() : connection.getErrorStream();
+        String body = readStream(stream);
+        connection.disconnect();
+        if (statusCode < 200 || statusCode >= 300) {
+            throw new IllegalStateException("GitHub returned " + statusCode);
+        }
+        JSONObject json = new JSONObject(body);
+        String tag = json.optString("tag_name", "");
+        String pageUrl = json.optString("html_url", UPDATE_RELEASES_URL);
+        String apkUrl = "";
+        JSONArray assets = json.optJSONArray("assets");
+        if (assets != null) {
+            for (int i = 0; i < assets.length(); i++) {
+                JSONObject asset = assets.getJSONObject(i);
+                String name = asset.optString("name", "");
+                if (name.toLowerCase(java.util.Locale.US).endsWith(".apk")) {
+                    apkUrl = asset.optString("browser_download_url", "");
+                    break;
+                }
+            }
+        }
+        return new UpdateInfo(tag, pageUrl, apkUrl);
+    }
+
+    private String readStream(InputStream stream) throws Exception {
+        if (stream == null) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                out.append(line);
+            }
+        }
+        return out.toString();
+    }
+
+    private void showUpdateResult(UpdateInfo update) {
+        if (empty(update.tag)) {
+            toast("No release version found");
+            return;
+        }
+        String latest = update.tag.startsWith("v") ? update.tag.substring(1) : update.tag;
+        if (compareVersions(latest, BuildConfig.VERSION_NAME) <= 0) {
+            new AlertDialog.Builder(this)
+                    .setTitle("App is up to date")
+                    .setMessage("Current version: " + BuildConfig.VERSION_NAME + "\nLatest version: " + update.tag)
+                    .setPositiveButton("OK", null)
+                    .show();
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Update Available")
+                .setMessage("Current version: " + BuildConfig.VERSION_NAME + "\nLatest version: " + update.tag + "\n\nDownload and install the latest APK from the release page.")
+                .setPositiveButton("Download APK", (dialog, which) -> openUrl(empty(update.apkUrl) ? update.pageUrl : update.apkUrl))
+                .setNegativeButton("Later", null)
+                .show();
+    }
+
+    private int compareVersions(String left, String right) {
+        String[] a = value(left).split("\\.");
+        String[] b = value(right).split("\\.");
+        int count = Math.max(a.length, b.length);
+        for (int i = 0; i < count; i++) {
+            int av = i < a.length ? parseVersionPart(a[i]) : 0;
+            int bv = i < b.length ? parseVersionPart(b[i]) : 0;
+            if (av != bv) {
+                return av - bv;
+            }
+        }
+        return 0;
+    }
+
+    private int parseVersionPart(String value) {
+        try {
+            return Integer.parseInt(value.replaceAll("[^0-9]", ""));
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private void openUrl(String url) {
+        if (empty(url)) {
+            toast("Update link unavailable");
+            return;
+        }
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Exception ex) {
+            toast("Cannot open link: " + ex.getMessage());
+        }
+    }
+
+    private static final class UpdateInfo {
+        final String tag;
+        final String pageUrl;
+        final String apkUrl;
+
+        UpdateInfo(String tag, String pageUrl, String apkUrl) {
+            this.tag = tag;
+            this.pageUrl = pageUrl;
+            this.apkUrl = apkUrl;
+        }
     }
 
     private void showReferenceDialog(String table, String title) {

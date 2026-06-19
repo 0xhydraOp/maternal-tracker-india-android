@@ -44,25 +44,16 @@ final class PatientRules {
             if (!empty(p.visit2) && empty(p.visit1)) {
                 return "1st visit is required before 2nd visit";
             }
-            if (!empty(p.visit2) && LocalDate.parse(p.visit2).isAfter(today)) {
-                return "2nd visit cannot be in the future";
-            }
             if (!empty(p.visit2) && LocalDate.parse(p.visit2).isBefore(LocalDate.parse(p.visit1))) {
                 return "2nd visit cannot be before 1st visit";
             }
             if (!empty(p.visit3) && empty(p.visit1) && empty(p.visit2)) {
                 return "Previous visit is required before 3rd visit";
             }
-            if (!empty(p.visit3) && LocalDate.parse(p.visit3).isAfter(today)) {
-                return "3rd visit cannot be in the future";
-            }
             if (!empty(p.visit3) && LocalDate.parse(p.visit3).isBefore(LocalDate.parse(empty(p.visit2) ? p.visit1 : p.visit2))) {
                 return "3rd visit cannot be before previous visit";
             }
             if (!empty(p.finalVisit)) {
-                if (LocalDate.parse(p.finalVisit).isAfter(today)) {
-                    return "Final visit cannot be in the future";
-                }
                 String previous = !empty(p.visit3) ? p.visit3 : (!empty(p.visit2) ? p.visit2 : p.visit1);
                 if (empty(previous)) {
                     return "Previous visit is required before final visit";

@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.10 - 2026-06-19
+
+- Allowed future 2nd, 3rd, and final visit dates as planned follow-up dates instead of blocking them as invalid.
+- Added Home dashboard tracking for planned visit follow-ups due within the next 7 days.
+- Added visit follow-up access from Search, Reports, and Admin patient controls.
+- Updated visit completion reporting so future planned visit dates are not counted as completed visits.
+- Added an in-app update checker linked to the latest GitHub release APK; staff and admins can access it from the profile menu, and admins also see it in App Support.
+- Bumped Android app version to `1.1.10` / versionCode `18`.
+
 ## v1.1.9 - 2026-06-18
 
 - Reviewed scheduled-delivery workflow, dashboard filters, report filters, and patient validation for behavior/query mismatches.

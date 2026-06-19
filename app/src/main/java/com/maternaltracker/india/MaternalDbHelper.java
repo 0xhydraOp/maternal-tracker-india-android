@@ -414,15 +414,29 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
     List<String[]> visitCompletionRows(String where, String[] args) {
         List<String[]> rows = new ArrayList<>();
         int total = countPatients(where, args);
-        rows.add(new String[]{"1st Visit", String.valueOf(countPatients(appendWhere(where, "visit1 IS NOT NULL AND visit1 != ''"), args)), String.valueOf(total)});
-        rows.add(new String[]{"2nd Visit", String.valueOf(countPatients(appendWhere(where, "visit2 IS NOT NULL AND visit2 != ''"), args)), String.valueOf(total)});
-        rows.add(new String[]{"3rd Visit", String.valueOf(countPatients(appendWhere(where, "visit3 IS NOT NULL AND visit3 != ''"), args)), String.valueOf(total)});
-        rows.add(new String[]{"Final Visit", String.valueOf(countPatients(appendWhere(where, "final_visit IS NOT NULL AND final_visit != ''"), args)), String.valueOf(total)});
+        String today = LocalDate.now().toString();
+        rows.add(new String[]{"1st Visit", String.valueOf(countPatients(appendWhere(where, "visit1 IS NOT NULL AND visit1 != '' AND visit1 <= ?"), appendArgs(args, today))), String.valueOf(total)});
+        rows.add(new String[]{"2nd Visit", String.valueOf(countPatients(appendWhere(where, "visit2 IS NOT NULL AND visit2 != '' AND visit2 <= ?"), appendArgs(args, today))), String.valueOf(total)});
+        rows.add(new String[]{"3rd Visit", String.valueOf(countPatients(appendWhere(where, "visit3 IS NOT NULL AND visit3 != '' AND visit3 <= ?"), appendArgs(args, today))), String.valueOf(total)});
+        rows.add(new String[]{"Final Visit", String.valueOf(countPatients(appendWhere(where, "final_visit IS NOT NULL AND final_visit != '' AND final_visit <= ?"), appendArgs(args, today))), String.valueOf(total)});
         return rows;
     }
 
     private String appendWhere(String where, String extra) {
         return where == null || where.trim().isEmpty() ? extra : "(" + where + ") AND (" + extra + ")";
+    }
+
+    private String[] appendArgs(String[] base, String... extra) {
+        int baseLength = base == null ? 0 : base.length;
+        int extraLength = extra == null ? 0 : extra.length;
+        String[] out = new String[baseLength + extraLength];
+        if (base != null) {
+            System.arraycopy(base, 0, out, 0, baseLength);
+        }
+        if (extra != null) {
+            System.arraycopy(extra, 0, out, baseLength, extraLength);
+        }
+        return out;
     }
 
     List<String[]> upcomingEddRows(int limit) {

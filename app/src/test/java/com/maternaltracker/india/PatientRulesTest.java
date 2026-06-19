@@ -100,10 +100,12 @@ public class PatientRulesTest {
     }
 
     @Test
-    public void validationRejectsFutureVisitDate() {
+    public void validationAcceptsFutureTentativeVisitDate() {
         Patient p = validPatient();
         p.visit2 = "2026-06-16";
-        assertEquals("2nd visit cannot be in the future", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+        p.visit3 = "2026-06-20";
+        p.finalVisit = "2026-06-25";
+        assertNull(PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
     private Patient validPatient() {
