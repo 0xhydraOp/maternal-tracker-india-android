@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.13 - 2026-06-20
+
+- Removed the duplicate Home dashboard Today's Priority Queue.
+- Kept Home focused on status/date sync, conditional Today at a Glance cards, Today's Work, KPI metrics, Upcoming EDD, and Data Quality Alerts.
+- Reworked the profile slide area into a grouped Blue Bird drawer with live role/sync status and cleaner action rows.
+- Bumped Android app version to `1.1.13` / versionCode `21`.
+
 ## v1.1.12 - 2026-06-20
 
 - Corrected the Home dashboard no-priority message so overdue visit follow-ups are described accurately.

@@ -110,6 +110,9 @@ public class MainActivity extends Activity {
     private TextView status;
     private TextView headerTitle;
     private TextView syncBadge;
+    private TextView profileUserLabel;
+    private TextView profileRoleBadge;
+    private TextView profileSyncBadge;
     private TextView backButton;
     private TextView dashboardClock;
     private Runnable dashboardClockTicker;
@@ -288,7 +291,7 @@ public class MainActivity extends Activity {
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.HORIZONTAL);
         profileMenu = profileMenu();
-        body.addView(profileMenu, new LinearLayout.LayoutParams(dp(214), -1));
+        body.addView(profileMenu, new LinearLayout.LayoutParams(dp(238), -1));
         profileMenu.setVisibility(View.GONE);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -424,31 +427,21 @@ public class MainActivity extends Activity {
         LinearLayout menu = card();
         menu.setOrientation(LinearLayout.VERTICAL);
         menu.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
-        TextView avatar = brandMark();
-        TextView title = label("Blue Bird Profile", 15, true);
-        title.setTextColor(PRIMARY_DARK);
-        TextView user = smallText(value(currentUser));
-        user.setTextColor(MUTED);
-        TextView role = chip(value(currentRole), PRIMARY, Color.WHITE);
-        TextView sync = chip(syncBadge == null ? "SYNCING" : value(syncBadge.getText().toString()), ACCENT, Color.WHITE);
-        menu.addView(avatar);
-        menu.addView(title);
-        menu.addView(user);
-        LinearLayout badges = new LinearLayout(this);
-        badges.setOrientation(LinearLayout.HORIZONTAL);
-        badges.addView(role);
-        badges.addView(sync);
-        menu.addView(badges);
+        menu.addView(profileHeader());
+        menu.addView(menuGroupTitle("Patient Work"));
         menu.addView(menuItem("+", "New Patient", v -> showPatientForm(null)));
         menu.addView(menuItem("Find", "Search Patients", v -> showPatientList(false)));
+        menu.addView(menuGroupTitle("Reports & Export"));
         menu.addView(menuItem("Rpt", "Reports", v -> showReports()));
-        menu.addView(menuItem("Save", "Export Center", v -> showExportCenter()));
+        menu.addView(menuItem("XLS", "Export Center", v -> showExportCenter()));
+        menu.addView(menuGroupTitle("System"));
         menu.addView(menuItem("Upd", "Check for Updates", v -> checkForAppUpdate()));
         if (isAdmin()) {
             menu.addView(menuItem("Admin", "Administration", v -> showAdmin()));
-            menu.addView(menuItem("Bak", "Backup Manager", v -> showBackup()));
+            menu.addView(menuItem("Backup", "Backup Manager", v -> showBackup()));
         }
-        menu.addView(menuItem("Exit", "Exit", v -> {
+        menu.addView(menuGroupTitle("Session"));
+        menu.addView(menuItem("Exit", "Sign Out", v -> {
             firebase.signOut();
             currentUser = "";
             currentRole = "";
@@ -457,26 +450,83 @@ public class MainActivity extends Activity {
         return menu;
     }
 
+    private View profileHeader() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
+        box.setBackground(gradient(PRIMARY_DARK, ACCENT, dp(CARD_RADIUS)));
+
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView avatar = label("BBH", 13, true);
+        avatar.setTextColor(PRIMARY_DARK);
+        avatar.setGravity(Gravity.CENTER);
+        avatar.setBackground(rounded(Color.WHITE, dp(18), 0, Color.WHITE));
+        top.addView(avatar, new LinearLayout.LayoutParams(dp(38), dp(38)));
+
+        LinearLayout identity = new LinearLayout(this);
+        identity.setOrientation(LinearLayout.VERTICAL);
+        identity.setPadding(dp(SPACE_SM), 0, 0, 0);
+        TextView title = label("Blue Bird Profile", 14, true);
+        title.setTextColor(Color.WHITE);
+        profileUserLabel = label(value(currentUser), 11, false);
+        profileUserLabel.setTextColor(Color.argb(220, 255, 255, 255));
+        profileUserLabel.setSingleLine(true);
+        identity.addView(title);
+        identity.addView(profileUserLabel);
+        top.addView(identity, new LinearLayout.LayoutParams(0, -2, 1));
+        box.addView(top);
+
+        LinearLayout badges = new LinearLayout(this);
+        badges.setOrientation(LinearLayout.HORIZONTAL);
+        badges.setPadding(0, dp(SPACE_SM), 0, 0);
+        profileRoleBadge = chip(value(currentRole), Color.argb(55, 255, 255, 255), Color.WHITE);
+        profileSyncBadge = chip(currentSyncText(), ACCENT, Color.WHITE);
+        badges.addView(profileRoleBadge);
+        badges.addView(profileSyncBadge);
+        box.addView(badges);
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(SPACE_SM));
+        box.setLayoutParams(lp);
+        return box;
+    }
+
+    private View menuGroupTitle(String title) {
+        TextView label = label(title, 10, true);
+        label.setTextColor(SLATE);
+        label.setPadding(dp(4), dp(SPACE_SM), 0, dp(3));
+        return label;
+    }
+
     private View menuItem(String symbol, String text, View.OnClickListener listener) {
         LinearLayout item = new LinearLayout(this);
         item.setOrientation(LinearLayout.HORIZONTAL);
         item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setPadding(dp(8), dp(6), dp(8), dp(6));
-        item.setBackground(glassInput(false));
-        TextView icon = label(symbol, 13, true);
+        item.setPadding(dp(8), dp(7), dp(8), dp(7));
+        item.setBackground(rounded(Color.argb(92, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(170, 255, 255, 255)));
+        TextView icon = label(symbol, 11, true);
         icon.setTextColor(PRIMARY);
         icon.setGravity(Gravity.CENTER);
-        TextView caption = label(text, 12, true);
+        icon.setSingleLine(true);
+        icon.setBackground(rounded(PRIMARY_SOFT, dp(CHIP_RADIUS), dp(1), Color.rgb(184, 207, 225)));
+        TextView caption = label(text, 13, true);
         caption.setTextColor(PRIMARY_DARK);
         caption.setPadding(dp(8), 0, 0, 0);
-        item.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(30)));
+        TextView arrow = label(">", 14, true);
+        arrow.setTextColor(MUTED);
+        arrow.setGravity(Gravity.CENTER);
+        item.addView(icon, new LinearLayout.LayoutParams(dp(54), dp(34)));
         item.addView(caption, new LinearLayout.LayoutParams(0, -2, 1));
+        item.addView(arrow, new LinearLayout.LayoutParams(dp(18), dp(34)));
         item.setOnClickListener(v -> {
             closeProfileMenu();
             listener.onClick(v);
         });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, dp(5), 0, 0);
+        lp.setMargins(0, 0, 0, dp(6));
         item.setLayoutParams(lp);
         return item;
     }
@@ -488,10 +538,30 @@ public class MainActivity extends Activity {
         boolean open = profileMenu.getVisibility() != View.VISIBLE;
         profileMenu.setVisibility(open ? View.VISIBLE : View.GONE);
         if (open) {
+            refreshProfileMenuStatus();
             profileMenu.setTranslationX(-dp(36));
             profileMenu.setAlpha(0f);
             profileMenu.animate().translationX(0f).alpha(1f).setDuration(180).start();
         }
+    }
+
+    private void refreshProfileMenuStatus() {
+        if (profileUserLabel != null) {
+            profileUserLabel.setText(value(currentUser));
+        }
+        if (profileRoleBadge != null) {
+            profileRoleBadge.setText(value(currentRole));
+        }
+        if (profileSyncBadge != null) {
+            String text = currentSyncText();
+            int color = "SYNC ERROR".equals(text) ? WARNING : ("ONLINE".equals(text) ? ACCENT : PRIMARY);
+            profileSyncBadge.setText(text);
+            profileSyncBadge.setBackground(rounded(color, dp(CHIP_RADIUS), 0, color));
+        }
+    }
+
+    private String currentSyncText() {
+        return syncBadge == null ? "SYNCING" : value(syncBadge.getText().toString());
     }
 
     private void closeProfileMenu() {
@@ -582,7 +652,10 @@ public class MainActivity extends Activity {
             box.addView(dashboardPreviewState());
             return;
         }
-        box.addView(todayPriorityStrip(scheduledCompletionDue, scheduledWeek, dueWeek, scheduledPending, followupWeek, edd30));
+        View priorityStrip = todayPriorityStrip(scheduledCompletionDue, scheduledWeek, dueWeek, scheduledPending, followupWeek, edd30);
+        if (priorityStrip != null) {
+            box.addView(priorityStrip);
+        }
         box.addView(section("Today's Work", todayWorkView(scopeWhere, scopeArgs)));
         box.addView(compactKpiRow(
                 compactKpi("Total", total, "Patients", v -> showScopedPatientList(null, null)),
@@ -594,22 +667,36 @@ public class MainActivity extends Activity {
                 compactKpi("Today", today, "New entries", v -> showScopedPatientList("entry_date = ?", new String[]{LocalDate.now().toString()})),
                 compactKpi("Done", locked, "Completed", v -> showScopedPatientList("record_locked = 1", null))
         ));
-        box.addView(section("Today's Priority Queue", priorityQueue(today, dueWeek, scheduledPending, scheduledWeek, scheduledCompletionDue, followupWeek)));
         box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
         box.addView(section("Data Quality Alerts", needsAttentionView(scopeWhere, scopeArgs)));
     }
 
     private View todayPriorityStrip(int scheduledCompletionDue, int scheduledWeek, int dueWeek, int scheduledPending, int followupWeek, int edd30) {
-        return section("Today at a Glance",
-                compactKpiRow(
-                        focusCard("Complete", scheduledCompletionDue, "Scheduled delivery date passed", URGENT, v -> showScopedPatientList(SCHEDULED_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString()})),
-                        focusCard("Highest", scheduledWeek, "Scheduled delivery in 7 days", URGENT, v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
-                        focusCard("Visits", followupWeek, "Due or next 7 days", WARNING, v -> showScopedPatientList(FOLLOWUP_WEEK_WHERE, followupWeekArgs())),
-                        focusCard("EDD Week", dueWeek, "Delivery dates in 7 days", WARNING, v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
-                        focusCard("Call Pending", scheduledPending, "Scheduled delivery calls", ACCENT, v -> showScopedPatientList(SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()})),
-                        focusCard("EDD 30", edd30, "Next 30 days", PRIMARY, v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()}))
-                )
-        );
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, 0, 0, dp(4));
+        int shown = 0;
+        shown += addFocusCardIf(row, "Complete", scheduledCompletionDue, "Scheduled delivery date passed", URGENT, v -> showScopedPatientList(SCHEDULED_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString()}));
+        shown += addFocusCardIf(row, "Highest", scheduledWeek, "Scheduled delivery in 7 days", URGENT, v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
+        shown += addFocusCardIf(row, "Visits", followupWeek, "Due or next 7 days", WARNING, v -> showScopedPatientList(FOLLOWUP_WEEK_WHERE, followupWeekArgs()));
+        shown += addFocusCardIf(row, "EDD Week", dueWeek, "Delivery dates in 7 days", WARNING, v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
+        shown += addFocusCardIf(row, "Call Pending", scheduledPending, "Scheduled delivery calls", ACCENT, v -> showScopedPatientList(SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()}));
+        shown += addFocusCardIf(row, "EDD 30", edd30, "Next 30 days", PRIMARY, v -> showScopedPatientList("edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()}));
+        if (shown == 0) {
+            return null;
+        }
+        scroll.addView(row);
+        return section("Today at a Glance", scroll);
+    }
+
+    private int addFocusCardIf(LinearLayout row, String title, int value, String caption, int color, View.OnClickListener click) {
+        if (value <= 0) {
+            return 0;
+        }
+        row.addView(focusCard(title, value, caption, color, click));
+        return 1;
     }
 
     private View focusCard(String title, int value, String caption, int color, View.OnClickListener click) {
@@ -833,42 +920,6 @@ public class MainActivity extends Activity {
         lp.setMargins(0, 0, dp(7), 0);
         box.setLayoutParams(lp);
         return box;
-    }
-
-    private View priorityQueue(int today, int dueWeek, int scheduledPending, int scheduledWeek, int scheduledCompletionDue, int followupWeek) {
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        list.addView(priorityItem("Scheduled delivery completion due", scheduledCompletionDue, "Delivery date has passed; mark completed after operator confirmation", SCHEDULED_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString()}));
-        list.addView(priorityItem("Scheduled delivery within 7 days", scheduledWeek, "Highest attention: call these doctor-scheduled delivery patients first", SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
-        list.addView(priorityItem("Visit follow-ups due", followupWeek, "Patients with overdue or upcoming planned visit dates", FOLLOWUP_WEEK_WHERE, followupWeekArgs()));
-        list.addView(priorityItem("EDD due this week", dueWeek, "Review patients with delivery dates in the next 7 days", "edd_date BETWEEN ? AND ?", new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
-        list.addView(priorityItem("Scheduled delivery calls", scheduledPending, "Call patients with doctor-given delivery dates", SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()}));
-        list.addView(priorityItem("New entries today", today, "Patients registered today", "entry_date = ?", new String[]{LocalDate.now().toString()}));
-        return list;
-    }
-
-    private View priorityItem(String title, int count, String detail, String where, String[] args) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(2), dp(5), dp(2), dp(5));
-        row.setOnClickListener(v -> showScopedPatientList(where, args));
-        TextView countView = label(String.valueOf(count), 18, true);
-        countView.setGravity(Gravity.CENTER);
-        countView.setTextColor(Color.WHITE);
-        countView.setBackground(gradient(count > 0 ? WARNING : ACCENT, PRIMARY, dp(18)));
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(10), 0, 0, 0);
-        TextView titleView = label(title, 13, true);
-        titleView.setTextColor(PRIMARY_DARK);
-        TextView detailView = smallText(detail);
-        detailView.setTextColor(MUTED);
-        copy.addView(titleView);
-        copy.addView(detailView);
-        row.addView(countView, new LinearLayout.LayoutParams(dp(36), dp(36)));
-        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
-        return row;
     }
 
     private View todayWorkView(String scopeWhere, String[] scopeArgs) {
