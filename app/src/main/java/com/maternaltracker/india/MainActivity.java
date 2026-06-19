@@ -698,7 +698,7 @@ public class MainActivity extends Activity {
         box.setPadding(dp(SPACE_LG), dp(SPACE_MD), dp(SPACE_LG), dp(SPACE_MD));
         TextView title = label(total == 0 ? "Ready for first patient entry" : (actionCount > 0 ? actionCount + " patient action(s) need attention" : "No priority patient action due"), 15, true);
         title.setTextColor(actionCount > 0 ? WARNING : ACCENT);
-        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Work from the patient cards below: completion due first, then scheduled delivery, visit follow-ups, and EDD reminders." : "No scheduled delivery, visit follow-up, or EDD falls within 7 days."));
+        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Work from the patient cards below: completion due first, then scheduled delivery, visit follow-ups, and EDD reminders." : "No scheduled delivery, overdue follow-up, or EDD is due within 7 days."));
         sub.setTextColor(MUTED);
         box.addView(title);
         box.addView(sub);

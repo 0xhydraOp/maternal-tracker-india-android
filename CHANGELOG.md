@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.12 - 2026-06-20
+
+- Corrected the Home dashboard no-priority message so overdue visit follow-ups are described accurately.
+- Bumped Android app version to `1.1.12` / versionCode `20`.
+
 ## v1.1.11 - 2026-06-20
 
 - Reorganized the Home dashboard around patient-specific Today's Work cards with direct call, update, completion, and detail actions.
