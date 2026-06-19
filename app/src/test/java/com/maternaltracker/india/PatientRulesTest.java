@@ -45,9 +45,19 @@ public class PatientRulesTest {
     @Test
     public void validationRequiresPreviousVisitBeforeFinalVisit() {
         Patient p = validPatient();
-        p.visit1 = null;
+        p.visit2 = null;
+        p.visit3 = null;
         p.finalVisit = "2026-07-01";
-        assertEquals("Fill all required fields. Motivator and later visits are optional", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+        assertEquals("2nd visit is required before final visit", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationRequiresSecondVisitBeforeThirdVisit() {
+        Patient p = validPatient();
+        p.visit2 = null;
+        p.visit3 = "2026-06-20";
+        p.finalVisit = null;
+        assertEquals("2nd visit is required before 3rd visit", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
     @Test

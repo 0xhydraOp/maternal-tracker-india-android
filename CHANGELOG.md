@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.11 - 2026-06-20
+
+- Reorganized the Home dashboard around patient-specific Today's Work cards with direct call, update, completion, and detail actions.
+- Kept priority patients de-duplicated so the same record does not occupy multiple Home action slots.
+- Fixed visit follow-up queries so overdue planned follow-ups remain visible until staff updates or completes the record.
+- Updated scheduled-delivery report counting so Patient Notified is counted directly from call-marked records.
+- Renamed visit reporting copy to date-tracking language so planned dates are not presented as completed clinical visits.
+- Clarified Admin user removal wording as app-access revocation, matching Firebase client-side behavior.
+- Bumped Android app version to `1.1.11` / versionCode `19`.
+
 ## v1.1.10 - 2026-06-19
 
 - Allowed future 2nd, 3rd, and final visit dates as planned follow-up dates instead of blocking them as invalid.
