@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.15 - 2026-06-21
+
+- Replaced placeholder bottom-navigation letters with native Home, Entry, Search, Reports, and Admin icons.
+- Upgraded patient search cards with clearer identity hierarchy, status color rails, and clinical priority chips.
+- Reorganized the Admin panel into operations, data/recovery, access control, reference lists, and app support command panels.
+- Kept core patient, report, export, backup, user-management, and update flows unchanged.
+- Bumped Android app version to `1.1.15` / versionCode `23`.
+
 ## v1.1.14 - 2026-06-20
 
 - Added automatic pregnancy age display from LMP in patient entry, search results, patient detail, and exports.

@@ -25,6 +25,7 @@ import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -416,12 +417,12 @@ public class MainActivity extends Activity {
             return;
         }
         bottomNav.removeAllViews();
-        bottomNav.addView(bottomNavItem("Dashboard", "H", "Home", v -> showDashboard()), new LinearLayout.LayoutParams(0, -1, 1));
-        bottomNav.addView(bottomNavItem("Patient Entry", "+", "Entry", v -> showPatientForm(null)), new LinearLayout.LayoutParams(0, -1, 1));
-        bottomNav.addView(bottomNavItem("Patient Search", "F", "Search", v -> showPatientList(false)), new LinearLayout.LayoutParams(0, -1, 1));
-        bottomNav.addView(bottomNavItem("Reports", "R", "Reports", v -> showReports()), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Dashboard", R.drawable.ic_nav_home, "Home", v -> showDashboard()), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Patient Entry", R.drawable.ic_nav_entry, "Entry", v -> showPatientForm(null)), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Patient Search", R.drawable.ic_nav_search, "Search", v -> showPatientList(false)), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Reports", R.drawable.ic_nav_reports, "Reports", v -> showReports()), new LinearLayout.LayoutParams(0, -1, 1));
         if (isAdmin()) {
-            bottomNav.addView(bottomNavItem("Administration", "A", "Admin", v -> showAdmin()), new LinearLayout.LayoutParams(0, -1, 1));
+            bottomNav.addView(bottomNavItem("Administration", R.drawable.ic_nav_admin, "Admin", v -> showAdmin()), new LinearLayout.LayoutParams(0, -1, 1));
         }
     }
 
@@ -1749,17 +1750,8 @@ public class MainActivity extends Activity {
         }
         for (Patient p : patients) {
             LinearLayout card = patientSearchCard(p);
-            if (scheduledDeliveryNeedsCompletion(p)) {
-                card.addView(chip("Delivery completion required", WARNING, Color.WHITE));
-            }
             if (!empty(p.scheduledDeliveryDate)) {
                 card.addView(statusLine("Scheduled delivery", value(p.scheduledDeliveryDate), scheduledDeliveryStatusText(p), scheduledDeliveryStatusColor(p)));
-            }
-            if (p.recordLocked) {
-                TextView locked = chip("Locked after final visit", ACCENT, Color.WHITE);
-                card.addView(locked);
-            } else {
-                card.addView(chip("Open", PRIMARY_SOFT, PRIMARY_DARK));
             }
             card.setOnClickListener(v -> showPatientDetail(db.getPatient(p.id), adminMode));
             List<View> rowActions = new java.util.ArrayList<>();
@@ -1812,25 +1804,110 @@ public class MainActivity extends Activity {
 
     private LinearLayout patientSearchCard(Patient p) {
         LinearLayout card = card();
+        card.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_SM));
+        int tone = patientStatusColor(p);
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView rail = new TextView(this);
+        rail.setBackground(rounded(tone, dp(5), 0, tone));
+        top.addView(rail, new LinearLayout.LayoutParams(dp(5), dp(66)));
+
         LinearLayout identity = new LinearLayout(this);
         identity.setOrientation(LinearLayout.VERTICAL);
+        identity.setPadding(dp(SPACE_SM), 0, dp(SPACE_SM), 0);
         TextView name = label(value(p.patientName), 16, true);
         name.setTextColor(PRIMARY_DARK);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         TextView id = label(value(p.patientId), 11, true);
         id.setTextColor(MUTED);
+        TextView contact = label(value(p.mobileNumber) + " | " + value(p.villageName) + ", " + value(p.localBodyName), 11, false);
+        contact.setTextColor(MUTED);
+        contact.setSingleLine(true);
+        contact.setEllipsize(android.text.TextUtils.TruncateAt.END);
         identity.addView(name);
         identity.addView(id);
+        identity.addView(contact);
         top.addView(identity, new LinearLayout.LayoutParams(0, -2, 1));
-        top.addView(chip(p.recordLocked ? "Completed" : (scheduledDeliveryNeedsCompletion(p) ? "Complete due" : (empty(p.scheduledDeliveryCalledAt) && !empty(p.scheduledDeliveryDate) ? "Call pending" : "Open")), p.recordLocked ? ACCENT : (scheduledDeliveryNeedsCompletion(p) || (!empty(p.scheduledDeliveryDate) && empty(p.scheduledDeliveryCalledAt)) ? WARNING : PRIMARY_SOFT), p.recordLocked || scheduledDeliveryNeedsCompletion(p) || (!empty(p.scheduledDeliveryDate) && empty(p.scheduledDeliveryCalledAt)) ? Color.WHITE : PRIMARY_DARK));
+        top.addView(chip(patientStatusLabel(p), tone, Color.WHITE));
         card.addView(top);
+        card.addView(patientBadgeRow(p));
         card.addView(statusLine("Mobile", value(p.mobileNumber), "Call", PRIMARY));
-        card.addView(statusLine("Location", value(p.villageName), value(p.localBodyName), SLATE));
         card.addView(statusLine("Pregnancy", pregnancyAgeText(p), p.recordLocked ? "Completed" : "Today", WARNING));
         card.addView(statusLine("Care", "EDD " + value(p.eddDate), "Doctor " + value(p.doctorName), ACCENT));
         return card;
+    }
+
+    private String patientStatusLabel(Patient p) {
+        if (p.recordLocked) {
+            return "Completed";
+        }
+        if (scheduledDeliveryNeedsCompletion(p)) {
+            return "Complete due";
+        }
+        if (dateWithinDays(p.scheduledDeliveryDate, 7)) {
+            return "Scheduled week";
+        }
+        if (!empty(p.scheduledDeliveryDate) && empty(p.scheduledDeliveryCalledAt)) {
+            return "Call pending";
+        }
+        if (dateWithinDays(p.eddDate, 7)) {
+            return "EDD week";
+        }
+        return "Open";
+    }
+
+    private int patientStatusColor(Patient p) {
+        if (p.recordLocked) {
+            return ACCENT;
+        }
+        if (scheduledDeliveryNeedsCompletion(p) || dateWithinDays(p.scheduledDeliveryDate, 7)) {
+            return URGENT;
+        }
+        if (!empty(p.scheduledDeliveryDate) && empty(p.scheduledDeliveryCalledAt)) {
+            return WARNING;
+        }
+        if (dateWithinDays(p.eddDate, 7)) {
+            return WARNING;
+        }
+        return PRIMARY;
+    }
+
+    private View patientBadgeRow(Patient p) {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(7), 0, dp(4));
+        row.addView(chip(p.recordLocked ? "Locked" : "Active", p.recordLocked ? ACCENT : PRIMARY_SOFT, p.recordLocked ? Color.WHITE : PRIMARY_DARK));
+        if (scheduledDeliveryNeedsCompletion(p)) {
+            row.addView(chip("Delivery completion required", URGENT, Color.WHITE));
+        } else if (dateWithinDays(p.scheduledDeliveryDate, 7)) {
+            row.addView(chip("Scheduled delivery within 7 days", URGENT, Color.WHITE));
+        } else if (!empty(p.scheduledDeliveryDate)) {
+            row.addView(chip("Scheduled delivery", ALERT_WARN_BG, WARNING));
+        }
+        if (!empty(p.scheduledDeliveryDate) && empty(p.scheduledDeliveryCalledAt) && !p.recordLocked) {
+            row.addView(chip("Call pending", WARNING, Color.WHITE));
+        }
+        if (!p.recordLocked && dateWithinDays(p.eddDate, 7)) {
+            row.addView(chip("EDD within 7 days", WARNING, Color.WHITE));
+        } else if (!p.recordLocked && dateWithinDays(p.eddDate, 30)) {
+            row.addView(chip("EDD within 30 days", PRIMARY_SOFT, PRIMARY_DARK));
+        }
+        scroll.addView(row);
+        return scroll;
+    }
+
+    private boolean dateWithinDays(String dateValue, int days) {
+        if (empty(dateValue) || !PatientRules.validDate(dateValue)) {
+            return false;
+        }
+        LocalDate date = LocalDate.parse(dateValue);
+        LocalDate today = LocalDate.now();
+        return !date.isBefore(today) && !date.isAfter(today.plusDays(days));
     }
 
     private View statusLine(String labelText, String valueText, String metaText, int color) {
@@ -2814,24 +2891,32 @@ public class MainActivity extends Activity {
         int doctors = db.listNames("custom_doctors").size();
         int motivators = db.listNames("custom_motivators").size();
         page.addView(adminHero(total, locked, scheduled, callPending));
-        page.addView(section("Patient Control",
-                scrollingActions(
-                        button("Patient Management", v -> showPatientList(true)),
-                        button("Reports", v -> showReports()),
-                        button("Scheduled Calls", v -> showPatientList(true, SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()})),
-                        button("Visit Follow-ups", v -> showPatientList(true, FOLLOWUP_WEEK_WHERE, followupWeekArgs())),
-                        button("Export Center", v -> showExportCenter())
+        page.addView(section("Operations Control",
+                compactTwoColumn(
+                        adminCommandPanel("Patient Records", "Search, edit, complete, unlock, and remove hospital records.", "Open Patients", PRIMARY, v -> showPatientList(true)),
+                        adminCommandPanel("Priority Follow-up", "Scheduled calls, delivery completion, and planned visit tracking.", "Open Priority", URGENT, v -> showPatientList(true, adminPriorityWhere(), adminPriorityArgs()))
+                ),
+                compactTwoColumn(
+                        adminCommandPanel("Reports", "Open scheduled delivery, EDD, village, and monthly summaries.", "Open Reports", ACCENT, v -> showReports()),
+                        adminCommandPanel("Export Center", "Create Excel and PDF files for staff and hospital records.", "Open Export", SLATE, v -> showExportCenter())
                 )
         ));
-        page.addView(section("Data Control",
-                scrollingActions(
-                        button("Backup", v -> showBackup()),
-                        button("Excel", v -> startExport("", null, null, REQ_EXPORT_EXCEL, "all_patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                        button("PDF", v -> startExport("", null, null, REQ_EXPORT_PDF, "all_patients.pdf", "application/pdf"))
+        page.addView(section("Data and Recovery",
+                compactTwoColumn(
+                        adminCommandPanel("Backup Manager", "Create or restore a local database backup when required.", "Open Backup", PRIMARY, v -> showBackup()),
+                        adminCommandPanel("Full Export", "Export all Blue Bird records directly as Excel or PDF.", "Export Excel", ACCENT, v -> startExport("", null, null, REQ_EXPORT_EXCEL, "all_patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 ),
-                smallText("Use exports for hospital reporting and backups for database recovery.")
+                scrollingActions(
+                        button("Export PDF", v -> startExport("", null, null, REQ_EXPORT_PDF, "all_patients.pdf", "application/pdf")),
+                        button("Save Backup File", v -> startBackupExport())
+                ),
+                smallText("Use exports for reporting and backups only for recovery or handover.")
         ));
         page.addView(section("Access Control",
+                compactTwoColumn(
+                        adminCommandPanel("Create Staff Login", "Only admins can create new app users and assign roles.", "Add User", PRIMARY, v -> addUserDialog()),
+                        adminCommandPanel("User Review", "Remove app access for users who should no longer sync records.", "Review Users", WARNING, v -> toast("Review the user list below"))
+                ),
                 usersView(),
                 navButton("Add User", v -> addUserDialog())
         ));
@@ -2840,9 +2925,9 @@ public class MainActivity extends Activity {
                         readinessPill("Doctors", String.valueOf(doctors), PRIMARY),
                         readinessPill("Motivators", String.valueOf(motivators), SLATE)
                 ),
-                scrollingActions(
-                        navButton("Doctor Names", v -> showReferenceDialog("custom_doctors", "Doctor Names")),
-                        navButton("Motivator Names", v -> showReferenceDialog("custom_motivators", "Motivator Names"))
+                compactTwoColumn(
+                        adminCommandPanel("Doctor Names", "Maintain the doctor dropdown used in patient entry.", "Edit Doctors", PRIMARY, v -> showReferenceDialog("custom_doctors", "Doctor Names")),
+                        adminCommandPanel("Motivator Names", "Optional field support for staff who still use motivators.", "Edit Motivators", SLATE, v -> showReferenceDialog("custom_motivators", "Motivator Names"))
                 )
         ));
         page.addView(section("App Support",
@@ -2852,9 +2937,9 @@ public class MainActivity extends Activity {
                         readinessPill("Role", value(currentRole), SLATE)
                 ),
                 smallText("Support note: " + lastSyncText),
-                scrollingActions(
-                        button("Check for Updates", v -> checkForAppUpdate()),
-                        button("Open Releases", v -> openUrl(UPDATE_RELEASES_URL))
+                compactTwoColumn(
+                        adminCommandPanel("App Update", "Check GitHub release updates and install the newest APK.", "Check Update", ACCENT, v -> checkForAppUpdate()),
+                        adminCommandPanel("Release Page", "Open the latest release page for manual support checks.", "Open Releases", SLATE, v -> openUrl(UPDATE_RELEASES_URL))
                 )
         ));
         page.addView(collapsibleSection("Audit Trail", false, changeLogView()));
@@ -2869,6 +2954,43 @@ public class MainActivity extends Activity {
                         focusCard("Calls", callPending, "Pending scheduled calls", URGENT, v -> showPatientList(true, SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()}))
                 )
         );
+    }
+
+    private View adminCommandPanel(String title, String message, String action, int color, View.OnClickListener listener) {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.HORIZONTAL);
+        panel.setGravity(Gravity.CENTER_VERTICAL);
+        panel.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
+        panel.setBackground(rounded(Color.argb(138, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(210, 255, 255, 255)));
+        TextView rail = new TextView(this);
+        rail.setBackground(rounded(color, dp(4), 0, color));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(SPACE_SM), 0, dp(SPACE_SM), 0);
+        TextView heading = label(title, 13, true);
+        heading.setTextColor(PRIMARY_DARK);
+        TextView body = smallText(message);
+        body.setTextColor(MUTED);
+        copy.addView(heading);
+        copy.addView(body);
+        Button cta = button(action, listener);
+        panel.addView(rail, new LinearLayout.LayoutParams(dp(4), dp(56)));
+        panel.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        panel.addView(cta);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, dp(7), dp(7));
+        panel.setLayoutParams(lp);
+        return panel;
+    }
+
+    private String adminPriorityWhere() {
+        return "(" + SCHEDULED_COMPLETION_DUE_WHERE + ") OR (" + SCHEDULED_WEEK_WHERE + ") OR (" + SCHEDULED_CALL_PENDING_WHERE + ") OR (" + FOLLOWUP_WEEK_WHERE + ")";
+    }
+
+    private String[] adminPriorityArgs() {
+        String today = LocalDate.now().toString();
+        String week = LocalDate.now().plusDays(7).toString();
+        return appendArgs(new String[]{today, today, week, today}, followupWeekArgs());
     }
 
     private void checkForAppUpdate() {
@@ -3458,13 +3580,23 @@ public class MainActivity extends Activity {
         return scroll;
     }
 
-    private TextView bottomNavItem(String pageName, String icon, String text, View.OnClickListener listener) {
+    private View bottomNavItem(String pageName, int iconRes, String text, View.OnClickListener listener) {
         boolean active = currentPage.equals(pageName) || (currentPage.equals("Edit Patient") && pageName.equals("Patient Entry")) || (currentPage.equals("Patient Detail") && pageName.equals("Patient Search")) || (currentPage.equals("Patient Management") && pageName.equals("Administration"));
-        TextView item = label(icon + "\n" + text, 10, true);
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL);
         item.setGravity(Gravity.CENTER);
-        item.setSingleLine(false);
-        item.setTextColor(active ? Color.WHITE : PRIMARY_DARK);
+        item.setPadding(dp(2), dp(3), dp(2), dp(3));
+        item.setContentDescription(text);
         item.setBackground(rounded(active ? PRIMARY : Color.TRANSPARENT, dp(BUTTON_RADIUS), 0, Color.TRANSPARENT));
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconRes);
+        icon.setColorFilter(active ? Color.WHITE : PRIMARY_DARK);
+        TextView caption = label(text, 9, true);
+        caption.setGravity(Gravity.CENTER);
+        caption.setSingleLine(true);
+        caption.setTextColor(active ? Color.WHITE : PRIMARY_DARK);
+        item.addView(icon, new LinearLayout.LayoutParams(dp(21), dp(21)));
+        item.addView(caption, new LinearLayout.LayoutParams(-1, -2));
         item.setOnClickListener(listener);
         return item;
     }
