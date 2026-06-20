@@ -15,6 +15,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
+import android.text.InputFilter;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -1373,14 +1374,15 @@ public class MainActivity extends Activity {
         pregnancyAge = readOnlyInput(pregnancyAgeText(patient == null ? null : patient));
         eddDate = input(patient == null ? LocalDate.now().plusDays(280).toString() : value(patient.eddDate));
         scheduledDeliveryDate = input(value(patient == null ? null : patient.scheduledDeliveryDate));
-        motivator = auto(db.listNames("custom_motivators"));
-        doctor = auto(db.listNames("custom_doctors"));
+        motivator = auto(uppercaseList(db.listNames("custom_motivators")));
+        doctor = auto(uppercaseList(db.listNames("custom_doctors")));
         lmpDate.setHint("YYYY-MM-DD");
         eddDate.setHint("YYYY-MM-DD");
         scheduledDeliveryDate.setHint("Optional YYYY-MM-DD");
         motivator.setHint("Optional");
         doctor.setHint("Doctor name");
-        doctor.setThreshold(Integer.MAX_VALUE);
+        configureLookupDropdown(motivator);
+        configureLookupDropdown(doctor);
         visit1 = readOnlyInput(patient == null ? LocalDate.now().toString() : value(patient.visit1));
         visit2 = input(value(patient == null ? null : patient.visit2));
         visit3 = input(value(patient == null ? null : patient.visit3));
@@ -1412,6 +1414,7 @@ public class MainActivity extends Activity {
             doctor.setText(value(patient.doctorName), false);
         }
 
+        configurePatientEntryCapitalization();
         refreshPregnancyAgePreview(patient);
         lmpDate.addTextChangedListener(simpleWatcher(s -> {
             updateEdd();
@@ -1486,19 +1489,109 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void configurePatientEntryCapitalization() {
+        applyUppercaseFilter(
+                patientId,
+                patientName,
+                mobile,
+                state,
+                district,
+                subdistrict,
+                localBodyType,
+                localBody,
+                ward,
+                village,
+                lmpDate,
+                eddDate,
+                scheduledDeliveryDate,
+                motivator,
+                doctor,
+                visit1,
+                visit2,
+                visit3,
+                finalVisit
+        );
+        normalizeUppercaseFields(
+                patientId,
+                patientName,
+                state,
+                district,
+                subdistrict,
+                localBodyType,
+                localBody,
+                ward,
+                village,
+                motivator,
+                doctor
+        );
+    }
+
+    private void applyUppercaseFilter(EditText... fields) {
+        for (EditText field : fields) {
+            if (field == null) {
+                continue;
+            }
+            InputFilter[] current = field.getFilters();
+            boolean hasAllCaps = false;
+            for (InputFilter filter : current) {
+                if (filter instanceof InputFilter.AllCaps) {
+                    hasAllCaps = true;
+                    break;
+                }
+            }
+            if (hasAllCaps) {
+                continue;
+            }
+            InputFilter[] next = new InputFilter[current.length + 1];
+            System.arraycopy(current, 0, next, 0, current.length);
+            next[current.length] = new InputFilter.AllCaps();
+            field.setFilters(next);
+        }
+    }
+
+    private void normalizeUppercaseFields(EditText... fields) {
+        for (EditText field : fields) {
+            if (field == null) {
+                continue;
+            }
+            String normalized = uppercaseEntryValue(text(field));
+            if (!value(normalized).equals(value(text(field)))) {
+                field.setText(value(normalized));
+                if (field.isEnabled()) {
+                    field.setSelection(field.getText().length());
+                }
+            }
+        }
+    }
+
+    private void configureLookupDropdown(AutoCompleteTextView view) {
+        view.setThreshold(1);
+        view.setOnClickListener(v -> {
+            if (view.getText() != null && view.getText().length() >= view.getThreshold()) {
+                view.showDropDown();
+            }
+        });
+        view.setOnFocusChangeListener((v, hasFocus) -> {
+            view.setBackground(glassInput(hasFocus));
+            if (hasFocus && view.getText() != null && view.getText().length() >= view.getThreshold()) {
+                view.post(view::showDropDown);
+            }
+        });
+    }
+
     private void savePatient() {
         Patient p = editingPatient == null ? new Patient() : editingPatient;
         Patient old = editingPatient == null ? null : db.getPatient(editingPatient.id);
         p.patientId = text(patientId);
-        p.patientName = text(patientName);
+        p.patientName = entryText(patientName);
         p.mobileNumber = text(mobile);
-        p.stateName = text(state);
-        p.districtName = text(district);
-        p.subdistrictName = text(subdistrict);
-        p.localBodyType = text(localBodyType);
-        p.localBodyName = text(localBody);
-        p.wardName = text(ward);
-        p.villageName = text(village);
+        p.stateName = entryText(state);
+        p.districtName = entryText(district);
+        p.subdistrictName = entryText(subdistrict);
+        p.localBodyType = entryText(localBodyType);
+        p.localBodyName = entryText(localBody);
+        p.wardName = entryText(ward);
+        p.villageName = entryText(village);
         p.lmpDate = text(lmpDate);
         p.eddDate = text(eddDate);
         p.scheduledDeliveryDate = text(scheduledDeliveryDate);
@@ -1509,8 +1602,8 @@ public class MainActivity extends Activity {
             p.scheduledDeliveryCalledAt = "";
             p.scheduledDeliveryCalledBy = "";
         }
-        p.motivatorName = text(motivator);
-        p.doctorName = text(doctor);
+        p.motivatorName = entryText(motivator);
+        p.doctorName = entryText(doctor);
         p.visit1 = text(visit1);
         p.visit2 = text(visit2);
         p.visit3 = text(visit3);
@@ -1836,7 +1929,7 @@ public class MainActivity extends Activity {
         card.addView(patientBadgeRow(p));
         card.addView(statusLine("Mobile", value(p.mobileNumber), "Call", PRIMARY));
         card.addView(statusLine("Pregnancy", pregnancyAgeText(p), p.recordLocked ? "Completed" : "Today", WARNING));
-        card.addView(statusLine("Care", "EDD " + value(p.eddDate), "Doctor " + value(p.doctorName), ACCENT));
+        card.addView(statusLine("Care", "EDD " + value(p.eddDate), value(p.doctorName), ACCENT));
         return card;
     }
 
@@ -3121,15 +3214,53 @@ public class MainActivity extends Activity {
     private void showReferenceDialog(String table, String title) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(namesView(table));
-        box.addView(navButton("Add " + title.replace(" Names", ""), v -> {
-            addNameDialog(table, title.replace(" Names", " Name"));
-        }));
+        box.setPadding(dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM), 0);
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        ScrollView listScroll = new ScrollView(this);
+        listScroll.setVerticalScrollBarEnabled(false);
+        listScroll.addView(list);
+        final Runnable[] refresh = new Runnable[1];
+        refresh[0] = () -> {
+            header.removeAllViews();
+            header.addView(referenceHeader(title, table));
+            list.removeAllViews();
+            list.addView(namesView(table, title, refresh[0]));
+        };
+        box.addView(header);
+        box.addView(listScroll, new LinearLayout.LayoutParams(-1, dp(310)));
+        box.addView(adminCommandPanel(
+                "Add " + referenceEntity(title),
+                "New " + referenceEntity(title).toLowerCase(java.util.Locale.US) + " names are saved in uppercase and appear in the patient entry dropdown.",
+                "Add " + referenceEntity(title),
+                PRIMARY,
+                v -> addNameDialog(table, referenceSingular(title), refresh[0])
+        ));
+        refresh[0].run();
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setView(box)
                 .setNegativeButton("Close", null)
                 .show();
+    }
+
+    private View referenceHeader(String title, String table) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
+        box.setBackground(prominentPanel());
+        TextView heading = label(referenceEntity(title) + " Manager", 15, true);
+        heading.setTextColor(Color.WHITE);
+        TextView sub = label(db.listNames(table).size() + " saved | Dropdown ready", 11, true);
+        sub.setTextColor(Color.argb(225, 255, 255, 255));
+        box.addView(heading);
+        box.addView(sub);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(CARD_GAP));
+        box.setLayoutParams(lp);
+        return box;
     }
 
     private View usersView() {
@@ -3187,20 +3318,51 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    private View namesView(String table) {
+    private View namesView(String table, String title, Runnable afterChange) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        for (String name : db.listNames(table)) {
-            LinearLayout row = new LinearLayout(this);
+        List<String> rows = uppercaseList(db.listNames(table));
+        if (rows.isEmpty()) {
+            list.addView(emptyState("No " + referenceEntity(title).toLowerCase(java.util.Locale.US) + " names saved", "Add names here so staff can select them quickly in patient entry."));
+            return list;
+        }
+        for (String name : rows) {
+            LinearLayout row = card(Color.argb(185, 255, 255, 255), 1, Color.argb(225, 255, 255, 255));
+            row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.addView(smallText(name), new LinearLayout.LayoutParams(0, -2, 1));
-            row.addView(button("Remove", v -> {
-                db.deleteName(table, name);
-                showAdmin();
-            }));
+            row.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
+            TextView rail = new TextView(this);
+            rail.setBackground(rounded(PRIMARY, dp(4), 0, PRIMARY));
+            LinearLayout details = new LinearLayout(this);
+            details.setOrientation(LinearLayout.VERTICAL);
+            details.setPadding(dp(SPACE_SM), 0, dp(SPACE_SM), 0);
+            TextView nameView = label(name, 13, true);
+            nameView.setTextColor(PRIMARY_DARK);
+            TextView meta = label(referenceEntity(title) + " dropdown option", 10, false);
+            meta.setTextColor(MUTED);
+            details.addView(nameView);
+            details.addView(meta);
+            row.addView(rail, new LinearLayout.LayoutParams(dp(4), dp(40)));
+            row.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
+            row.addView(button("Remove", v -> confirmRemoveReferenceName(table, title, name, afterChange)));
             list.addView(row);
         }
         return list;
+    }
+
+    private void confirmRemoveReferenceName(String table, String title, String name, Runnable afterChange) {
+        new AlertDialog.Builder(this)
+                .setTitle("Remove " + referenceEntity(title))
+                .setMessage("Remove " + name + " from the " + referenceEntity(title).toLowerCase(java.util.Locale.US) + " dropdown?")
+                .setPositiveButton("Remove", (dialog, which) -> {
+                    db.deleteName(table, name);
+                    toast(referenceEntity(title) + " removed");
+                    if (afterChange != null) {
+                        afterChange.run();
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private View changeLogView() {
@@ -3217,7 +3379,13 @@ public class MainActivity extends Activity {
     }
 
     private void addNameDialog(String table, String title) {
+        addNameDialog(table, title, null);
+    }
+
+    private void addNameDialog(String table, String title, Runnable afterSave) {
         EditText input = input("");
+        input.setHint(title.toUpperCase(java.util.Locale.US));
+        applyUppercaseFilter(input);
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Add " + title)
                 .setView(row(title, input))
@@ -3232,14 +3400,27 @@ public class MainActivity extends Activity {
                 return;
             }
             try {
-                db.addName(table, text(input));
+                db.addName(table, entryText(input));
                 dialog.dismiss();
-                showAdmin();
+                toast(title + " added");
+                if (afterSave != null) {
+                    afterSave.run();
+                } else {
+                    showAdmin();
+                }
             } catch (Exception ex) {
                 toast("Could not save " + title.toLowerCase(java.util.Locale.US) + ": " + ex.getMessage());
             }
         }));
         dialog.show();
+    }
+
+    private String referenceEntity(String title) {
+        return title.replace(" Names", "");
+    }
+
+    private String referenceSingular(String title) {
+        return title.replace(" Names", " Name");
     }
 
     private void addUserDialog() {
@@ -4036,6 +4217,31 @@ public class MainActivity extends Activity {
     private String text(TextView view) {
         String value = view.getText() == null ? "" : view.getText().toString().trim();
         return value.isEmpty() ? null : value;
+    }
+
+    private String entryText(TextView view) {
+        return uppercaseEntryValue(text(view));
+    }
+
+    private String uppercaseEntryValue(String raw) {
+        if (empty(raw)) {
+            return null;
+        }
+        return raw.trim().toUpperCase(java.util.Locale.US);
+    }
+
+    private List<String> uppercaseList(List<String> values) {
+        List<String> out = new java.util.ArrayList<>();
+        if (values == null) {
+            return out;
+        }
+        for (String item : values) {
+            String normalized = uppercaseEntryValue(item);
+            if (!empty(normalized) && !out.contains(normalized)) {
+                out.add(normalized);
+            }
+        }
+        return out;
     }
 
     private String value(String value) {

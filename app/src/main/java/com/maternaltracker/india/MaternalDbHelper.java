@@ -238,7 +238,10 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
     List<String> listNames(String table) {
         List<String> out = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();
-        try (Cursor c = db.rawQuery("SELECT name FROM " + table + " ORDER BY name", null)) {
+        String sql = customLookupTable(table)
+                ? "SELECT DISTINCT UPPER(name) FROM " + table + " WHERE name IS NOT NULL AND TRIM(name) != '' ORDER BY UPPER(name)"
+                : "SELECT name FROM " + table + " ORDER BY name";
+        try (Cursor c = db.rawQuery(sql, null)) {
             while (c.moveToNext()) {
                 out.add(c.getString(0));
             }
@@ -254,7 +257,11 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         if (name == null) {
             return;
         }
-        getWritableDatabase().delete(table, "name = ?", new String[]{name});
+        if (customLookupTable(table)) {
+            getWritableDatabase().delete(table, "UPPER(name) = ?", new String[]{name.trim().toUpperCase(java.util.Locale.US)});
+        } else {
+            getWritableDatabase().delete(table, "name = ?", new String[]{name});
+        }
     }
 
     List<String> listStates() {
@@ -564,8 +571,18 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
             return;
         }
         ContentValues values = new ContentValues();
-        values.put("name", name.trim());
+        if (customLookupTable(table)) {
+            String normalized = name.trim().toUpperCase(java.util.Locale.US);
+            db.delete(table, "UPPER(name) = ?", new String[]{normalized});
+            values.put("name", normalized);
+        } else {
+            values.put("name", name.trim());
+        }
         db.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_IGNORE);
+    }
+
+    private boolean customLookupTable(String table) {
+        return "custom_motivators".equals(table) || "custom_doctors".equals(table);
     }
 
 }

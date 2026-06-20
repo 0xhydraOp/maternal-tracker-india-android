@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.16 - 2026-06-21
+
+- Forced patient-entry text inputs to stay uppercase while typing and before save.
+- Fixed Doctor and Motivator dropdowns so saved names appear while staff types.
+- Removed the extra `Doctor` prefix from Search result care rows.
+- Reworked the Admin Doctor/Motivator manager with polished managed rows, uppercase add dialogs, and safer remove confirmation.
+- Normalized custom Doctor/Motivator lookup storage and removal to avoid lowercase duplicates.
+- Bumped Android app version to `1.1.16` / versionCode `24`.
+
 ## v1.1.15 - 2026-06-21
 
 - Replaced placeholder bottom-navigation letters with native Home, Entry, Search, Reports, and Admin icons.
