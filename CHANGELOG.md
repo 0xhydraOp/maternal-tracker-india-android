@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.14 - 2026-06-20
+
+- Added automatic pregnancy age display from LMP in patient entry, search results, patient detail, and exports.
+- Refined the profile drawer with cleaner action rows and a scrollable account panel.
+- Hardened report filter validation, admin access guarding, and admin dialog validation behavior.
+- Excluded completed records from active EDD queues and upcoming EDD lists.
+- Added unit coverage for first-visit and final-visit validation edge cases.
+- Bumped Android app version to `1.1.14` / versionCode `22`.
+
 ## v1.1.13 - 2026-06-20
 
 - Removed the duplicate Home dashboard Today's Priority Queue.

@@ -110,6 +110,27 @@ public class PatientRulesTest {
     }
 
     @Test
+    public void validationRejectsInvalidFirstVisitDate() {
+        Patient p = validPatient();
+        p.visit1 = "2026/06/01";
+        assertEquals("Use date format YYYY-MM-DD", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationRejectsFutureFirstVisitDate() {
+        Patient p = validPatient();
+        p.visit1 = "2026-06-16";
+        assertEquals("1st visit cannot be in the future", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationRejectsFinalVisitBeforePreviousVisit() {
+        Patient p = validPatient();
+        p.finalVisit = "2026-06-09";
+        assertEquals("Final visit cannot be before previous visit", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
     public void validationAcceptsFutureTentativeVisitDate() {
         Patient p = validPatient();
         p.visit2 = "2026-06-16";

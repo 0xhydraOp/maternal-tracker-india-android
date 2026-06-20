@@ -445,7 +445,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     List<String[]> upcomingEddRows(String where, String[] args, int limit) {
         List<String[]> rows = new ArrayList<>();
-        String finalWhere = appendWhere(where, "edd_date IS NOT NULL AND edd_date != '' AND edd_date >= ?");
+        String finalWhere = appendWhere(where, "record_locked = 0 AND edd_date IS NOT NULL AND edd_date != '' AND edd_date >= ?");
         List<String> finalArgs = new ArrayList<>();
         if (args != null) {
             for (String arg : args) {
