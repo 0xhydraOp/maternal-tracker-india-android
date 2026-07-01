@@ -34,14 +34,16 @@ Last updated: 2026-07-02
 - Added scheduled delivery workflow, planned-visit tracking, in-app updater, pregnancy age display, and polished admin/reference controls.
 - Added mandatory Age, Blood Group, and GRAVIDA fields, plus optional Method of Last Delivery.
 - Reworked Patient Detail into a compact grouped panel with action buttons and all entered patient fields visible much earlier.
-- Rebuilt and published through `v1.1.17`.
+- Enlarged Patient Detail typography and applied final UI polish across status colors, headers, forms, search cards, reports, empty states, and press animations.
+- Fixed scheduled-delivery 7-day tracking so called/notified patients stay visible until delivery completion is marked.
+- Rebuilt and published through `v1.1.18`.
 
 ## Latest Published Version
 
-- Version: `1.1.17`
-- Version code: `25`
-- Release APK: `release/MaternalTrackerIndia-v1.1.17-release.apk`
-- GitHub release: `https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.17`
+- Version: `1.1.18`
+- Version code: `26`
+- Release APK: `release/MaternalTrackerIndia-v1.1.18-release.apk`
+- GitHub release: `https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.18`
 
 ## Verified Recently
 
@@ -51,6 +53,7 @@ Last updated: 2026-07-02
 - Android release lint/build completed.
 - ADB smoke-tested Home, Entry, Search, Reports, and Admin navigation.
 - ADB smoke-tested compact Patient Detail from Search, including identity, care/address, pregnancy, visits, scheduled delivery, and record status fields.
+- Confirmed scheduled-delivery 7-day lists are independent from call-pending status.
 - Static scan confirmed required patient-entry fields, scheduled delivery logic, and removed dashboard/report labels were correctly wired.
 
 ## Scheduled Delivery Feature

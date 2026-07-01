@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.18 - 2026-07-02
+
+- Kept scheduled-delivery patients visible in the 7-day delivery window after call notification; only the call-pending list now clears after notification.
+- Enlarged and bolded Patient Detail text so saved patient information is easier to read on phones.
+- Applied a visual polish pass across headers, cards, empty states, forms, search cards, reports, status colors, and press animations without changing core workflows.
+- Bumped Android app version to `1.1.18` / versionCode `26`.
+
 ## v1.1.17 - 2026-07-02
 
 - Added mandatory Age and Blood Group fields to Basic Info, with Blood Group as a fixed dropdown.

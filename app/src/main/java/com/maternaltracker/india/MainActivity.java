@@ -81,7 +81,7 @@ public class MainActivity extends Activity {
     private static final int CARD_RADIUS = 12;
     private static final int CARD_GAP = 8;
     private static final int BUTTON_RADIUS = 10;
-    private static final int BUTTON_HEIGHT = 42;
+    private static final int BUTTON_HEIGHT = 44;
     private static final int CHIP_RADIUS = 14;
     private static final int CHIP_PAD_X = 10;
     private static final int CHIP_PAD_Y = 5;
@@ -97,8 +97,9 @@ public class MainActivity extends Activity {
     private static final int REQ_EXPORT_PDF = 502;
     private static final int REQ_EXPORT_BACKUP = 503;
     private static final String SCHEDULED_WHERE = "scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != ''";
-    private static final String SCHEDULED_PENDING_WHERE = SCHEDULED_WHERE + " AND record_locked = 0 AND (scheduled_delivery_called_at IS NULL OR scheduled_delivery_called_at = '')";
-    private static final String SCHEDULED_WEEK_WHERE = SCHEDULED_PENDING_WHERE + " AND scheduled_delivery_date BETWEEN ? AND ?";
+    private static final String SCHEDULED_ACTIVE_WHERE = SCHEDULED_WHERE + " AND record_locked = 0";
+    private static final String SCHEDULED_PENDING_WHERE = SCHEDULED_ACTIVE_WHERE + " AND (scheduled_delivery_called_at IS NULL OR scheduled_delivery_called_at = '')";
+    private static final String SCHEDULED_WEEK_WHERE = SCHEDULED_ACTIVE_WHERE + " AND scheduled_delivery_date BETWEEN ? AND ?";
     private static final String SCHEDULED_CALL_PENDING_WHERE = SCHEDULED_PENDING_WHERE + " AND scheduled_delivery_date >= ?";
     private static final String SCHEDULED_COMPLETION_DUE_WHERE = SCHEDULED_WHERE + " AND scheduled_delivery_date < ? AND record_locked = 0";
     private static final String FOLLOWUP_WEEK_WHERE = "record_locked = 0 AND (((visit2 IS NOT NULL AND visit2 != '') AND (visit3 IS NULL OR visit3 = '') AND (final_visit IS NULL OR final_visit = '') AND visit2 <= ?) OR ((visit3 IS NOT NULL AND visit3 != '') AND (final_visit IS NULL OR final_visit = '') AND visit3 <= ?) OR ((final_visit IS NOT NULL AND final_visit != '') AND final_visit <= ?))";
@@ -365,19 +366,19 @@ public class MainActivity extends Activity {
         LinearLayout box = card(PRIMARY_DARK, 0, PRIMARY_DARK);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setBackground(gradient(PRIMARY_DARK, ACCENT, dp(CARD_RADIUS)));
-        box.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
+        box.setPadding(dp(SPACE_MD), dp(7), dp(SPACE_MD), dp(7));
 
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
 
-        TextView mark = label("BBH", 13, true);
+        TextView mark = label("BBH", 12, true);
         mark.setTextColor(PRIMARY_DARK);
         mark.setGravity(Gravity.CENTER);
         mark.setBackground(rounded(Color.WHITE, dp(18), 0, Color.WHITE));
         mark.setOnClickListener(v -> toggleProfileMenu());
-        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(34), dp(34));
-        markLp.setMargins(0, 0, dp(9), 0);
+        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(32), dp(32));
+        markLp.setMargins(0, 0, dp(8), 0);
         top.addView(mark, markLp);
 
         LinearLayout titles = new LinearLayout(this);
@@ -385,9 +386,9 @@ public class MainActivity extends Activity {
         TextView hospital = label(HOSPITAL_NAME, 14, true);
         hospital.setTextColor(Color.WHITE);
         hospital.setSingleLine(true);
-        headerTitle = label("Dashboard", 12, true);
+        headerTitle = label("Dashboard", 13, true);
         headerTitle.setTextColor(Color.WHITE);
-        headerTitle.setAlpha(0.82f);
+        headerTitle.setAlpha(0.9f);
         titles.addView(hospital);
         titles.addView(headerTitle);
 
@@ -410,7 +411,7 @@ public class MainActivity extends Activity {
         LinearLayout meta = new LinearLayout(this);
         meta.setOrientation(LinearLayout.HORIZONTAL);
         meta.setGravity(Gravity.CENTER_VERTICAL);
-        meta.setPadding(0, dp(4), 0, 0);
+        meta.setPadding(0, dp(3), 0, 0);
         meta.addView(new TextView(this), new LinearLayout.LayoutParams(0, 1, 1));
         meta.addView(chip(currentRole, Color.argb(45, 255, 255, 255), Color.WHITE));
         syncBadge = chip("SYNCING", WARNING, Color.WHITE);
@@ -558,6 +559,7 @@ public class MainActivity extends Activity {
             closeProfileMenu();
             listener.onClick(v);
         });
+        attachPressAnimation(item, 0.98f);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(7));
         item.setLayoutParams(lp);
@@ -738,13 +740,14 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setOnClickListener(click);
+        attachPressAnimation(box, 0.98f);
         box.setPadding(dp(10), dp(8), dp(10), dp(8));
         box.setBackground(rounded(Color.argb(76, Color.red(color), Color.green(color), Color.blue(color)), dp(12), dp(1), Color.argb(145, Color.red(color), Color.green(color), Color.blue(color))));
         TextView count = label(String.valueOf(value), 24, true);
         count.setTextColor(color);
         TextView label = label(title, 12, true);
         label.setTextColor(PRIMARY_DARK);
-        TextView note = label(caption, 9, false);
+        TextView note = label(caption, 9, true);
         note.setTextColor(MUTED);
         box.addView(count);
         box.addView(label);
@@ -1137,7 +1140,7 @@ public class MainActivity extends Activity {
     private View scheduledDeliveryView(String where, String[] args) {
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
-        List<String[]> rows = db.scheduledDeliveryRows(appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()), 6);
+        List<String[]> rows = db.scheduledDeliveryRows(appendWhere(where, SCHEDULED_ACTIVE_WHERE + " AND scheduled_delivery_date >= ?"), appendArgs(args, LocalDate.now().toString()), 6);
         if (rows.isEmpty()) {
             list.addView(emptyState("No scheduled delivery dates", "Doctor-given delivery dates will appear here when entered on patient records."));
             return list;
@@ -1148,7 +1151,8 @@ public class MainActivity extends Activity {
             item.addView(label(value(row[1]), 14, true));
             item.addView(smallText("Scheduled: " + value(row[2]) + " | Village: " + value(row[4])));
             item.addView(smallText("Mobile: " + value(row[3])));
-            item.addView(chip("Call pending", WARNING, Color.WHITE));
+            boolean notified = !empty(row[5]);
+            item.addView(chip(notified ? "Patient notified" : "Call pending", notified ? ACCENT : WARNING, Color.WHITE));
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
             actions.addView(button("Call Mobile", v -> callPatient(db.getPatientByPatientId(row[0]))));
@@ -1253,12 +1257,13 @@ public class MainActivity extends Activity {
     private View compactKpi(String title, int value, String caption, View.OnClickListener click) {
         LinearLayout box = card();
         box.setOnClickListener(click);
+        attachPressAnimation(box, 0.98f);
         box.setPadding(dp(9), dp(7), dp(9), dp(7));
         TextView count = label(String.valueOf(value), 22, true);
         count.setTextColor(PRIMARY);
         TextView titleView = label(title, 11, true);
         titleView.setTextColor(PRIMARY_DARK);
-        TextView captionView = label(caption, 9, false);
+        TextView captionView = label(caption, 9, true);
         captionView.setTextColor(MUTED);
         box.addView(count);
         box.addView(titleView);
@@ -1287,20 +1292,42 @@ public class MainActivity extends Activity {
     private View stat(String title, int value, View.OnClickListener click) {
         LinearLayout box = card();
         box.setOnClickListener(click);
+        attachPressAnimation(box, 0.98f);
         box.setBackground(glassPanel(dp(CARD_RADIUS)));
         box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
         TextView number = label(String.valueOf(value), 23, true);
-        number.setTextColor(PRIMARY);
-        TextView caption = label(title, 11, true);
-        caption.setTextColor(MUTED);
+        int tone = reportTone(title);
+        number.setTextColor(tone);
+        TextView caption = label(title, 12, true);
+        caption.setTextColor(PRIMARY_DARK);
+        TextView underline = new TextView(this);
+        underline.setBackground(rounded(tone, dp(4), 0, tone));
+        LinearLayout.LayoutParams lineLp = new LinearLayout.LayoutParams(dp(42), dp(4));
+        lineLp.setMargins(0, dp(4), 0, 0);
         box.addView(number);
         box.addView(caption);
+        box.addView(underline, lineLp);
         return box;
+    }
+
+    private int reportTone(String title) {
+        String normalized = value(title).toLowerCase(java.util.Locale.US);
+        if (normalized.contains("complete due") || normalized.contains("call pending")) {
+            return URGENT;
+        }
+        if (normalized.contains("scheduled") || normalized.contains("edd") || normalized.contains("follow")) {
+            return WARNING;
+        }
+        if (normalized.contains("completed") || normalized.contains("today")) {
+            return ACCENT;
+        }
+        return PRIMARY;
     }
 
     private View workTile(String title, int value, String captionText, View.OnClickListener click) {
         LinearLayout box = card();
         box.setOnClickListener(click);
+        attachPressAnimation(box, 0.98f);
         box.setPadding(dp(12), dp(10), dp(12), dp(10));
         TextView count = label(String.valueOf(value), 28, true);
         count.setTextColor(ACCENT);
@@ -1973,14 +2000,14 @@ public class MainActivity extends Activity {
         LinearLayout identity = new LinearLayout(this);
         identity.setOrientation(LinearLayout.VERTICAL);
         identity.setPadding(dp(SPACE_SM), 0, dp(SPACE_SM), 0);
-        TextView name = label(value(p.patientName), 16, true);
+        TextView name = label(value(p.patientName), 17, true);
         name.setTextColor(PRIMARY_DARK);
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        TextView id = label(value(p.patientId), 11, true);
+        TextView id = label(value(p.patientId), 12, true);
         id.setTextColor(MUTED);
-        TextView contact = label(value(p.mobileNumber) + " | " + value(p.villageName) + ", " + value(p.localBodyName), 11, false);
-        contact.setTextColor(MUTED);
+        TextView contact = label(value(p.mobileNumber) + " | " + value(p.villageName) + ", " + value(p.localBodyName), 12, true);
+        contact.setTextColor(SLATE);
         contact.setSingleLine(true);
         contact.setEllipsize(android.text.TextUtils.TruncateAt.END);
         identity.addView(name);
@@ -2072,11 +2099,11 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(3), 0, dp(3));
-        TextView label = label(labelText, 11, true);
+        TextView label = label(labelText, 12, true);
         label.setTextColor(color);
-        TextView value = label(valueText, 12, false);
+        TextView value = label(valueText, 13, true);
         value.setTextColor(TEXT);
-        TextView meta = label(metaText, 11, true);
+        TextView meta = label(metaText, 12, true);
         meta.setTextColor(MUTED);
         meta.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         row.addView(label, new LinearLayout.LayoutParams(dp(82), -2));
@@ -2108,10 +2135,10 @@ public class MainActivity extends Activity {
 
         LinearLayout title = new LinearLayout(this);
         title.setOrientation(LinearLayout.VERTICAL);
-        TextView name = label(value(p.patientName), 17, true);
+        TextView name = label(value(p.patientName), 19, true);
         name.setTextColor(PRIMARY_DARK);
-        TextView meta = label(value(p.patientId) + " | " + value(p.villageName) + " | " + value(p.mobileNumber), 10, false);
-        meta.setTextColor(MUTED);
+        TextView meta = label(value(p.patientId) + " | " + value(p.villageName) + " | " + value(p.mobileNumber), 12, true);
+        meta.setTextColor(SLATE);
         title.addView(name);
         title.addView(meta);
         top.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
@@ -2207,10 +2234,10 @@ public class MainActivity extends Activity {
     private View detailGroup(String title, View... rows) {
         LinearLayout group = new LinearLayout(this);
         group.setOrientation(LinearLayout.VERTICAL);
-        group.setPadding(0, dp(1), 0, dp(3));
-        TextView heading = label(title.toUpperCase(java.util.Locale.US), 9, true);
+        group.setPadding(0, dp(3), 0, dp(5));
+        TextView heading = label(title.toUpperCase(java.util.Locale.US), 11, true);
         heading.setTextColor(PRIMARY);
-        heading.setPadding(0, dp(1), 0, dp(1));
+        heading.setPadding(0, dp(2), 0, dp(2));
         group.addView(heading);
         for (View row : rows) {
             group.addView(row);
@@ -2239,14 +2266,14 @@ public class MainActivity extends Activity {
     private View detailCell(String title, String value, int color) {
         LinearLayout cell = new LinearLayout(this);
         cell.setOrientation(LinearLayout.VERTICAL);
-        cell.setPadding(dp(5), dp(1), dp(5), dp(1));
+        cell.setPadding(dp(7), dp(4), dp(7), dp(4));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
-        lp.setMargins(dp(1), dp(1), dp(1), dp(1));
+        lp.setMargins(dp(2), dp(2), dp(2), dp(2));
         cell.setLayoutParams(lp);
         cell.setBackground(rounded(Color.argb(62, 255, 255, 255), dp(8), dp(1), Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))));
-        TextView label = label(title, 8, true);
+        TextView label = label(title, 10, true);
         label.setTextColor(color);
-        TextView body = label(displayValue(value), 10, false);
+        TextView body = label(displayValue(value), 13, true);
         body.setTextColor(TEXT);
         cell.addView(label);
         cell.addView(body);
@@ -2256,10 +2283,10 @@ public class MainActivity extends Activity {
     private View detailFull(String title, String value, int color) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(dp(5), dp(1), dp(5), dp(1));
-        TextView label = label(title, 8, true);
+        row.setPadding(dp(7), dp(4), dp(7), dp(4));
+        TextView label = label(title, 10, true);
         label.setTextColor(color);
-        TextView body = label(displayValue(value), 10, false);
+        TextView body = label(displayValue(value), 13, true);
         body.setTextColor(TEXT);
         row.addView(label);
         row.addView(body);
@@ -2302,7 +2329,19 @@ public class MainActivity extends Activity {
     }
 
     private int scheduledDeliveryStatusColor(Patient p) {
-        if (p != null && (p.recordLocked || (!empty(p.scheduledDeliveryCalledAt) && !scheduledDeliveryNeedsCompletion(p)))) {
+        if (p == null) {
+            return PRIMARY;
+        }
+        if (p.recordLocked) {
+            return ACCENT;
+        }
+        if (scheduledDeliveryNeedsCompletion(p) || dateWithinDays(p.scheduledDeliveryDate, 7)) {
+            return URGENT;
+        }
+        if (empty(p.scheduledDeliveryCalledAt)) {
+            return WARNING;
+        }
+        if (!empty(p.scheduledDeliveryCalledAt)) {
             return ACCENT;
         }
         return WARNING;
@@ -3801,7 +3840,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams accentLp = new LinearLayout.LayoutParams(dp(SECTION_ACCENT_WIDTH), dp(SECTION_ACCENT_HEIGHT));
         accentLp.setMargins(0, 0, dp(SPACE_SM), 0);
         head.addView(accent, accentLp);
-        TextView heading = label(title, 14, true);
+        TextView heading = label(title, 15, true);
         heading.setTextColor(PRIMARY_DARK);
         head.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
         head.setPadding(0, 0, 0, dp(SPACE_SM));
@@ -3849,11 +3888,11 @@ public class MainActivity extends Activity {
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView badge = label(number, 13, true);
+        TextView badge = label(number, 14, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(gradient(PRIMARY, ACCENT, dp(CHIP_RADIUS)));
-        TextView heading = label(title, 14, true);
+        TextView heading = label(title, 15, true);
         heading.setTextColor(PRIMARY_DARK);
         TextView state = chip("Visit Tracking".equals(title) ? "Optional dates" : ("Pregnancy Dates".equals(title) ? "Required + optional" : "Required"), "Visit Tracking".equals(title) ? PRIMARY_SOFT : ACCENT, "Visit Tracking".equals(title) ? PRIMARY_DARK : Color.WHITE);
         TextView indicator = label(expanded ? "-" : "+", 18, true);
@@ -3964,19 +4003,27 @@ public class MainActivity extends Activity {
         item.addView(icon, new LinearLayout.LayoutParams(dp(21), dp(21)));
         item.addView(caption, new LinearLayout.LayoutParams(-1, -2));
         item.setOnClickListener(listener);
+        attachPressAnimation(item, 0.96f);
         return item;
     }
 
     private View emptyState(String title, String message) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
-        box.setBackground(rounded(Color.argb(70, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(140, 255, 255, 255)));
-        TextView t = label(title, 14, true);
+        box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
+        box.setBackground(rounded(Color.argb(118, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(185, 255, 255, 255)));
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView mark = chip("Info", PRIMARY_SOFT, PRIMARY_DARK);
+        TextView t = label(title, 15, true);
         t.setTextColor(PRIMARY_DARK);
-        TextView m = smallText(message);
-        m.setTextColor(MUTED);
-        box.addView(t);
+        head.addView(mark);
+        head.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView m = label(message, 13, true);
+        m.setTextColor(SLATE);
+        m.setPadding(0, dp(4), 0, 0);
+        box.addView(head);
         box.addView(m);
         return box;
     }
@@ -3984,12 +4031,13 @@ public class MainActivity extends Activity {
     private View emptyActionState(String title, String message, String action, View.OnClickListener listener) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
-        box.setBackground(rounded(Color.argb(76, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(150, 255, 255, 255)));
-        TextView t = label(title, 14, true);
+        box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
+        box.setBackground(rounded(Color.argb(118, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(185, 255, 255, 255)));
+        TextView t = label(title, 15, true);
         t.setTextColor(PRIMARY_DARK);
-        TextView m = smallText(message);
-        m.setTextColor(MUTED);
+        TextView m = label(message, 13, true);
+        m.setTextColor(SLATE);
+        m.setPadding(0, dp(4), 0, dp(6));
         box.addView(t);
         box.addView(m);
         box.addView(navButton(action, listener));
@@ -4034,8 +4082,8 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(dp(2), dp(SPACE_XS), dp(2), dp(SPACE_XS));
-        TextView tv = label(label, 12, true);
-        tv.setTextColor(MUTED);
+        TextView tv = label(label, 13, true);
+        tv.setTextColor(SLATE);
         row.addView(tv);
         row.addView(input, new LinearLayout.LayoutParams(-1, dp(BUTTON_HEIGHT)));
         return row;
@@ -4150,7 +4198,8 @@ public class MainActivity extends Activity {
         EditText edit = new EditText(this);
         edit.setSingleLine(true);
         edit.setText(value == null ? "" : value);
-        edit.setTextSize(15);
+        edit.setTextSize(16);
+        edit.setTypeface(edit.getTypeface(), Typeface.BOLD);
         edit.setTextColor(TEXT);
         edit.setHintTextColor(Color.rgb(135, 151, 166));
         edit.setBackground(glassInput(false));
@@ -4172,7 +4221,8 @@ public class MainActivity extends Activity {
         AutoCompleteTextView view = new AutoCompleteTextView(this);
         view.setSingleLine(true);
         view.setThreshold(1);
-        view.setTextSize(15);
+        view.setTextSize(16);
+        view.setTypeface(view.getTypeface(), Typeface.BOLD);
         view.setTextColor(TEXT);
         view.setHintTextColor(Color.rgb(135, 151, 166));
         view.setBackground(glassInput(false));
@@ -4234,7 +4284,7 @@ public class MainActivity extends Activity {
         };
         b.setText(text);
         b.setTextColor(Color.WHITE);
-        b.setTextSize(13);
+        b.setTextSize(14);
         b.setTypeface(b.getTypeface(), Typeface.BOLD);
         b.setAllCaps(false);
         b.setMinWidth(0);
@@ -4266,7 +4316,7 @@ public class MainActivity extends Activity {
         if (label.contains("delete") || label.contains("remove")) {
             return URGENT;
         }
-        if (label.contains("call") || label.contains("save") || label.contains("apply") || label.contains("add user")) {
+        if (label.contains("call") || label.contains("save") || label.contains("apply") || label.contains("add user") || label.contains("mark completed")) {
             return ACCENT;
         }
         if (label.contains("excel") || label.contains("pdf") || label.contains("csv") || label.contains("search") || label.contains("export")) {
@@ -4280,7 +4330,7 @@ public class MainActivity extends Activity {
         if (label.contains("delete") || label.contains("remove")) {
             return Color.rgb(127, 29, 29);
         }
-        if (label.contains("call") || label.contains("save") || label.contains("apply") || label.contains("add user")) {
+        if (label.contains("call") || label.contains("save") || label.contains("apply") || label.contains("add user") || label.contains("mark completed")) {
             return Color.rgb(0, 105, 92);
         }
         if (label.contains("excel") || label.contains("pdf") || label.contains("csv") || label.contains("search") || label.contains("export")) {
@@ -4310,6 +4360,18 @@ public class MainActivity extends Activity {
                 .setDuration(220)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
                 .start());
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private void attachPressAnimation(View view, float scale) {
+        view.setOnTouchListener((target, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                target.animate().scaleX(scale).scaleY(scale).setDuration(70).start();
+            } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                target.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+            }
+            return false;
+        });
     }
 
     private GradientDrawable rounded(int color, int radius, int strokeWidth, int strokeColor) {

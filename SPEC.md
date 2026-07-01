@@ -1,7 +1,7 @@
 # Blue Bird Maternal Tracker Specification
 
 Last updated: 2026-07-02  
-Current app version: `1.1.17` / versionCode `25`  
+Current app version: `1.1.18` / versionCode `26`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -123,6 +123,7 @@ Scheduled delivery behavior:
 
 - Patient records can be searched and edited to add or update Scheduled Delivery Date.
 - Scheduled delivery within 7 days is highest-attention work.
+- Scheduled delivery patients stay visible in the 7-day delivery window after call notification.
 - Scheduled delivery call actions are available from Home, Search, Reports, and Patient Detail.
 - Patient Detail should keep scheduled delivery status visible inside the compact detail panel.
 - When staff taps the call action, the app opens the Android dialer and marks the scheduled delivery patient as notified.
@@ -307,6 +308,7 @@ Export behavior:
 - Patient list exports include all current clinical tracking fields.
 - Single patient Excel/PDF export is available from Patient Detail.
 - Patient Detail uses a compact grouped panel so identity, address, pregnancy, scheduled delivery, visit dates, and record status are visible without scanning a long plain-text stack.
+- Patient Detail labels and values should use larger bold text for field readability on staff phones.
 
 Backup:
 
@@ -418,11 +420,11 @@ Important patient fields:
 
 Latest published release:
 
-- Version: `1.1.17`
-- Version code: `25`
-- Git tag: `v1.1.17`
-- Release URL: `https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.17`
-- APK asset: `MaternalTrackerIndia-v1.1.17-release.apk`
+- Version: `1.1.18`
+- Version code: `26`
+- Git tag: `v1.1.18`
+- Release URL: `https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.18`
+- APK asset: `MaternalTrackerIndia-v1.1.18-release.apk`
 
 Latest verification:
 
@@ -434,6 +436,12 @@ Latest verification:
 - ADB smoke test passed for Home, Entry new fields/dropdown, Search, Reports, Admin reference controls, installed version, and logcat fatal check.
 
 ## 16. Recent Release Summary
+
+### v1.1.18
+
+- Kept scheduled delivery patients visible in the 7-day delivery window after call notification.
+- Enlarged and bolded Patient Detail field text for better readability.
+- Polished cards, buttons, empty states, form labels, report status colors, and press animations across the app.
 
 ### v1.1.17
 
