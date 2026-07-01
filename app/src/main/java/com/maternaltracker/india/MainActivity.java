@@ -23,12 +23,14 @@ import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -127,16 +129,20 @@ public class MainActivity extends Activity {
 
     private EditText patientId;
     private EditText patientName;
+    private EditText age;
+    private Spinner bloodGroup;
     private EditText mobile;
     private AutoCompleteTextView state;
     private AutoCompleteTextView district;
     private AutoCompleteTextView subdistrict;
     private AutoCompleteTextView localBodyType;
-    private AutoCompleteTextView localBody;
+    private Spinner localBody;
     private AutoCompleteTextView ward;
     private AutoCompleteTextView village;
     private EditText lmpDate;
     private TextView pregnancyAge;
+    private EditText gravida;
+    private EditText lastDeliveryMethod;
     private EditText eddDate;
     private EditText scheduledDeliveryDate;
     private AutoCompleteTextView motivator;
@@ -1345,8 +1351,11 @@ public class MainActivity extends Activity {
 
         patientId = readOnlyInput(patient == null ? db.nextPatientId() : patient.patientId);
         patientName = input(value(patient == null ? null : patient.patientName));
+        age = input(value(patient == null ? null : patient.age));
+        bloodGroup = spinner(bloodGroups(), "Select blood group", "Blood Group");
         mobile = input(value(patient == null ? null : patient.mobileNumber));
         patientName.setHint("Patient full name");
+        age.setHint("Patient age");
         mobile.setHint("10 digit mobile number");
         state = auto(db.listStates());
         state.setText(DEFAULT_STATE, false);
@@ -1359,24 +1368,22 @@ public class MainActivity extends Activity {
         subdistrict = auto(murshidabadBlocks());
         localBodyType = auto(list("Block"));
         localBodyType.setText("Block", false);
-        localBody = auto(murshidabadBlocks());
-        localBody.setHint("Select block");
-        localBody.setThreshold(0);
-        localBody.setInputType(InputType.TYPE_NULL);
-        localBody.setKeyListener(null);
-        localBody.setFocusable(false);
-        localBody.setOnClickListener(v -> localBody.showDropDown());
+        localBody = spinner(murshidabadBlocks(), "Select block", "Block Name");
         ward = auto(db.listWards(selectedLocalBodyCode));
         village = auto(list());
         village.setHint("Type village name");
         village.setThreshold(Integer.MAX_VALUE);
         lmpDate = input(patient == null ? LocalDate.now().toString() : value(patient.lmpDate));
         pregnancyAge = readOnlyInput(pregnancyAgeText(patient == null ? null : patient));
+        gravida = input(value(patient == null ? null : patient.gravida));
+        lastDeliveryMethod = input(value(patient == null ? null : patient.lastDeliveryMethod));
         eddDate = input(patient == null ? LocalDate.now().plusDays(280).toString() : value(patient.eddDate));
         scheduledDeliveryDate = input(value(patient == null ? null : patient.scheduledDeliveryDate));
         motivator = auto(uppercaseList(db.listNames("custom_motivators")));
         doctor = auto(uppercaseList(db.listNames("custom_doctors")));
         lmpDate.setHint("YYYY-MM-DD");
+        gravida.setHint("Example: G2P1");
+        lastDeliveryMethod.setHint("Optional");
         eddDate.setHint("YYYY-MM-DD");
         scheduledDeliveryDate.setHint("Optional YYYY-MM-DD");
         motivator.setHint("Optional");
@@ -1404,12 +1411,15 @@ public class MainActivity extends Activity {
             selectedDistrictCode = db.getCodeByNameAndParent("districts", text(district), "state_code", selectedStateCode);
             subdistrict.setText(value(patient.subdistrictName), false);
             localBodyType.setText("Block", false);
-            setAdapter(localBody, murshidabadBlocks());
-            localBody.setText(value(patient.localBodyName), false);
-            selectedLocalBodyCode = db.getCodeByNameAndParent("local_bodies", text(localBody), "district_code", selectedDistrictCode);
+            selectSpinnerValue(localBody, patient.localBodyName);
+            selectedLocalBodyCode = db.getCodeByNameAndParent("local_bodies", selectedSpinnerValue(localBody), "district_code", selectedDistrictCode);
             setAdapter(ward, db.listWards(selectedLocalBodyCode));
             ward.setText(value(patient.wardName), false);
             village.setText(value(patient.villageName), false);
+            age.setText(value(patient.age));
+            selectSpinnerValue(bloodGroup, patient.bloodGroup);
+            gravida.setText(value(patient.gravida));
+            lastDeliveryMethod.setText(value(patient.lastDeliveryMethod));
             motivator.setText(value(patient.motivatorName), false);
             doctor.setText(value(patient.doctorName), false);
         }
@@ -1423,16 +1433,32 @@ public class MainActivity extends Activity {
         scheduledDeliveryDate.addTextChangedListener(simpleWatcher(s -> refreshPregnancyAgePreview(patient)));
         finalVisit.addTextChangedListener(simpleWatcher(s -> refreshPregnancyAgePreview(patient)));
         addPatientValidationWatchers();
-        subdistrict.setOnItemClickListener((parent, view, position, id) -> localBody.setText(text(subdistrict), false));
-        localBody.setOnItemClickListener((parent, view, position, id) -> {
-            subdistrict.setText(text(localBody), false);
-            localBody.clearFocus();
+        subdistrict.setOnItemClickListener((parent, view, position, id) -> selectSpinnerValue(localBody, text(subdistrict)));
+        localBody.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String block = selectedSpinnerValue(localBody);
+                if (!empty(block)) {
+                    subdistrict.setText(block, false);
+                    selectedLocalBodyCode = db.getCodeByNameAndParent("local_bodies", block, "district_code", selectedDistrictCode);
+                    setAdapter(ward, db.listWards(selectedLocalBodyCode));
+                }
+                if (status != null) {
+                    status.setText("");
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
         });
 
         boolean lockedForStaff = patient != null && patient.recordLocked && !isAdmin();
         form.addView(formStep("1", "Basic Info", true,
                 row("Patient ID *", patientId),
                 row("Patient Name *", patientName),
+                row("Age *", age),
+                row("Blood Group *", bloodGroup),
                 row("Mobile Number *", mobile),
                 row("Motivator Name", motivator),
                 row("Doctor Name *", doctor)
@@ -1447,6 +1473,8 @@ public class MainActivity extends Activity {
                 row("LMP Date *", lmpDate),
                 row("Pregnancy Age", pregnancyAge),
                 smallText("Auto-calculated from LMP; freezes after the patient is completed."),
+                row("GRAVIDA *", gravida),
+                row("Method of Last Delivery", lastDeliveryMethod),
                 row("EDD Date *", eddDate),
                 row("Scheduled Delivery Date", scheduledDeliveryDate),
                 smallText("Optional doctor-given delivery date. Changing it resets the call reminder."),
@@ -1478,7 +1506,7 @@ public class MainActivity extends Activity {
     }
 
     private void addPatientValidationWatchers() {
-        TextView[] fields = {patientName, mobile, localBody, village, lmpDate, eddDate, scheduledDeliveryDate, doctor, visit2, visit3, finalVisit};
+        TextView[] fields = {patientName, age, mobile, village, gravida, lmpDate, eddDate, scheduledDeliveryDate, doctor, visit2, visit3, finalVisit};
         for (TextView field : fields) {
             field.addTextChangedListener(simpleWatcher(s -> {
                 field.setError(null);
@@ -1487,21 +1515,35 @@ public class MainActivity extends Activity {
                 }
             }));
         }
+        bloodGroup.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (status != null) {
+                    status.setText("");
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
     }
 
     private void configurePatientEntryCapitalization() {
         applyUppercaseFilter(
                 patientId,
                 patientName,
+                age,
                 mobile,
                 state,
                 district,
                 subdistrict,
                 localBodyType,
-                localBody,
                 ward,
                 village,
                 lmpDate,
+                gravida,
+                lastDeliveryMethod,
                 eddDate,
                 scheduledDeliveryDate,
                 motivator,
@@ -1514,13 +1556,15 @@ public class MainActivity extends Activity {
         normalizeUppercaseFields(
                 patientId,
                 patientName,
+                age,
                 state,
                 district,
                 subdistrict,
                 localBodyType,
-                localBody,
                 ward,
                 village,
+                gravida,
+                lastDeliveryMethod,
                 motivator,
                 doctor
         );
@@ -1584,14 +1628,18 @@ public class MainActivity extends Activity {
         Patient old = editingPatient == null ? null : db.getPatient(editingPatient.id);
         p.patientId = text(patientId);
         p.patientName = entryText(patientName);
+        p.age = entryText(age);
+        p.bloodGroup = selectedSpinnerValue(bloodGroup);
         p.mobileNumber = text(mobile);
         p.stateName = entryText(state);
         p.districtName = entryText(district);
         p.subdistrictName = entryText(subdistrict);
         p.localBodyType = entryText(localBodyType);
-        p.localBodyName = entryText(localBody);
+        p.localBodyName = selectedSpinnerValue(localBody);
         p.wardName = entryText(ward);
         p.villageName = entryText(village);
+        p.gravida = entryText(gravida);
+        p.lastDeliveryMethod = entryText(lastDeliveryMethod);
         p.lmpDate = text(lmpDate);
         p.eddDate = text(eddDate);
         p.scheduledDeliveryDate = text(scheduledDeliveryDate);
@@ -1697,11 +1745,17 @@ public class MainActivity extends Activity {
     }
 
     private void showPatientValidationError(Patient p, String fallback) {
-        TextView target = null;
+        View target = null;
         String message = fallback;
         if (empty(p.patientName)) {
             target = patientName;
             message = "Patient name is required";
+        } else if (empty(p.age)) {
+            target = age;
+            message = "Age is required";
+        } else if (empty(p.bloodGroup)) {
+            target = bloodGroup;
+            message = "Blood group is required";
         } else if (empty(p.mobileNumber)) {
             target = mobile;
             message = "Mobile number is required";
@@ -1714,6 +1768,9 @@ public class MainActivity extends Activity {
         } else if (empty(p.villageName)) {
             target = village;
             message = "Village name is required";
+        } else if (empty(p.gravida)) {
+            target = gravida;
+            message = "GRAVIDA is required";
         } else if (empty(p.lmpDate) || !PatientRules.validDate(p.lmpDate) || LocalDate.parse(p.lmpDate).isAfter(LocalDate.now())) {
             target = lmpDate;
         } else if (empty(p.eddDate) || !PatientRules.validDate(p.eddDate)) {
@@ -1744,7 +1801,9 @@ public class MainActivity extends Activity {
         }
         toast(message);
         if (target != null) {
-            target.setError(message);
+            if (target instanceof TextView) {
+                ((TextView) target).setError(message);
+            }
             target.requestFocus();
             scrollPatientFieldIntoView(target);
         }
@@ -1770,11 +1829,15 @@ public class MainActivity extends Activity {
 
     private void logPatientDiff(Patient old, Patient p) {
         db.logChange(p.patientId, "patient_name", old.patientName, p.patientName, currentUser);
+        db.logChange(p.patientId, "age", old.age, p.age, currentUser);
+        db.logChange(p.patientId, "blood_group", old.bloodGroup, p.bloodGroup, currentUser);
         db.logChange(p.patientId, "mobile_number", old.mobileNumber, p.mobileNumber, currentUser);
         db.logChange(p.patientId, "state_name", old.stateName, p.stateName, currentUser);
         db.logChange(p.patientId, "district_name", old.districtName, p.districtName, currentUser);
         db.logChange(p.patientId, "block_name", old.localBodyName, p.localBodyName, currentUser);
         db.logChange(p.patientId, "village_name", old.villageName, p.villageName, currentUser);
+        db.logChange(p.patientId, "gravida", old.gravida, p.gravida, currentUser);
+        db.logChange(p.patientId, "last_delivery_method", old.lastDeliveryMethod, p.lastDeliveryMethod, currentUser);
         db.logChange(p.patientId, "lmp_date", old.lmpDate, p.lmpDate, currentUser);
         db.logChange(p.patientId, "edd_date", old.eddDate, p.eddDate, currentUser);
         db.logChange(p.patientId, "scheduled_delivery_date", old.scheduledDeliveryDate, p.scheduledDeliveryDate, currentUser);
@@ -1927,6 +1990,7 @@ public class MainActivity extends Activity {
         top.addView(chip(patientStatusLabel(p), tone, Color.WHITE));
         card.addView(top);
         card.addView(patientBadgeRow(p));
+        card.addView(statusLine("Profile", "Age " + value(p.age), "Blood " + value(p.bloodGroup), PRIMARY));
         card.addView(statusLine("Mobile", value(p.mobileNumber), "Call", PRIMARY));
         card.addView(statusLine("Pregnancy", pregnancyAgeText(p), p.recordLocked ? "Completed" : "Today", WARNING));
         card.addView(statusLine("Care", "EDD " + value(p.eddDate), value(p.doctorName), ACCENT));
@@ -2033,55 +2097,49 @@ public class MainActivity extends Activity {
         scroll.addView(page);
         content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
 
-        page.addView(section(value(p.patientName),
-                smallText("Patient ID: " + value(p.patientId)),
-                smallText("Mobile: " + value(p.mobileNumber)),
-                smallText("State: " + value(p.stateName) + " | District: " + value(p.districtName)),
-                smallText("Block: " + value(p.localBodyName) + " | Village: " + value(p.villageName)),
-                smallText("Motivator: " + value(p.motivatorName) + " | Doctor: " + value(p.doctorName))
-        ));
-        page.addView(section("Pregnancy",
-                smallText("LMP: " + value(p.lmpDate)),
-                smallText("Pregnancy age: " + pregnancyAgeText(p)),
-                smallText("EDD: " + value(p.eddDate))
-        ));
-        if (!empty(p.scheduledDeliveryDate)) {
-            page.addView(section("Scheduled Delivery",
-                    smallText("Doctor-given date: " + value(p.scheduledDeliveryDate)),
-                    smallText(p.recordLocked ? "Completion status: Completed" : (scheduledDeliveryNeedsCompletion(p) ? "Completion status: Delivery date passed; completion pending" : (empty(p.scheduledDeliveryCalledAt) ? "Notification status: Call pending" : "Notification status: Patient notified"))),
-                    smallText(p.recordLocked ? "This patient record is locked in the completed list." : (scheduledDeliveryNeedsCompletion(p) ? "Mark this patient completed after operator confirmation." : (empty(p.scheduledDeliveryCalledAt) ? "Call this patient from the action button below." : "Called " + value(p.scheduledDeliveryCalledAt) + " by " + value(p.scheduledDeliveryCalledBy))))
-            ));
-        }
-        if (scheduledDeliveryNeedsCompletion(p)) {
-            page.addView(section("Completion Required",
-                    emptyState("Scheduled delivery date has passed", "Operator must mark this patient completed before it moves to the completed list."),
-                    button("Mark Completed", v -> confirmScheduledDeliveryCompleted(db.getPatient(p.id)))
-            ));
-        }
-        page.addView(section("Record Trust",
-                smallText("Entry date: " + value(p.entryDate)),
-                smallText("Created by: " + value(p.createdBy)),
-                smallText("Updated by: " + value(p.updatedBy)),
-                smallText("Cloud status: " + value(lastSyncText)),
-                chip(p.recordLocked ? "Locked after final visit" : "Open for follow-up", p.recordLocked ? ACCENT : WARNING, Color.WHITE)
-        ));
-        page.addView(section("Visit Timeline", visitTimeline(p)));
+        page.addView(compactPatientDetailCard(p, adminMode));
+    }
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.VERTICAL);
-        actions.addView(navButton("Back to Search", v -> showPatientList(adminMode)));
-        if (!p.recordLocked || isAdmin()) {
-            actions.addView(button("Update Visit Dates", v -> showPatientForm(db.getPatient(p.id), true)));
-            actions.addView(button("Edit Patient", v -> showPatientForm(db.getPatient(p.id))));
+    private View compactPatientDetailCard(Patient p, boolean adminMode) {
+        LinearLayout panel = card();
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout title = new LinearLayout(this);
+        title.setOrientation(LinearLayout.VERTICAL);
+        TextView name = label(value(p.patientName), 17, true);
+        name.setTextColor(PRIMARY_DARK);
+        TextView meta = label(value(p.patientId) + " | " + value(p.villageName) + " | " + value(p.mobileNumber), 10, false);
+        meta.setTextColor(MUTED);
+        title.addView(name);
+        title.addView(meta);
+        top.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        top.addView(chip(patientStatusLabel(p), patientStatusColor(p), Color.WHITE));
+        panel.addView(top);
+
+        if (scheduledDeliveryNeedsCompletion(p)) {
+            TextView alert = chip("Completion required: scheduled delivery date passed", URGENT, Color.WHITE);
+            panel.addView(horizontalWrap(alert));
         }
-        actions.addView(button("Call Patient", v -> callPatient(db.getPatient(p.id))));
-        actions.addView(button("Export Single Excel", v -> startPatientExport(p.id, REQ_EXPORT_EXCEL, value(p.patientId) + ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")));
-        actions.addView(button("Export Single PDF", v -> startPatientExport(p.id, REQ_EXPORT_PDF, value(p.patientId) + ".pdf", "application/pdf")));
+
+        java.util.List<View> actions = new java.util.ArrayList<>();
+        actions.add(navButton("Back to Search", v -> showPatientList(adminMode)));
+        if (scheduledDeliveryNeedsCompletion(p)) {
+            actions.add(button("Mark Completed", v -> confirmScheduledDeliveryCompleted(db.getPatient(p.id))));
+        }
+        if (!p.recordLocked || isAdmin()) {
+            actions.add(button("Update Visits", v -> showPatientForm(db.getPatient(p.id), true)));
+            actions.add(button("Edit Patient", v -> showPatientForm(db.getPatient(p.id))));
+        }
+        actions.add(button("Call Patient", v -> callPatient(db.getPatient(p.id))));
+        actions.add(button("Excel", v -> startPatientExport(p.id, REQ_EXPORT_EXCEL, value(p.patientId) + ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")));
+        actions.add(button("PDF", v -> startPatientExport(p.id, REQ_EXPORT_PDF, value(p.patientId) + ".pdf", "application/pdf")));
         if (p.recordLocked) {
-            actions.addView(chip("Locked after final visit", ACCENT, Color.WHITE));
+            actions.add(chip("Locked after final visit", ACCENT, Color.WHITE));
         }
         if (adminMode && isAdmin()) {
-            actions.addView(button("Unlock", v -> {
+            actions.add(button("Unlock", v -> {
                 p.recordLocked = false;
                 p.updatedBy = currentUser;
                 firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
@@ -2095,9 +2153,132 @@ public class MainActivity extends Activity {
                     showPatientDetail(db.getPatient(p.id), true);
                 }));
             }));
-            actions.addView(button("Delete", v -> confirmDeletePatient(p)));
+            actions.add(button("Delete", v -> confirmDeletePatient(p)));
         }
-        page.addView(section("Actions", actions));
+        panel.addView(scrollingActions(actions.toArray(new View[0])));
+
+        panel.addView(detailGroup("Patient",
+                detailGrid(
+                        detailCell("Patient ID", p.patientId, PRIMARY),
+                        detailCell("Mobile", p.mobileNumber, PRIMARY),
+                        detailCell("Age", p.age, SLATE),
+                        detailCell("Blood Group", p.bloodGroup, SLATE)
+                )
+        ));
+        panel.addView(detailGroup("Care & Address",
+                detailGrid(
+                        detailCell("Doctor", p.doctorName, PRIMARY),
+                        detailCell("Motivator", optionalValue(p.motivatorName), SLATE),
+                        detailCell("State", p.stateName, PRIMARY),
+                        detailCell("District", p.districtName, PRIMARY),
+                        detailCell("Block", p.localBodyName, ACCENT),
+                        detailCell("Village", p.villageName, ACCENT)
+                )
+        ));
+        panel.addView(detailGroup("Pregnancy",
+                detailGrid(
+                        detailCell("LMP", p.lmpDate, PRIMARY),
+                        detailCell("Pregnancy Age", pregnancyAgeText(p), ACCENT),
+                        detailCell("GRAVIDA", p.gravida, WARNING),
+                        detailCell("Last Delivery", optionalValue(p.lastDeliveryMethod), SLATE),
+                        detailCell("EDD", p.eddDate, WARNING),
+                        detailCell("Scheduled Delivery", optionalValue(p.scheduledDeliveryDate), scheduledDeliveryStatusColor(p))
+                )
+        ));
+        panel.addView(detailGroup("Visits & Record",
+                detailGrid(
+                        detailCell("1st Visit", p.visit1, PRIMARY),
+                        detailCell("2nd Visit", optionalValue(p.visit2), SLATE),
+                        detailCell("3rd Visit", optionalValue(p.visit3), SLATE),
+                        detailCell("Final Visit", optionalValue(p.finalVisit), p.recordLocked ? ACCENT : SLATE),
+                        detailCell("Call Status", scheduledDeliveryStatusText(p), scheduledDeliveryStatusColor(p)),
+                        detailCell("Called At", optionalValue(p.scheduledDeliveryCalledAt), ACCENT),
+                        detailCell("Called By", optionalValue(p.scheduledDeliveryCalledBy), SLATE),
+                        detailCell("Record State", p.recordLocked ? "Completed / Locked" : "Open", p.recordLocked ? ACCENT : WARNING),
+                        detailCell("Entry Date", p.entryDate, PRIMARY),
+                        detailCell("Cloud", value(lastSyncText), ACCENT)
+                ),
+                detailFull("Created By", optionalValue(p.createdBy), SLATE),
+                detailFull("Updated By", optionalValue(p.updatedBy), SLATE)
+        ));
+        return panel;
+    }
+
+    private View detailGroup(String title, View... rows) {
+        LinearLayout group = new LinearLayout(this);
+        group.setOrientation(LinearLayout.VERTICAL);
+        group.setPadding(0, dp(1), 0, dp(3));
+        TextView heading = label(title.toUpperCase(java.util.Locale.US), 9, true);
+        heading.setTextColor(PRIMARY);
+        heading.setPadding(0, dp(1), 0, dp(1));
+        group.addView(heading);
+        for (View row : rows) {
+            group.addView(row);
+        }
+        return group;
+    }
+
+    private View detailGrid(View... cells) {
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        for (int i = 0; i < cells.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.addView(cells[i], new LinearLayout.LayoutParams(0, -2, 1));
+            if (i + 1 < cells.length) {
+                row.addView(cells[i + 1], new LinearLayout.LayoutParams(0, -2, 1));
+            } else {
+                TextView spacer = new TextView(this);
+                row.addView(spacer, new LinearLayout.LayoutParams(0, -2, 1));
+            }
+            grid.addView(row);
+        }
+        return grid;
+    }
+
+    private View detailCell(String title, String value, int color) {
+        LinearLayout cell = new LinearLayout(this);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        cell.setPadding(dp(5), dp(1), dp(5), dp(1));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+        lp.setMargins(dp(1), dp(1), dp(1), dp(1));
+        cell.setLayoutParams(lp);
+        cell.setBackground(rounded(Color.argb(62, 255, 255, 255), dp(8), dp(1), Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))));
+        TextView label = label(title, 8, true);
+        label.setTextColor(color);
+        TextView body = label(displayValue(value), 10, false);
+        body.setTextColor(TEXT);
+        cell.addView(label);
+        cell.addView(body);
+        return cell;
+    }
+
+    private View detailFull(String title, String value, int color) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(dp(5), dp(1), dp(5), dp(1));
+        TextView label = label(title, 8, true);
+        label.setTextColor(color);
+        TextView body = label(displayValue(value), 10, false);
+        body.setTextColor(TEXT);
+        row.addView(label);
+        row.addView(body);
+        return row;
+    }
+
+    private View horizontalWrap(View row) {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.addView(row);
+        return scroll;
+    }
+
+    private String displayValue(String value) {
+        return empty(value) ? "-" : value(value);
+    }
+
+    private String optionalValue(String value) {
+        return empty(value) ? "Not added" : value(value);
     }
 
     private boolean scheduledDeliveryNeedsCompletion(Patient p) {
@@ -2848,7 +3029,7 @@ public class MainActivity extends Activity {
         PdfDocument.Page page = newPdfPage(document, pageWidth, pageHeight, pageNo);
         int y = drawPdfHeader(page, titlePaint, textPaint, margin, pageNo);
         for (Patient p : patients) {
-            if (y > pageHeight - 70) {
+            if (y > pageHeight - 112) {
                 document.finishPage(page);
                 page = newPdfPage(document, pageWidth, pageHeight, ++pageNo);
                 y = drawPdfHeader(page, titlePaint, textPaint, margin, pageNo);
@@ -2856,6 +3037,10 @@ public class MainActivity extends Activity {
             page.getCanvas().drawText(value(p.patientId) + " | " + value(p.patientName), margin, y, textPaint);
             y += 14;
             page.getCanvas().drawText("Mobile: " + value(p.mobileNumber) + " | Block: " + value(p.localBodyName) + " | Village: " + value(p.villageName), margin, y, textPaint);
+            y += 14;
+            page.getCanvas().drawText("Age: " + value(p.age) + " | Blood group: " + value(p.bloodGroup) + " | GRAVIDA: " + value(p.gravida), margin, y, textPaint);
+            y += 14;
+            page.getCanvas().drawText("Last delivery method: " + value(p.lastDeliveryMethod), margin, y, textPaint);
             y += 14;
             page.getCanvas().drawText("LMP: " + value(p.lmpDate) + " | Pregnancy age: " + pregnancyAgeText(p) + " | EDD: " + value(p.eddDate), margin, y, textPaint);
             y += 14;
@@ -2882,11 +3067,11 @@ public class MainActivity extends Activity {
     }
 
     private String[] patientExportHeaders() {
-        return new String[]{"Serial", "Entry Date", "Patient Name", "Patient ID", "State", "District", "Block", "Village", "Mobile", "Motivator", "Doctor", "LMP", "Pregnancy Age", "EDD", "Scheduled Delivery", "Scheduled Call At", "Scheduled Call By", "1st Visit", "2nd Visit", "3rd Visit", "Final Visit", "Locked", "Exported At", "Exported By"};
+        return new String[]{"Serial", "Entry Date", "Patient Name", "Patient ID", "Age", "Blood Group", "State", "District", "Block", "Village", "Mobile", "Motivator", "Doctor", "GRAVIDA", "Last Delivery Method", "LMP", "Pregnancy Age", "EDD", "Scheduled Delivery", "Scheduled Call At", "Scheduled Call By", "1st Visit", "2nd Visit", "3rd Visit", "Final Visit", "Locked", "Exported At", "Exported By"};
     }
 
     private String[] patientExportValues(Patient p) {
-        return new String[]{String.valueOf(p.serialNumber), value(p.entryDate), value(p.patientName), value(p.patientId), value(p.stateName), value(p.districtName), value(p.localBodyName), value(p.villageName), value(p.mobileNumber), value(p.motivatorName), value(p.doctorName), value(p.lmpDate), pregnancyAgeText(p), value(p.eddDate), value(p.scheduledDeliveryDate), value(p.scheduledDeliveryCalledAt), value(p.scheduledDeliveryCalledBy), value(p.visit1), value(p.visit2), value(p.visit3), value(p.finalVisit), p.recordLocked ? "1" : "0", LocalDateTime.now().format(TIME_FMT), value(currentUser)};
+        return new String[]{String.valueOf(p.serialNumber), value(p.entryDate), value(p.patientName), value(p.patientId), value(p.age), value(p.bloodGroup), value(p.stateName), value(p.districtName), value(p.localBodyName), value(p.villageName), value(p.mobileNumber), value(p.motivatorName), value(p.doctorName), value(p.gravida), value(p.lastDeliveryMethod), value(p.lmpDate), pregnancyAgeText(p), value(p.eddDate), value(p.scheduledDeliveryDate), value(p.scheduledDeliveryCalledAt), value(p.scheduledDeliveryCalledBy), value(p.visit1), value(p.visit2), value(p.visit3), value(p.finalVisit), p.recordLocked ? "1" : "0", LocalDateTime.now().format(TIME_FMT), value(currentUser)};
     }
 
     private String exportStamp() {
@@ -3501,16 +3686,16 @@ public class MainActivity extends Activity {
         selectedSubdistrictCode = null;
         selectedLocalBodyCode = null;
         setAdapter(subdistrict, db.listSubdistricts(selectedDistrictCode));
-        setAdapter(localBody, db.listLocalBodies(selectedDistrictCode));
+        setSpinnerOptions(localBody, db.listLocalBodies(selectedDistrictCode), "Select block");
         if (clear) {
             subdistrict.setText("", false);
-            localBody.setText("", false);
+            localBody.setSelection(0);
         }
         refreshWardAndVillageAdapters(clear);
     }
 
     private void refreshWardAndVillageAdapters(boolean clear) {
-        selectedLocalBodyCode = db.getCodeByNameAndParent("local_bodies", text(localBody), "district_code", selectedDistrictCode);
+        selectedLocalBodyCode = db.getCodeByNameAndParent("local_bodies", selectedSpinnerValue(localBody), "district_code", selectedDistrictCode);
         setAdapter(ward, db.listWards(selectedLocalBodyCode));
         if (clear) {
             ward.setText("", false);
@@ -3998,8 +4183,35 @@ public class MainActivity extends Activity {
         return view;
     }
 
+    private Spinner spinner(List<String> values, String placeholder, String prompt) {
+        Spinner view = new Spinner(this);
+        List<String> options = new java.util.ArrayList<>();
+        options.add(placeholder);
+        if (values != null) {
+            options.addAll(values);
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, options);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        view.setAdapter(adapter);
+        view.setBackground(glassInput(false));
+        view.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
+        view.setPrompt(prompt);
+        return view;
+    }
+
     private void setAdapter(AutoCompleteTextView view, List<String> values) {
         view.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, values));
+    }
+
+    private void setSpinnerOptions(Spinner view, List<String> values, String placeholder) {
+        List<String> options = new java.util.ArrayList<>();
+        options.add(placeholder);
+        if (values != null) {
+            options.addAll(values);
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, options);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        view.setAdapter(adapter);
     }
 
     private Button navButton(String text, View.OnClickListener listener) {
@@ -4183,6 +4395,10 @@ public class MainActivity extends Activity {
         return java.util.Arrays.asList(values);
     }
 
+    private List<String> bloodGroups() {
+        return list("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-");
+    }
+
     private List<String> murshidabadBlocks() {
         return list(
                 "BELDANGA I",
@@ -4221,6 +4437,27 @@ public class MainActivity extends Activity {
 
     private String entryText(TextView view) {
         return uppercaseEntryValue(text(view));
+    }
+
+    private String selectedSpinnerValue(Spinner spinner) {
+        if (spinner == null || spinner.getSelectedItemPosition() <= 0 || spinner.getSelectedItem() == null) {
+            return null;
+        }
+        return uppercaseEntryValue(spinner.getSelectedItem().toString());
+    }
+
+    private void selectSpinnerValue(Spinner spinner, String value) {
+        if (spinner == null || empty(value)) {
+            return;
+        }
+        String normalized = uppercaseEntryValue(value);
+        for (int i = 0; i < spinner.getCount(); i++) {
+            Object item = spinner.getItemAtPosition(i);
+            if (item != null && normalized.equals(uppercaseEntryValue(item.toString()))) {
+                spinner.setSelection(i);
+                return;
+            }
+        }
     }
 
     private String uppercaseEntryValue(String raw) {

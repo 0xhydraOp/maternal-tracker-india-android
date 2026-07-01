@@ -1,6 +1,6 @@
 # Blue Bird Maternal Tracker Progress
 
-Last updated: 2026-06-18
+Last updated: 2026-07-02
 
 ## Current App Scope
 
@@ -31,15 +31,17 @@ Last updated: 2026-06-18
 - Improved dashboard styling, compact default layout, sky-blue background, translucent/glass-style cards, and bottom navigation.
 - Added date/live-time dashboard display.
 - Fixed Firebase permission/save issues found during patient-entry testing.
-- Rebuilt and published `v1.1.1`.
+- Added scheduled delivery workflow, planned-visit tracking, in-app updater, pregnancy age display, and polished admin/reference controls.
+- Added mandatory Age, Blood Group, and GRAVIDA fields, plus optional Method of Last Delivery.
+- Reworked Patient Detail into a compact grouped panel with action buttons and all entered patient fields visible much earlier.
+- Rebuilt and published through `v1.1.17`.
 
 ## Latest Published Version
 
-- Version: `1.1.1`
-- Version code: `9`
-- Commit: `bca8543`
-- Release APK: `release/MaternalTrackerIndia-v1.1.1-release.apk`
-- GitHub release: `https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.1`
+- Version: `1.1.17`
+- Version code: `25`
+- Release APK: `release/MaternalTrackerIndia-v1.1.17-release.apk`
+- GitHub release: `https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.17`
 
 ## Verified Recently
 
@@ -48,7 +50,8 @@ Last updated: 2026-06-18
 - Release APK build passed.
 - Android release lint/build completed.
 - ADB smoke-tested Home, Entry, Search, Reports, and Admin navigation.
-- Static scan confirmed removed dashboard/report labels were gone from the main code.
+- ADB smoke-tested compact Patient Detail from Search, including identity, care/address, pregnancy, visits, scheduled delivery, and record status fields.
+- Static scan confirmed required patient-entry fields, scheduled delivery logic, and removed dashboard/report labels were correctly wired.
 
 ## Scheduled Delivery Feature
 

@@ -39,7 +39,35 @@ public class PatientRulesTest {
         Patient p = validPatient();
         p.visit1 = null;
         p.visit2 = "2026-06-20";
-        assertEquals("Fill all required fields. Motivator and later visits are optional", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+        assertEquals("Fill all required fields. Motivator, last delivery method, scheduled delivery, and later visits are optional", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationRequiresAge() {
+        Patient p = validPatient();
+        p.age = null;
+        assertEquals("Fill all required fields. Motivator, last delivery method, scheduled delivery, and later visits are optional", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationRequiresBloodGroup() {
+        Patient p = validPatient();
+        p.bloodGroup = null;
+        assertEquals("Fill all required fields. Motivator, last delivery method, scheduled delivery, and later visits are optional", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationRequiresGravida() {
+        Patient p = validPatient();
+        p.gravida = null;
+        assertEquals("Fill all required fields. Motivator, last delivery method, scheduled delivery, and later visits are optional", PatientRules.validate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void validationAcceptsMissingLastDeliveryMethod() {
+        Patient p = validPatient();
+        p.lastDeliveryMethod = null;
+        assertNull(PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
     @Test
@@ -143,12 +171,16 @@ public class PatientRulesTest {
         Patient p = new Patient();
         p.patientId = "PT01-06-2026";
         p.patientName = "Test Patient";
+        p.age = "24";
+        p.bloodGroup = "O+";
         p.mobileNumber = "9876543210";
         p.stateName = "West Bengal";
         p.districtName = "MURSHIDABAD";
         p.localBodyType = "Block";
         p.localBodyName = "KANDI";
         p.villageName = "Test Village";
+        p.gravida = "G2P1";
+        p.lastDeliveryMethod = "NORMAL";
         p.lmpDate = "2026-06-01";
         p.eddDate = "2027-03-08";
         p.scheduledDeliveryDate = "2027-02-28";

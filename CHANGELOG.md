@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.17 - 2026-07-02
+
+- Added mandatory Age and Blood Group fields to Basic Info, with Blood Group as a fixed dropdown.
+- Added mandatory GRAVIDA and optional Method of Last Delivery fields to Pregnancy Dates.
+- Wired the new fields through validation, SQLite migration, Firebase sync, Firestore rules, patient detail, search cards, and CSV/Excel/PDF exports.
+- Reworked Patient Detail into a compact one-panel view so identity, address, pregnancy, scheduled delivery, visit dates, and record status are visible without a long plain-text scroll.
+- Added unit coverage for the new mandatory-field rules while keeping last delivery method optional.
+- Bumped Android app version to `1.1.17` / versionCode `25`.
+
 ## v1.1.16 - 2026-06-21
 
 - Forced patient-entry text inputs to stay uppercase while typing and before save.

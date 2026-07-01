@@ -33,9 +33,9 @@ service cloud.firestore {
 
     function validPatientDocument(patientId) {
       return request.resource.data.keys().hasOnly([
-          'serialNumber', 'patientId', 'patientName', 'mobileNumber',
+          'serialNumber', 'patientId', 'patientName', 'age', 'bloodGroup', 'mobileNumber',
           'stateName', 'districtName', 'subdistrictName', 'localBodyType',
-          'localBodyName', 'wardName', 'villageName', 'lmpDate', 'eddDate',
+          'localBodyName', 'wardName', 'villageName', 'gravida', 'lastDeliveryMethod', 'lmpDate', 'eddDate',
           'scheduledDeliveryDate', 'scheduledDeliveryCalledAt', 'scheduledDeliveryCalledBy',
           'motivatorName', 'doctorName', 'visit1', 'visit2', 'visit3',
           'finalVisit', 'entryDate', 'createdBy', 'recordLocked', 'remarks',

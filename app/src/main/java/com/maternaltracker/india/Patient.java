@@ -5,6 +5,8 @@ final class Patient {
     int serialNumber;
     String patientId;
     String patientName;
+    String age;
+    String bloodGroup;
     String mobileNumber;
     String stateName;
     String districtName;
@@ -13,6 +15,8 @@ final class Patient {
     String localBodyName;
     String wardName;
     String villageName;
+    String gravida;
+    String lastDeliveryMethod;
     String lmpDate;
     String eddDate;
     String motivatorName;

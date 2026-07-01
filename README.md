@@ -1,17 +1,17 @@
 # Maternal Tracker India Android
 
-Native Android version of the desktop Maternal Tracking app. This project lives beside the Windows `.exe` project and keeps its own SQLite database on the Android device.
+Native Android maternal follow-up app for `BLUE BIRD A GENERAL HOSPITAL`, backed by Firebase Authentication, Firestore sync, and a local SQLite cache for reports/exports.
 
-Current version: `v1.0.1`
+Current version: `v1.1.17`
 
 ## Current Scope
 
-- Patient registration with patient ID generation.
-- India-wide location fields: State/UT, District, Sub-District, Panchayat/Municipality, Ward, Village.
-- Complete built-in State/UT seed list.
-- LGD CSV import support for national district, sub-district, local body, ward, and village data.
-- Motivator and doctor autocomplete persistence.
-- Patient list/search view.
+- Patient registration with patient ID generation, mandatory Age/Blood Group/GRAVIDA, and pregnancy follow-up dates.
+- Blue Bird scoped State/District defaults for West Bengal / Murshidabad with Murshidabad block dropdowns.
+- Firebase login, admin/staff roles, and online patient sync.
+- Scheduled delivery, EDD, planned visit, call-pending, and completed-record workflows.
+- Excel/PDF export support through Android document picker/share flow.
+- Admin-managed doctor and motivator autocomplete lists.
 
 The lower-level India location database is designed to be imported from official LGD/data.gov.in CSV exports because districts, panchayats, municipalities, wards, and villages change frequently. The official LGD catalog is published by the Ministry of Panchayati Raj and was updated in May 2026.
 
@@ -47,7 +47,7 @@ Build signed release APK:
 Output:
 
 ```text
-release\MaternalTrackerIndia-v1.0.1-release.apk
+release\MaternalTrackerIndia-v1.1.17-release.apk
 ```
 
 Install to an attached phone/emulator:

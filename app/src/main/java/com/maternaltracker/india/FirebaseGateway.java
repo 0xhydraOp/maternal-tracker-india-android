@@ -223,6 +223,8 @@ final class FirebaseGateway {
         p.patientId = string(doc, "patientId", doc.getId());
         p.serialNumber = intValue(doc, "serialNumber");
         p.patientName = string(doc, "patientName", "");
+        p.age = string(doc, "age", "");
+        p.bloodGroup = string(doc, "bloodGroup", "");
         p.mobileNumber = string(doc, "mobileNumber", "");
         p.stateName = string(doc, "stateName", "");
         p.districtName = string(doc, "districtName", "");
@@ -231,6 +233,8 @@ final class FirebaseGateway {
         p.localBodyName = string(doc, "localBodyName", "");
         p.wardName = string(doc, "wardName", "");
         p.villageName = string(doc, "villageName", "");
+        p.gravida = string(doc, "gravida", "");
+        p.lastDeliveryMethod = string(doc, "lastDeliveryMethod", "");
         p.lmpDate = string(doc, "lmpDate", "");
         p.eddDate = string(doc, "eddDate", "");
         p.scheduledDeliveryDate = string(doc, "scheduledDeliveryDate", "");
@@ -255,6 +259,8 @@ final class FirebaseGateway {
         values.put("serialNumber", p.serialNumber);
         values.put("patientId", p.patientId);
         values.put("patientName", p.patientName);
+        values.put("age", p.age);
+        values.put("bloodGroup", p.bloodGroup);
         values.put("mobileNumber", p.mobileNumber);
         values.put("stateName", p.stateName);
         values.put("districtName", p.districtName);
@@ -263,6 +269,8 @@ final class FirebaseGateway {
         values.put("localBodyName", p.localBodyName);
         values.put("wardName", p.wardName);
         values.put("villageName", p.villageName);
+        values.put("gravida", p.gravida);
+        values.put("lastDeliveryMethod", p.lastDeliveryMethod);
         values.put("lmpDate", p.lmpDate);
         values.put("eddDate", p.eddDate);
         values.put("scheduledDeliveryDate", p.scheduledDeliveryDate);

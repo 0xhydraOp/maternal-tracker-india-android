@@ -12,11 +12,11 @@ final class PatientRules {
     }
 
     static String validate(Patient p, LocalDate today) {
-        if (empty(p.patientId) || empty(p.patientName) || empty(p.mobileNumber) ||
+        if (empty(p.patientId) || empty(p.patientName) || empty(p.age) || empty(p.bloodGroup) || empty(p.mobileNumber) ||
                 empty(p.stateName) || empty(p.districtName) || empty(p.localBodyType) ||
-                empty(p.localBodyName) || empty(p.villageName) || empty(p.lmpDate) ||
+                empty(p.localBodyName) || empty(p.villageName) || empty(p.gravida) || empty(p.lmpDate) ||
                 empty(p.eddDate) || empty(p.doctorName) || empty(p.visit1)) {
-            return "Fill all required fields. Motivator and later visits are optional";
+            return "Fill all required fields. Motivator, last delivery method, scheduled delivery, and later visits are optional";
         }
         String digits = p.mobileNumber.replaceAll("\\D", "");
         if (digits.length() != 10) {

@@ -15,9 +15,15 @@ import java.util.Map;
 
 final class MaternalDbHelper extends SQLiteOpenHelper {
     static final String DB_NAME = "maternal_tracker_india.db";
-    static final int DB_VERSION = 5;
+    static final int DB_VERSION = 6;
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("MM");
     private static final DateTimeFormatter YEAR_FMT = DateTimeFormatter.ofPattern("yyyy");
+    private static final String PATIENT_COLUMNS =
+            "id, serial_number, patient_id, patient_name, age, blood_group, mobile_number, " +
+                    "state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, " +
+                    "gravida, last_delivery_method, lmp_date, edd_date, scheduled_delivery_date, scheduled_delivery_called_at, " +
+                    "scheduled_delivery_called_by, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, " +
+                    "entry_date, created_by, updated_by, remarks, record_locked";
 
     MaternalDbHelper(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
@@ -30,6 +36,8 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
                 "serial_number INTEGER," +
                 "patient_name TEXT NOT NULL," +
                 "patient_id TEXT NOT NULL UNIQUE," +
+                "age TEXT," +
+                "blood_group TEXT," +
                 "mobile_number TEXT NOT NULL," +
                 "state_name TEXT," +
                 "district_name TEXT," +
@@ -38,6 +46,8 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
                 "local_body_name TEXT," +
                 "ward_name TEXT," +
                 "village_name TEXT," +
+                "gravida TEXT," +
+                "last_delivery_method TEXT," +
                 "lmp_date TEXT," +
                 "edd_date TEXT," +
                 "scheduled_delivery_date TEXT," +
@@ -85,6 +95,12 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
             ensureColumn(db, "patients", "scheduled_delivery_date", "TEXT");
             ensureColumn(db, "patients", "scheduled_delivery_called_at", "TEXT");
             ensureColumn(db, "patients", "scheduled_delivery_called_by", "TEXT");
+        }
+        if (oldVersion < 6) {
+            ensureColumn(db, "patients", "age", "TEXT");
+            ensureColumn(db, "patients", "blood_group", "TEXT");
+            ensureColumn(db, "patients", "gravida", "TEXT");
+            ensureColumn(db, "patients", "last_delivery_method", "TEXT");
         }
     }
 
@@ -187,6 +203,8 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         values.put("serial_number", serialNumber > 0 ? serialNumber : 1);
         values.put("patient_name", patient.patientName);
         values.put("patient_id", patient.patientId);
+        values.put("age", patient.age);
+        values.put("blood_group", patient.bloodGroup);
         values.put("mobile_number", patient.mobileNumber);
         values.put("state_name", patient.stateName);
         values.put("district_name", patient.districtName);
@@ -195,6 +213,8 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         values.put("local_body_name", patient.localBodyName);
         values.put("ward_name", patient.wardName);
         values.put("village_name", patient.villageName);
+        values.put("gravida", patient.gravida);
+        values.put("last_delivery_method", patient.lastDeliveryMethod);
         values.put("lmp_date", patient.lmpDate);
         values.put("edd_date", patient.eddDate);
         values.put("scheduled_delivery_date", patient.scheduledDeliveryDate);
@@ -340,7 +360,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     Patient getPatient(long id) {
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, scheduled_delivery_date, scheduled_delivery_called_at, scheduled_delivery_called_by, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, created_by, updated_by, remarks, record_locked FROM patients WHERE id = ?",
+                "SELECT " + PATIENT_COLUMNS + " FROM patients WHERE id = ?",
                 new String[]{String.valueOf(id)})) {
             return c.moveToFirst() ? patientFromCursor(c) : null;
         }
@@ -348,7 +368,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     Patient getPatientByPatientId(String patientId) {
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, scheduled_delivery_date, scheduled_delivery_called_at, scheduled_delivery_called_by, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, created_by, updated_by, remarks, record_locked FROM patients WHERE patient_id = ?",
+                "SELECT " + PATIENT_COLUMNS + " FROM patients WHERE patient_id = ?",
                 new String[]{patientId == null ? "" : patientId})) {
             return c.moveToFirst() ? patientFromCursor(c) : null;
         }
@@ -362,9 +382,9 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         List<Patient> out = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();
         String like = "%" + (filter == null ? "" : filter.trim()) + "%";
-        String where = "(patient_name LIKE ? OR patient_id LIKE ? OR mobile_number LIKE ? OR village_name LIKE ? OR motivator_name LIKE ? OR doctor_name LIKE ? OR district_name LIKE ? OR local_body_name LIKE ?)";
+        String where = "(patient_name LIKE ? OR patient_id LIKE ? OR mobile_number LIKE ? OR age LIKE ? OR blood_group LIKE ? OR gravida LIKE ? OR village_name LIKE ? OR motivator_name LIKE ? OR doctor_name LIKE ? OR district_name LIKE ? OR local_body_name LIKE ?)";
         List<String> args = new ArrayList<>();
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 11; i++) {
             args.add(like);
         }
         if (extraWhere != null && !extraWhere.trim().isEmpty()) {
@@ -376,7 +396,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
             }
         }
         try (Cursor c = db.rawQuery(
-                "SELECT id, serial_number, patient_id, patient_name, mobile_number, state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, lmp_date, edd_date, scheduled_delivery_date, scheduled_delivery_called_at, scheduled_delivery_called_by, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, entry_date, created_by, updated_by, remarks, record_locked " +
+                "SELECT " + PATIENT_COLUMNS + " " +
                         "FROM patients WHERE " + where + " ORDER BY entry_date DESC, serial_number DESC",
                 args.toArray(new String[0]))) {
             while (c.moveToNext()) {
@@ -513,30 +533,34 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         p.serialNumber = c.getInt(1);
         p.patientId = c.getString(2);
         p.patientName = c.getString(3);
-        p.mobileNumber = c.getString(4);
-        p.stateName = c.getString(5);
-        p.districtName = c.getString(6);
-        p.subdistrictName = c.getString(7);
-        p.localBodyType = c.getString(8);
-        p.localBodyName = c.getString(9);
-        p.wardName = c.getString(10);
-        p.villageName = c.getString(11);
-        p.lmpDate = c.getString(12);
-        p.eddDate = c.getString(13);
-        p.scheduledDeliveryDate = c.getString(14);
-        p.scheduledDeliveryCalledAt = c.getString(15);
-        p.scheduledDeliveryCalledBy = c.getString(16);
-        p.motivatorName = c.getString(17);
-        p.doctorName = c.getString(18);
-        p.visit1 = c.getString(19);
-        p.visit2 = c.getString(20);
-        p.visit3 = c.getString(21);
-        p.finalVisit = c.getString(22);
-        p.entryDate = c.getString(23);
-        p.createdBy = c.getString(24);
-        p.updatedBy = c.getString(25);
-        p.remarks = c.getString(26);
-        p.recordLocked = c.getInt(27) == 1;
+        p.age = c.getString(4);
+        p.bloodGroup = c.getString(5);
+        p.mobileNumber = c.getString(6);
+        p.stateName = c.getString(7);
+        p.districtName = c.getString(8);
+        p.subdistrictName = c.getString(9);
+        p.localBodyType = c.getString(10);
+        p.localBodyName = c.getString(11);
+        p.wardName = c.getString(12);
+        p.villageName = c.getString(13);
+        p.gravida = c.getString(14);
+        p.lastDeliveryMethod = c.getString(15);
+        p.lmpDate = c.getString(16);
+        p.eddDate = c.getString(17);
+        p.scheduledDeliveryDate = c.getString(18);
+        p.scheduledDeliveryCalledAt = c.getString(19);
+        p.scheduledDeliveryCalledBy = c.getString(20);
+        p.motivatorName = c.getString(21);
+        p.doctorName = c.getString(22);
+        p.visit1 = c.getString(23);
+        p.visit2 = c.getString(24);
+        p.visit3 = c.getString(25);
+        p.finalVisit = c.getString(26);
+        p.entryDate = c.getString(27);
+        p.createdBy = c.getString(28);
+        p.updatedBy = c.getString(29);
+        p.remarks = c.getString(30);
+        p.recordLocked = c.getInt(31) == 1;
         return p;
     }
 
