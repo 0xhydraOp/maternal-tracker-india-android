@@ -167,6 +167,54 @@ public class PatientRulesTest {
         assertNull(PatientRules.validate(p, LocalDate.parse("2026-06-15")));
     }
 
+    @Test
+    public void deliveryCompletionDueAcceptsOverdueEddWithoutScheduledDelivery() {
+        Patient p = validPatient();
+        p.eddDate = "2026-06-14";
+        p.scheduledDeliveryDate = "";
+        p.finalVisit = "";
+
+        assertEquals(true, PatientRules.deliveryCompletionDue(p, LocalDate.parse("2026-06-15")));
+        assertEquals(true, PatientRules.deliveryCompletionEligible(p, LocalDate.parse("2026-06-15")));
+        assertEquals("EDD date passed", PatientRules.deliveryCompletionReason(p, LocalDate.parse("2026-06-15")));
+        assertEquals(LocalDate.parse("2026-06-14"), PatientRules.deliveryCompletionVisitDate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void deliveryCompletionEligibleAcceptsEddWithinSevenDays() {
+        Patient p = validPatient();
+        p.eddDate = "2026-06-20";
+        p.scheduledDeliveryDate = "";
+        p.finalVisit = "";
+
+        assertEquals(false, PatientRules.deliveryCompletionDue(p, LocalDate.parse("2026-06-15")));
+        assertEquals(true, PatientRules.deliveryCompletionEligible(p, LocalDate.parse("2026-06-15")));
+        assertEquals("EDD within 7 days", PatientRules.deliveryCompletionReason(p, LocalDate.parse("2026-06-15")));
+        assertEquals(LocalDate.parse("2026-06-15"), PatientRules.deliveryCompletionVisitDate(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void deliveryCompletionPrefersScheduledDateInsideWindow() {
+        Patient p = validPatient();
+        p.eddDate = "2026-06-20";
+        p.scheduledDeliveryDate = "2026-06-18";
+        p.finalVisit = "";
+
+        assertEquals("scheduled", PatientRules.deliveryCompletionSource(p, LocalDate.parse("2026-06-15")));
+        assertEquals("Scheduled delivery within 7 days", PatientRules.deliveryCompletionReason(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void deliveryCompletionIgnoresLockedRecords() {
+        Patient p = validPatient();
+        p.eddDate = "2026-06-14";
+        p.scheduledDeliveryDate = "";
+        p.recordLocked = true;
+
+        assertEquals(false, PatientRules.deliveryCompletionDue(p, LocalDate.parse("2026-06-15")));
+        assertEquals(false, PatientRules.deliveryCompletionEligible(p, LocalDate.parse("2026-06-15")));
+    }
+
     private Patient validPatient() {
         Patient p = new Patient();
         p.patientId = "PT01-06-2026";

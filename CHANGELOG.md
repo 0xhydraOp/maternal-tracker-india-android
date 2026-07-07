@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.19 - 2026-07-08
+
+- Reordered delivery completion actions so staff sees Call Patient and Open Record first, with Mark Completed placed after the normal patient actions.
+- Fixed dashboard delivery/EDD cards so action buttons wrap cleanly instead of clipping on phone screens.
+- Upgraded Patient Detail group headers so Delivery Status, Care & Address, Pregnancy, and Visit sections are easier to scan.
+- Polished dashboard readability with a two-column KPI grid, lighter glass cards, tighter sync status text, and clearer spacing before Upcoming EDD.
+- Bumped Android app version to `1.1.19` / versionCode `27`.
+
 ## v1.1.18 - 2026-07-02
 
 - Kept scheduled-delivery patients visible in the 7-day delivery window after call notification; only the call-pending list now clears after notification.

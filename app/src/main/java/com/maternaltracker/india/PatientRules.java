@@ -80,7 +80,100 @@ final class PatientRules {
         }
     }
 
+    static boolean scheduledDeliveryNeedsCompletion(Patient p, LocalDate today) {
+        return activeRecord(p) && dateBefore(p.scheduledDeliveryDate, safeToday(today));
+    }
+
+    static boolean eddNeedsCompletion(Patient p, LocalDate today) {
+        return activeRecord(p) && dateBefore(p.eddDate, safeToday(today));
+    }
+
+    static boolean deliveryCompletionDue(Patient p, LocalDate today) {
+        LocalDate checkedToday = safeToday(today);
+        return scheduledDeliveryNeedsCompletion(p, checkedToday) || eddNeedsCompletion(p, checkedToday);
+    }
+
+    static boolean deliveryCompletionEligible(Patient p, LocalDate today) {
+        if (!activeRecord(p)) {
+            return false;
+        }
+        LocalDate checkedToday = safeToday(today);
+        return completionWindowActive(p.scheduledDeliveryDate, checkedToday) || completionWindowActive(p.eddDate, checkedToday);
+    }
+
+    static String deliveryCompletionSource(Patient p, LocalDate today) {
+        if (!activeRecord(p)) {
+            return "";
+        }
+        LocalDate checkedToday = safeToday(today);
+        if (completionWindowActive(p.scheduledDeliveryDate, checkedToday)) {
+            return "scheduled";
+        }
+        if (completionWindowActive(p.eddDate, checkedToday)) {
+            return "edd";
+        }
+        return "";
+    }
+
+    static String deliveryCompletionReferenceDate(Patient p, LocalDate today) {
+        String source = deliveryCompletionSource(p, today);
+        if ("scheduled".equals(source)) {
+            return value(p.scheduledDeliveryDate);
+        }
+        if ("edd".equals(source)) {
+            return value(p.eddDate);
+        }
+        return "";
+    }
+
+    static LocalDate deliveryCompletionVisitDate(Patient p, LocalDate today) {
+        LocalDate checkedToday = safeToday(today);
+        String reference = deliveryCompletionReferenceDate(p, checkedToday);
+        if (empty(reference) || !validDate(reference)) {
+            return checkedToday;
+        }
+        LocalDate target = LocalDate.parse(reference);
+        return target.isAfter(checkedToday) ? checkedToday : target;
+    }
+
+    static String deliveryCompletionReason(Patient p, LocalDate today) {
+        LocalDate checkedToday = safeToday(today);
+        String source = deliveryCompletionSource(p, checkedToday);
+        String reference = deliveryCompletionReferenceDate(p, checkedToday);
+        boolean passed = dateBefore(reference, checkedToday);
+        if ("scheduled".equals(source)) {
+            return passed ? "Scheduled delivery date passed" : "Scheduled delivery within 7 days";
+        }
+        if ("edd".equals(source)) {
+            return passed ? "EDD date passed" : "EDD within 7 days";
+        }
+        return "Delivery date eligible";
+    }
+
     static boolean empty(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private static boolean activeRecord(Patient p) {
+        return p != null && !p.recordLocked;
+    }
+
+    private static boolean completionWindowActive(String value, LocalDate today) {
+        if (empty(value) || !validDate(value)) {
+            return false;
+        }
+        return !LocalDate.parse(value).isAfter(today.plusDays(7));
+    }
+
+    private static boolean dateBefore(String value, LocalDate today) {
+        return !empty(value) && validDate(value) && LocalDate.parse(value).isBefore(today);
+    }
+
+    private static LocalDate safeToday(LocalDate today) {
+        return today == null ? LocalDate.now() : today;
+    }
+
+    private static String value(String value) {
+        return value == null ? "" : value.trim();
     }
 }
