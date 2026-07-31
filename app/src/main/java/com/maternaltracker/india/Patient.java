@@ -31,6 +31,8 @@ final class Patient {
     String entryDate;
     String createdBy;
     String updatedBy;
+    String deletedAt;
+    String deletedBy;
     String remarks;
     boolean recordLocked;
 }

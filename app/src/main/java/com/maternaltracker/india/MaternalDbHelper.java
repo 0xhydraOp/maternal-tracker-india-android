@@ -15,7 +15,9 @@ import java.util.Map;
 
 final class MaternalDbHelper extends SQLiteOpenHelper {
     static final String DB_NAME = "maternal_tracker_india.db";
-    static final int DB_VERSION = 6;
+    static final int DB_VERSION = 7;
+    private static final String ACTIVE_PATIENT_WHERE = "(deleted_at IS NULL OR deleted_at = '')";
+    private static final String DELETED_PATIENT_WHERE = "(deleted_at IS NOT NULL AND deleted_at != '')";
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("MM");
     private static final DateTimeFormatter YEAR_FMT = DateTimeFormatter.ofPattern("yyyy");
     private static final String PATIENT_COLUMNS =
@@ -23,7 +25,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
                     "state_name, district_name, subdistrict_name, local_body_type, local_body_name, ward_name, village_name, " +
                     "gravida, last_delivery_method, lmp_date, edd_date, scheduled_delivery_date, scheduled_delivery_called_at, " +
                     "scheduled_delivery_called_by, motivator_name, doctor_name, visit1, visit2, visit3, final_visit, " +
-                    "entry_date, created_by, updated_by, remarks, record_locked";
+                    "entry_date, created_by, updated_by, remarks, record_locked, deleted_at, deleted_by";
 
     MaternalDbHelper(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
@@ -63,6 +65,8 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
                 "created_by TEXT," +
                 "updated_by TEXT," +
                 "record_locked INTEGER NOT NULL DEFAULT 0," +
+                "deleted_at TEXT," +
+                "deleted_by TEXT," +
                 "remarks TEXT," +
                 "created_at TEXT NOT NULL DEFAULT (datetime('now'))" +
                 ")");
@@ -101,6 +105,10 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
             ensureColumn(db, "patients", "blood_group", "TEXT");
             ensureColumn(db, "patients", "gravida", "TEXT");
             ensureColumn(db, "patients", "last_delivery_method", "TEXT");
+        }
+        if (oldVersion < 7) {
+            ensureColumn(db, "patients", "deleted_at", "TEXT");
+            ensureColumn(db, "patients", "deleted_by", "TEXT");
         }
     }
 
@@ -230,6 +238,8 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         values.put("created_by", patient.createdBy);
         values.put("updated_by", patient.updatedBy);
         values.put("record_locked", patient.recordLocked ? 1 : 0);
+        values.put("deleted_at", patient.deletedAt);
+        values.put("deleted_by", patient.deletedBy);
         values.put("remarks", patient.remarks);
         return values;
     }
@@ -388,13 +398,14 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
             args.add(like);
         }
         if (extraWhere != null && !extraWhere.trim().isEmpty()) {
-            where += " AND (" + extraWhere + ")";
+            where = appendWhere(where, extraWhere);
             if (extraArgs != null) {
                 for (String arg : extraArgs) {
                     args.add(arg);
                 }
             }
         }
+        where = appendWhere(where, ACTIVE_PATIENT_WHERE);
         try (Cursor c = db.rawQuery(
                 "SELECT " + PATIENT_COLUMNS + " " +
                         "FROM patients WHERE " + where + " ORDER BY entry_date DESC, serial_number DESC",
@@ -406,12 +417,33 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         return out;
     }
 
-    void deletePatient(long id) {
+    List<Patient> listDeletedPatients() {
+        List<Patient> out = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT " + PATIENT_COLUMNS + " FROM patients WHERE " + DELETED_PATIENT_WHERE + " ORDER BY deleted_at DESC, entry_date DESC",
+                null)) {
+            while (c.moveToNext()) {
+                out.add(patientFromCursor(c));
+            }
+        }
+        return out;
+    }
+
+    int countDeletedPatients() {
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*) FROM patients WHERE " + DELETED_PATIENT_WHERE,
+                null)) {
+            return c.moveToFirst() ? c.getInt(0) : 0;
+        }
+    }
+
+    void discardLocalPatient(long id) {
         getWritableDatabase().delete("patients", "id = ?", new String[]{String.valueOf(id)});
     }
 
     int countPatients(String where, String[] args) {
-        String sql = "SELECT COUNT(*) FROM patients" + (where == null || where.isEmpty() ? "" : " WHERE " + where);
+        String activeWhere = appendWhere(where, ACTIVE_PATIENT_WHERE);
+        String sql = "SELECT COUNT(*) FROM patients WHERE " + activeWhere;
         try (Cursor c = getReadableDatabase().rawQuery(sql, args)) {
             return c.moveToFirst() ? c.getInt(0) : 0;
         }
@@ -423,7 +455,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     Map<String, Integer> countBy(String column, String where, String[] args) {
         Map<String, Integer> out = new LinkedHashMap<>();
-        String sqlWhere = where == null || where.trim().isEmpty() ? "" : " WHERE " + where;
+        String sqlWhere = " WHERE " + appendWhere(where, ACTIVE_PATIENT_WHERE);
         try (Cursor c = getReadableDatabase().rawQuery(
                 "SELECT COALESCE(NULLIF(" + column + ", ''), '-') AS label, COUNT(*) FROM patients" + sqlWhere + " GROUP BY label ORDER BY COUNT(*) DESC, label LIMIT 50",
                 args)) {
@@ -472,7 +504,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     List<String[]> upcomingEddRows(String where, String[] args, int limit) {
         List<String[]> rows = new ArrayList<>();
-        String finalWhere = appendWhere(where, "record_locked = 0 AND edd_date IS NOT NULL AND edd_date != '' AND edd_date >= ?");
+        String finalWhere = appendWhere(appendWhere(where, ACTIVE_PATIENT_WHERE), "record_locked = 0 AND edd_date IS NOT NULL AND edd_date != '' AND edd_date >= ?");
         List<String> finalArgs = new ArrayList<>();
         if (args != null) {
             for (String arg : args) {
@@ -495,7 +527,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     List<String[]> scheduledDeliveryRows(String where, String[] args, int limit) {
         List<String[]> rows = new ArrayList<>();
-        String finalWhere = appendWhere(where, "scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != ''");
+        String finalWhere = appendWhere(appendWhere(where, ACTIVE_PATIENT_WHERE), "scheduled_delivery_date IS NOT NULL AND scheduled_delivery_date != ''");
         List<String> finalArgs = new ArrayList<>();
         if (args != null) {
             for (String arg : args) {
@@ -561,6 +593,8 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         p.updatedBy = c.getString(29);
         p.remarks = c.getString(30);
         p.recordLocked = c.getInt(31) == 1;
+        p.deletedAt = c.getString(32);
+        p.deletedBy = c.getString(33);
         return p;
     }
 

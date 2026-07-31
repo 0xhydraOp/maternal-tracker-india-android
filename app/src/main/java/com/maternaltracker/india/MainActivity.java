@@ -474,6 +474,7 @@ public class MainActivity extends Activity {
         actions.addView(menuItem("Check for Updates", "Install the newest app release", WARNING, v -> checkForAppUpdate()));
         if (isAdmin()) {
             actions.addView(menuItem("Administration", "Manage users and reference data", PRIMARY, v -> showAdmin()));
+            actions.addView(menuItem("Patient Recovery", "Restore accidentally deleted records", WARNING, v -> showPatientRecovery()));
             actions.addView(menuItem("Backup Manager", "Create or restore database backup", SLATE, v -> showBackup()));
         }
         actions.addView(menuGroupTitle("Session"));
@@ -1895,6 +1896,8 @@ public class MainActivity extends Activity {
         p.entryDate = p.entryDate == null ? LocalDate.now().toString() : p.entryDate;
         p.createdBy = old == null || empty(old.createdBy) ? currentUser : old.createdBy;
         p.updatedBy = currentUser;
+        p.deletedAt = old == null ? value(p.deletedAt) : value(old.deletedAt);
+        p.deletedBy = old == null ? value(p.deletedBy) : value(old.deletedBy);
         p.remarks = "";
 
         String validation = validatePatient(p);
@@ -1966,7 +1969,7 @@ public class MainActivity extends Activity {
     private void rollbackPatientCache(Patient p, Patient old, boolean creating) {
         try {
             if (creating) {
-                db.deletePatient(p.id);
+                db.discardLocalPatient(p.id);
                 p.id = 0;
             } else if (old != null) {
                 db.savePatient(old);
@@ -2838,22 +2841,93 @@ public class MainActivity extends Activity {
     }
 
     private void confirmDeletePatient(Patient p) {
+        if (!isAdmin()) {
+            toast("Only admin can delete patient records");
+            return;
+        }
+        if (p == null) {
+            toast("Patient not found");
+            return;
+        }
         new AlertDialog.Builder(this)
-                .setTitle("Delete Patient")
-                .setMessage("Delete " + p.patientName + " (" + p.patientId + ")?")
-                .setPositiveButton("Delete", (dialog, which) -> {
-                    firebase.deletePatient(p, (unused, error) -> runOnUiThread(() -> {
-                        if (error != null) {
-                            toast("Delete sync failed: " + error.getMessage());
-                            return;
-                        }
-                        db.deletePatient(p.id);
-                        db.logActivity("PATIENT_DELETE", p.patientId, currentUser);
-                        showPatientList(true);
-                    }));
-                })
+                .setTitle("Move Patient to Recovery")
+                .setMessage("Hide " + value(p.patientName) + " (" + value(p.patientId) + ")?\n\nThe record will be removed from normal search, dashboard, reports, and exports. Admin can restore it later from Patient Recovery.")
+                .setPositiveButton("Move to Recovery", (dialog, which) -> softDeletePatient(p))
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    private void softDeletePatient(Patient source) {
+        Patient p = db.getPatient(source.id);
+        if (p == null) {
+            toast("Patient not found");
+            return;
+        }
+        String oldDeletedAt = value(p.deletedAt);
+        String oldDeletedBy = value(p.deletedBy);
+        String oldUpdatedBy = value(p.updatedBy);
+        p.deletedAt = LocalDateTime.now().toString();
+        p.deletedBy = currentUser;
+        p.updatedBy = currentUser;
+        db.savePatient(p);
+        firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
+            if (error != null) {
+                p.deletedAt = oldDeletedAt;
+                p.deletedBy = oldDeletedBy;
+                p.updatedBy = oldUpdatedBy;
+                db.savePatient(p);
+                toast("Delete sync failed: " + error.getMessage());
+                return;
+            }
+            db.logActivity("PATIENT_DELETE", p.patientId + " moved to recovery", currentUser);
+            toast("Patient moved to recovery");
+            showPatientList(true);
+        }));
+    }
+
+    private void confirmRestorePatient(Patient p) {
+        if (!isAdmin()) {
+            toast("Only admin can restore patient records");
+            return;
+        }
+        if (p == null) {
+            toast("Patient not found");
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Restore Patient")
+                .setMessage("Restore " + value(p.patientName) + " (" + value(p.patientId) + ") to active patient records?")
+                .setPositiveButton("Restore", (dialog, which) -> restoreDeletedPatient(p))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void restoreDeletedPatient(Patient source) {
+        Patient p = db.getPatient(source.id);
+        if (p == null) {
+            toast("Patient not found");
+            return;
+        }
+        String oldDeletedAt = value(p.deletedAt);
+        String oldDeletedBy = value(p.deletedBy);
+        String oldUpdatedBy = value(p.updatedBy);
+        p.deletedAt = "";
+        p.deletedBy = "";
+        p.updatedBy = currentUser;
+        db.savePatient(p);
+        firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
+            if (error != null) {
+                p.deletedAt = oldDeletedAt;
+                p.deletedBy = oldDeletedBy;
+                p.updatedBy = oldUpdatedBy;
+                db.savePatient(p);
+                toast("Restore sync failed: " + error.getMessage());
+                return;
+            }
+            db.logActivity("PATIENT_RESTORE", p.patientId + " restored from recovery", currentUser);
+            toast("Patient restored");
+            showPatientRecovery();
+        }));
     }
 
     private void showReports() {
@@ -3021,9 +3095,11 @@ public class MainActivity extends Activity {
     private List<String> reportMonthOptions() {
         List<String> months = new java.util.ArrayList<>();
         months.add("All Months");
+        YearMonth start = reportStartMonth();
         YearMonth month = YearMonth.now();
-        for (int i = 0; i < 18; i++) {
-            months.add(month.minusMonths(i).format(REPORT_MONTH_FMT));
+        while (!month.isBefore(start)) {
+            months.add(month.format(REPORT_MONTH_FMT));
+            month = month.minusMonths(1);
         }
         return months;
     }
@@ -3115,7 +3191,7 @@ public class MainActivity extends Activity {
         int scheduledNotified = db.countPatients(appendWhere(where, SCHEDULED_WHERE + " AND scheduled_delivery_called_at IS NOT NULL AND scheduled_delivery_called_at != ''"), args);
         int followupWeek = db.countPatients(appendWhere(where, FOLLOWUP_WEEK_WHERE), appendArgs(args, followupWeekArgs()));
         int today = db.countPatients(appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()));
-        page.addView(section("Priority Overview",
+        page.addView(collapsibleSection("Priority Overview", true,
                 reportContextLine(from, to, monthLabel),
                 reportOverviewBlock("Needs Attention",
                         stat("Complete Due", deliveryCompletionDue, v -> showPatientList(false, appendWhere(where, DELIVERY_COMPLETION_DUE_WHERE), appendArgs(args, LocalDate.now().toString(), LocalDate.now().toString()), true)),
@@ -3132,10 +3208,10 @@ public class MainActivity extends Activity {
         ));
         page.addView(registrationTrendChart(baseWhere, baseArgs));
         if (total == 0) {
-            page.addView(section("Report Result", emptyActionState("No records match these filters", "Change the filters or create a patient record first.", "New Patient", v -> showPatientForm(null))));
+            page.addView(collapsibleSection("Report Result", true, emptyActionState("No records match these filters", "Change the filters or create a patient record first.", "New Patient", v -> showPatientForm(null))));
             return;
         }
-        page.addView(section("Scheduled Delivery",
+        page.addView(collapsibleSection("Scheduled Delivery", false,
                 progressRow("Patient notified", scheduledNotified, scheduled, scheduled == 0 ? 0 : Math.round(scheduledNotified * 100f / scheduled)),
                 progressRow("Call pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled)),
                 progressRow("Completion due", deliveryCompletionDue, total, total == 0 ? 0 : Math.round(deliveryCompletionDue * 100f / total))
@@ -3147,7 +3223,7 @@ public class MainActivity extends Activity {
             int pct = total == 0 ? 0 : Math.round(done * 100f / total);
             visits.addView(progressRow(row[0], done, total, pct));
         }
-        page.addView(section("Visit Progress", visits));
+        page.addView(collapsibleSection("Visit Progress", false, visits));
         page.addView(villageSummaryView(where, args));
         page.addView(monthlySummaryView(baseWhere, baseArgs, dateType));
     }
@@ -3220,16 +3296,28 @@ public class MainActivity extends Activity {
 
     private Map<String, Integer> monthlySummary(String where, String[] args, String dateType) {
         java.util.LinkedHashMap<String, Integer> rows = new java.util.LinkedHashMap<>();
-        YearMonth month = YearMonth.now().minusMonths(11);
+        YearMonth month = reportSummaryStartMonth();
+        YearMonth end = YearMonth.now();
         String dateColumn = reportDateColumn(dateType);
-        for (int i = 0; i < 12; i++) {
-            YearMonth current = month.plusMonths(i);
+        while (!month.isAfter(end)) {
+            YearMonth current = month;
             rows.put(current.toString(), db.countPatients(
                     appendWhere(where, dateColumn + " BETWEEN ? AND ?"),
                     appendArgs(args, current.atDay(1).toString(), current.atEndOfMonth().toString())
             ));
+            month = month.plusMonths(1);
         }
         return rows;
+    }
+
+    private YearMonth reportStartMonth() {
+        return YearMonth.of(2026, 1);
+    }
+
+    private YearMonth reportSummaryStartMonth() {
+        YearMonth rollingStart = YearMonth.now().minusMonths(11);
+        YearMonth fixedStart = reportStartMonth();
+        return rollingStart.isBefore(fixedStart) ? fixedStart : rollingStart;
     }
 
     private View monthlySummaryView(String baseWhere, String[] baseArgs, String dateType) {
@@ -3254,7 +3342,7 @@ public class MainActivity extends Activity {
             });
             body.addView(monthRow);
         }
-        return section("Monthly Summary", body);
+        return collapsibleSection("Monthly Summary", false, body);
     }
 
     private String reportMonthLabel(String monthKey) {
@@ -3281,7 +3369,7 @@ public class MainActivity extends Activity {
             chart.addView(trendBar(row.getKey(), row.getValue(), max));
         }
         scroll.addView(chart);
-        return section("Registration Trend", smallText("New patient registrations by month."), scroll);
+        return collapsibleSection("Registration Trend", false, smallText("New patient registrations by month."), scroll);
     }
 
     private View trendBar(String monthKey, int count, int max) {
@@ -3321,7 +3409,7 @@ public class MainActivity extends Activity {
         body.setOrientation(LinearLayout.VERTICAL);
         if (rows.isEmpty()) {
             body.addView(emptyState("No data", "Village totals will appear after matching patients are saved."));
-            return section("Patients by Village", body);
+            return collapsibleSection("Patients by Village", false, body);
         }
         int max = 1;
         for (Integer value : rows.values()) {
@@ -3340,7 +3428,7 @@ public class MainActivity extends Activity {
             });
             body.addView(item);
         }
-        return section("Patients by Village", body);
+        return collapsibleSection("Patients by Village", false, body);
     }
 
     private void showBackup() {
@@ -3755,6 +3843,70 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void showPatientRecovery() {
+        if (!isAdmin()) {
+            toast("Only admin can open patient recovery");
+            showDashboard();
+            return;
+        }
+        setPage("Patient Recovery");
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(page);
+        content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+
+        List<Patient> deleted = db.listDeletedPatients();
+        page.addView(section("Patient Recovery",
+                compactKpiRow(
+                        focusCard("Recoverable", deleted.size(), "Hidden patient records", WARNING, v -> toast("Recoverable records: " + deleted.size())),
+                        focusCard("Active", db.countPatients(null, null), "Visible hospital records", PRIMARY, v -> showPatientList(true))
+                ),
+                smallText("Deleted patients are hidden from dashboard, search, reports, exports, and priority queues until an admin restores them.")
+        ));
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        if (deleted.isEmpty()) {
+            list.addView(emptyState("No recoverable patients", "Accidentally deleted records will appear here for admin restore."));
+        } else {
+            for (Patient p : deleted) {
+                list.addView(patientRecoveryCard(p));
+            }
+        }
+        page.addView(section("Recover Deleted Patients", list));
+    }
+
+    private View patientRecoveryCard(Patient p) {
+        LinearLayout card = card();
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout title = new LinearLayout(this);
+        title.setOrientation(LinearLayout.VERTICAL);
+        TextView name = label(value(p.patientName), 17, true);
+        name.setTextColor(PRIMARY_DARK);
+        TextView meta = label(value(p.patientId) + " | " + value(p.mobileNumber), 12, true);
+        meta.setTextColor(SLATE);
+        title.addView(name);
+        title.addView(meta);
+        top.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        top.addView(chip("RECOVERY", WARNING, Color.WHITE));
+        card.addView(top);
+        card.addView(statusLine("Address", value(p.villageName), value(p.localBodyName), PRIMARY));
+        card.addView(statusLine("Pregnancy", "EDD " + value(p.eddDate), "Scheduled " + optionalValue(p.scheduledDeliveryDate), WARNING));
+        card.addView(statusLine("Deleted", deletedMeta(p.deletedAt), "By " + optionalValue(p.deletedBy), URGENT));
+        card.addView(scrollingActions(
+                navButton("Restore Patient", v -> confirmRestorePatient(db.getPatient(p.id))),
+                button("Back to Admin", v -> showAdmin())
+        ));
+        return card;
+    }
+
+    private String deletedMeta(String deletedAt) {
+        return empty(deletedAt) ? "Unknown time" : value(deletedAt).replace('T', ' ');
+    }
+
     private void showAdmin() {
         if (!isAdmin()) {
             toast("Only admin can open administration");
@@ -3771,9 +3923,10 @@ public class MainActivity extends Activity {
         int locked = db.countPatients("record_locked = 1", null);
         int scheduled = db.countPatients(SCHEDULED_WHERE, null);
         int callPending = db.countPatients(SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()});
+        int deleted = db.countDeletedPatients();
         int doctors = db.listNames("custom_doctors").size();
         int motivators = db.listNames("custom_motivators").size();
-        page.addView(adminHero(total, locked, scheduled, callPending));
+        page.addView(adminHero(total, locked, scheduled, callPending, deleted));
         page.addView(section("Operations Control",
                 compactTwoColumn(
                         adminCommandPanel("Patient Records", "Search, edit, complete, unlock, and remove hospital records.", "Open Patients", PRIMARY, v -> showPatientList(true)),
@@ -3786,9 +3939,10 @@ public class MainActivity extends Activity {
         ));
         page.addView(section("Data and Recovery",
                 compactTwoColumn(
-                        adminCommandPanel("Backup Manager", "Create or restore a local database backup when required.", "Open Backup", PRIMARY, v -> showBackup()),
-                        adminCommandPanel("Full Export", "Export all Blue Bird records directly as Excel or PDF.", "Export Excel", ACCENT, v -> startExport("", null, null, REQ_EXPORT_EXCEL, "all_patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                        adminCommandPanel("Patient Recovery", deleted + " recoverable deleted record(s). Restore accidental deletes here.", "Open Recovery", WARNING, v -> showPatientRecovery()),
+                        adminCommandPanel("Backup Manager", "Create or restore a local database backup when required.", "Open Backup", PRIMARY, v -> showBackup())
                 ),
+                adminCommandPanel("Full Export", "Export all Blue Bird records directly as Excel or PDF.", "Export Excel", ACCENT, v -> startExport("", null, null, REQ_EXPORT_EXCEL, "all_patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
                 scrollingActions(
                         button("Export PDF", v -> startExport("", null, null, REQ_EXPORT_PDF, "all_patients.pdf", "application/pdf")),
                         button("Save Backup File", v -> startBackupExport())
@@ -3828,13 +3982,14 @@ public class MainActivity extends Activity {
         page.addView(collapsibleSection("Audit Trail", false, changeLogView()));
     }
 
-    private View adminHero(int total, int locked, int scheduled, int callPending) {
+    private View adminHero(int total, int locked, int scheduled, int callPending, int deleted) {
         return section("Admin Overview",
                 compactKpiRow(
                         focusCard("Records", total, "All hospital records", PRIMARY, v -> showPatientList(true)),
                         focusCard("Completed", locked, "Locked patient records", ACCENT, v -> showPatientList(true, "record_locked = 1", null)),
                         focusCard("Scheduled", scheduled, "Doctor-given delivery dates", WARNING, v -> showPatientList(true, SCHEDULED_WHERE, null)),
-                        focusCard("Calls", callPending, "Pending scheduled calls", URGENT, v -> showPatientList(true, SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()}))
+                        focusCard("Calls", callPending, "Pending scheduled calls", URGENT, v -> showPatientList(true, SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()})),
+                        focusCard("Recovery", deleted, "Deleted records", WARNING, v -> showPatientRecovery())
                 )
         );
     }
@@ -4590,7 +4745,7 @@ public class MainActivity extends Activity {
     }
 
     private View bottomNavItem(String pageName, int iconRes, String text, View.OnClickListener listener) {
-        boolean active = currentPage.equals(pageName) || (currentPage.equals("Edit Patient") && pageName.equals("Patient Entry")) || (currentPage.equals("Patient Detail") && pageName.equals("Patient Search")) || (currentPage.equals("Patient Management") && pageName.equals("Administration"));
+        boolean active = currentPage.equals(pageName) || (currentPage.equals("Edit Patient") && pageName.equals("Patient Entry")) || (currentPage.equals("Patient Detail") && pageName.equals("Patient Search")) || ((currentPage.equals("Patient Management") || currentPage.equals("Patient Recovery")) && pageName.equals("Administration"));
         LinearLayout item = new LinearLayout(this);
         item.setOrientation(LinearLayout.VERTICAL);
         item.setGravity(Gravity.CENTER);

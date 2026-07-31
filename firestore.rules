@@ -39,7 +39,7 @@ service cloud.firestore {
           'scheduledDeliveryDate', 'scheduledDeliveryCalledAt', 'scheduledDeliveryCalledBy',
           'motivatorName', 'doctorName', 'visit1', 'visit2', 'visit3',
           'finalVisit', 'entryDate', 'createdBy', 'recordLocked', 'remarks',
-          'updatedAt', 'updatedBy'
+          'deletedAt', 'deletedBy', 'updatedAt', 'updatedBy'
         ])
         && request.resource.data.patientId == patientId
         && request.resource.data.updatedBy == email();
@@ -71,7 +71,7 @@ service cloud.firestore {
           || (isActive() && resource.data.recordLocked != true && request.resource.data.recordLocked == true)
           || (isActive() && resource.data.recordLocked != true && request.resource.data.recordLocked != true)
         );
-      allow delete: if isAdmin();
+      allow delete: if false;
     }
 
     match /{document=**} {

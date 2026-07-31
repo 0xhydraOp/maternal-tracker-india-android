@@ -109,14 +109,6 @@ final class FirebaseGateway {
                 .addOnFailureListener(error -> result.onComplete(null, error));
     }
 
-    void deletePatient(Patient patient, Result<Void> result) {
-        firestore.collection("patients")
-                .document(safeDocumentId(patient.patientId))
-                .delete()
-                .addOnSuccessListener(unused -> result.onComplete(null, null))
-                .addOnFailureListener(error -> result.onComplete(null, error));
-    }
-
     void saveRole(String email, String role, Result<Void> result) {
         Map<String, Object> values = new HashMap<>();
         values.put("email", normalizeEmail(email));
@@ -249,6 +241,8 @@ final class FirebaseGateway {
         p.entryDate = string(doc, "entryDate", "");
         p.createdBy = string(doc, "createdBy", string(doc, "updatedBy", ""));
         p.updatedBy = string(doc, "updatedBy", "");
+        p.deletedAt = string(doc, "deletedAt", "");
+        p.deletedBy = string(doc, "deletedBy", "");
         p.remarks = string(doc, "remarks", "");
         p.recordLocked = Boolean.TRUE.equals(doc.getBoolean("recordLocked"));
         return p;
@@ -285,6 +279,8 @@ final class FirebaseGateway {
         values.put("entryDate", p.entryDate);
         values.put("createdBy", p.createdBy);
         values.put("updatedBy", currentEmail());
+        values.put("deletedAt", p.deletedAt);
+        values.put("deletedBy", p.deletedBy);
         values.put("recordLocked", p.recordLocked);
         values.put("remarks", p.remarks);
         values.put("updatedAt", Timestamp.now());

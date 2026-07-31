@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.22 - 2026-08-01
+
+- Replaced admin patient deletion with a recoverable soft-delete flow.
+- Added `deletedAt` and `deletedBy` patient metadata across SQLite, Firebase sync, and Firestore rules.
+- Hid deleted patients from normal search, dashboard, reports, exports, EDD lists, scheduled delivery lists, and priority queues.
+- Added an Admin `Patient Recovery` screen with recoverable-record count and restore action.
+- Added a Patient Recovery shortcut in the profile panel and Admin Data and Recovery section.
+- Blocked permanent patient document deletes from Firestore client rules.
+- Preserved delete metadata when editing records and kept failed cloud-create rollback as a local cache-only discard.
+- Converted detailed report blocks below Report Controls into collapsible sections to reduce long scrolling.
+- Limited report month picker, monthly summary, and trend rows to January 2026 onward.
+- Bumped Android app version to `1.1.22` / versionCode `30`.
+
 ## v1.1.21 - 2026-08-01
 
 - Fixed Search shortcut chips so Completion Due, Scheduled, Call Pending, Visit Follow-ups, EDD 30 Days, and Locked open their own correct result sets instead of stacking stale filters.
