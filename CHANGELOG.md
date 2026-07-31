@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.1.21 - 2026-08-01
+
+- Fixed Search shortcut chips so Completion Due, Scheduled, Call Pending, Visit Follow-ups, EDD 30 Days, and Locked open their own correct result sets instead of stacking stale filters.
+- Added a visible Search shortcut state showing which shortcut is selected and how many matching records are available.
+- Added a dedicated visible `Delete Patient` control to every patient card opened from the admin patient-management section.
+- Changed Reports month options from numeric month values to a reliable month picker with readable names such as `August 2026`.
+- Added a live Reports month context line so the current report month stays updated while the Reports screen is open.
+- Made report month selection refresh immediately while View Records, Excel, and PDF stay scoped to the selected month/date range.
+- Added a compact home Today Summary strip for New Today, EDD 7 Days, Scheduled, Calls Pending, and Completed.
+- Added a Reports registration trend chart using monthly new-patient counts.
+- Strengthened clickable Monthly Summary and Patients by Village rows with bold labels, counts, progress bars, arrows, and press animation.
+- Enlarged the New Patient This Month report header and renamed the report count card to `Total Registered`.
+- Bumped Android app version to `1.1.21` / versionCode `29`.
+
+## v1.1.20 - 2026-08-01
+
+- Fixed monthly report filtering so month selection and monthly rows use exact month start/end ranges.
+- Rebuilt Report Overview into grouped priority blocks for patient records, delivery attention, scheduled delivery, and follow-up work.
+- Simplified the Reports screen into a compact control panel, one priority overview, and focused supporting breakdowns.
+- Added a live-scoped `New Patient This Month` count at the top of Reports.
+- Reduced Report Controls to Month plus From/To date range only.
+- Made monthly summary rows clickable so staff can open the matching patient list directly.
+- Aligned report Excel/PDF export with the active month/date range filters and staff/admin data scope.
+- Bumped Android app version to `1.1.20` / versionCode `28`.
+
 ## v1.1.19 - 2026-07-08
 
 - Reordered delivery completion actions so staff sees Call Patient and Open Record first, with Mark Completed placed after the normal patient actions.

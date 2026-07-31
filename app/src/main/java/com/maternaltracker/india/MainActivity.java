@@ -89,6 +89,7 @@ public class MainActivity extends Activity {
     private static final int SECTION_ACCENT_HEIGHT = 22;
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("hh:mm a");
     private static final DateTimeFormatter DASHBOARD_CLOCK_FMT = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy | hh:mm a");
+    private static final DateTimeFormatter REPORT_MONTH_FMT = DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale.US);
     private static final String HOSPITAL_NAME = "BLUE BIRD A GENERAL HOSPITAL";
     private static final String APP_NAME = "Maternal Care Registry";
     private static final String DEFAULT_STATE = "West Bengal";
@@ -107,6 +108,10 @@ public class MainActivity extends Activity {
     private static final String FOLLOWUP_WEEK_WHERE = "record_locked = 0 AND (((visit2 IS NOT NULL AND visit2 != '') AND (visit3 IS NULL OR visit3 = '') AND (final_visit IS NULL OR final_visit = '') AND visit2 <= ?) OR ((visit3 IS NOT NULL AND visit3 != '') AND (final_visit IS NULL OR final_visit = '') AND visit3 <= ?) OR ((final_visit IS NOT NULL AND final_visit != '') AND final_visit <= ?))";
     private static final String OPEN_EDD_RANGE_WHERE = "record_locked = 0 AND edd_date BETWEEN ? AND ?";
     private static final String UPDATE_API_URL = "https://api.github.com/repos/0xhydraOp/maternal-tracker-india-android/releases/latest";
+    private static final String REPORT_DATE_ENTRY = "Entry Date";
+    private static final String REPORT_DATE_EDD = "EDD Date";
+    private static final String REPORT_DATE_SCHEDULED = "Scheduled Delivery";
+    private static final String REPORT_DATE_COMPLETED = "Completed / Locked";
     private static final String UPDATE_RELEASES_URL = "https://github.com/0xhydraOp/maternal-tracker-india-android/releases/latest";
 
     private MaternalDbHelper db;
@@ -124,6 +129,9 @@ public class MainActivity extends Activity {
     private TextView backButton;
     private TextView dashboardClock;
     private Runnable dashboardClockTicker;
+    private TextView reportMonthLiveLabel;
+    private Runnable reportMonthTicker;
+    private Runnable reportsRefresh;
     private ScrollView patientFormScroll;
     private String currentUser = "";
     private String currentRole = "";
@@ -341,6 +349,8 @@ public class MainActivity extends Activity {
                     }
                     if ("Dashboard".equals(currentPage)) {
                         showDashboard();
+                    } else if ("Reports".equals(currentPage) && reportsRefresh != null) {
+                        reportsRefresh.run();
                     }
                     if (status != null) {
                         status.setText("Online sync active | " + patients.size() + " patient(s) cached | " + lastSyncText);
@@ -632,6 +642,10 @@ public class MainActivity extends Activity {
         if (!"Dashboard".equals(title)) {
             stopDashboardClock();
         }
+        if (!"Reports".equals(title)) {
+            stopReportMonthTicker();
+            reportsRefresh = null;
+        }
         currentPage = title;
         closeProfileMenu();
         content.animate().cancel();
@@ -711,24 +725,55 @@ public class MainActivity extends Activity {
             box.addView(dashboardPreviewState());
             return;
         }
+        box.addView(todaySummaryStrip(today, dueWeek, scheduledWeek, scheduledPending, locked));
         View priorityStrip = todayPriorityStrip(deliveryCompletionDue, scheduledWeek, dueWeek, scheduledPending, followupWeek, edd30);
         if (priorityStrip != null) {
             box.addView(priorityStrip);
         }
         box.addView(section("Today's Work", todayWorkView(scopeWhere, scopeArgs)));
-        box.addView(compactKpiRow(
-                compactKpi("Total", total, "Patients", v -> showScopedPatientList(null, null)),
-                compactKpi("Due Week", dueWeek, "EDD within 7 days", v -> showScopedPatientList(OPEN_EDD_RANGE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
-                compactKpi("Urgent", scheduledWeek, "Scheduled 7 days", v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
-                compactKpi("Complete", deliveryCompletionDue, "Delivery done", v -> showScopedPatientList(DELIVERY_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().toString()})),
-                compactKpi("Calls", scheduledPending, "Scheduled", v -> showScopedPatientList(SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()})),
-                compactKpi("Visits", followupWeek, "Due now", v -> showScopedPatientList(FOLLOWUP_WEEK_WHERE, followupWeekArgs())),
-                compactKpi("Today", today, "New entries", v -> showScopedPatientList("entry_date = ?", new String[]{LocalDate.now().toString()})),
-                compactKpi("Done", locked, "Completed", v -> showScopedPatientList("record_locked = 1", null))
-        ));
         box.addView(verticalGap(4));
         box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
         box.addView(section("Data Quality Alerts", needsAttentionView(scopeWhere, scopeArgs)));
+    }
+
+    private View todaySummaryStrip(int today, int dueWeek, int scheduledWeek, int scheduledPending, int locked) {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, 0, 0, dp(3));
+        row.addView(summaryCard("New Today", today, "Registered", ACCENT, v -> showScopedPatientList("entry_date = ?", new String[]{LocalDate.now().toString()})));
+        row.addView(summaryCard("EDD 7 Days", dueWeek, "Delivery window", WARNING, v -> showScopedPatientList(OPEN_EDD_RANGE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})));
+        row.addView(summaryCard("Scheduled", scheduledWeek, "Doctor date", URGENT, v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})));
+        row.addView(summaryCard("Calls Pending", scheduledPending, "Need call", WARNING, v -> showScopedPatientList(SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()})));
+        row.addView(summaryCard("Completed", locked, "Locked records", PRIMARY, v -> showScopedPatientList("record_locked = 1", null)));
+        scroll.addView(row);
+        return section("Today Summary", scroll);
+    }
+
+    private View summaryCard(String title, int value, String caption, int color, View.OnClickListener click) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(10), dp(8), dp(10), dp(8));
+        box.setBackground(rounded(Color.argb(88, Color.red(color), Color.green(color), Color.blue(color)), dp(12), dp(1), Color.argb(155, Color.red(color), Color.green(color), Color.blue(color))));
+        box.setOnClickListener(click);
+        attachPressAnimation(box, 0.98f);
+        TextView count = label(String.valueOf(value), 24, true);
+        count.setTextColor(color);
+        TextView name = label(title, 12, true);
+        name.setTextColor(PRIMARY_DARK);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        TextView detail = label(caption, 9, true);
+        detail.setTextColor(MUTED);
+        box.addView(count);
+        box.addView(name);
+        box.addView(detail);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(126), -2);
+        lp.setMargins(0, 0, dp(7), dp(3));
+        box.setLayoutParams(lp);
+        animateIn(box);
+        return box;
     }
 
     private View todayPriorityStrip(int deliveryCompletionDue, int scheduledWeek, int dueWeek, int scheduledPending, int followupWeek, int edd30) {
@@ -839,6 +884,36 @@ public class MainActivity extends Activity {
         }
         dashboardClockTicker = null;
         dashboardClock = null;
+    }
+
+    private void startReportMonthTicker(TextView monthLabel, Runnable render) {
+        stopReportMonthTicker();
+        reportMonthLiveLabel = monthLabel;
+        final String[] lastMonth = {""};
+        reportMonthTicker = new Runnable() {
+            @Override
+            public void run() {
+                if (reportMonthLiveLabel == null || !"Reports".equals(currentPage)) {
+                    return;
+                }
+                String currentMonth = YearMonth.now().format(REPORT_MONTH_FMT);
+                reportMonthLiveLabel.setText("Current report month: " + currentMonth + " | Updated " + LocalDateTime.now().format(TIME_FMT));
+                if (!empty(lastMonth[0]) && !lastMonth[0].equals(currentMonth) && render != null) {
+                    render.run();
+                }
+                lastMonth[0] = currentMonth;
+                reportMonthLiveLabel.postDelayed(this, 60000);
+            }
+        };
+        reportMonthTicker.run();
+    }
+
+    private void stopReportMonthTicker() {
+        if (reportMonthLiveLabel != null && reportMonthTicker != null) {
+            reportMonthLiveLabel.removeCallbacks(reportMonthTicker);
+        }
+        reportMonthTicker = null;
+        reportMonthLiveLabel = null;
     }
 
     private View todayFocusBanner(int total, int actionCount) {
@@ -1384,6 +1459,63 @@ public class MainActivity extends Activity {
         box.addView(number);
         box.addView(caption);
         box.addView(underline, lineLp);
+        return box;
+    }
+
+    private View reportOverviewBlock(String title, View... stats) {
+        LinearLayout block = new LinearLayout(this);
+        block.setOrientation(LinearLayout.VERTICAL);
+        block.setPadding(dp(8), dp(7), dp(8), dp(8));
+        block.setBackground(rounded(Color.argb(82, 255, 255, 255), dp(10), dp(1), Color.argb(145, 255, 255, 255)));
+        TextView heading = label(title, 13, true);
+        heading.setTextColor(PRIMARY_DARK);
+        heading.setPadding(0, 0, 0, dp(5));
+        block.addView(heading);
+        block.addView(statGrid(stats));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(7));
+        block.setLayoutParams(lp);
+        return block;
+    }
+
+    private View reportContextLine(String from, String to, String monthLabel) {
+        LinearLayout chips = new LinearLayout(this);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        if (!empty(monthLabel) && !"All Months".equalsIgnoreCase(monthLabel)) {
+            chips.addView(chip("Month: " + monthLabel, ACCENT, Color.WHITE));
+        } else {
+            chips.addView(chip("Month: all", ACCENT, Color.WHITE));
+        }
+        String range = empty(from) && empty(to) ? "Date range: all" : "Date range: " + (empty(from) ? "..." : from) + " to " + (empty(to) ? "..." : to);
+        chips.addView(chip(range, PRIMARY_SOFT, PRIMARY_DARK));
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.addView(chips);
+        return scroll;
+    }
+
+    private View reportHeroMetric(String title, String value, String period, String hint) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setPadding(dp(12), dp(10), dp(12), dp(10));
+        box.setBackground(rounded(Color.argb(132, Color.red(PRIMARY), Color.green(PRIMARY), Color.blue(PRIMARY)), dp(14), dp(1), Color.argb(170, 255, 255, 255)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        TextView t = label(title, 16, true);
+        t.setTextColor(Color.WHITE);
+        TextView h = label(period + " | " + hint, 12, true);
+        h.setTextColor(Color.argb(220, 255, 255, 255));
+        copy.addView(t);
+        copy.addView(h);
+        TextView number = label(value, 35, true);
+        number.setTextColor(Color.WHITE);
+        number.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        box.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        box.addView(number, new LinearLayout.LayoutParams(dp(96), -2));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(8));
+        box.setLayoutParams(lp);
         return box;
     }
 
@@ -1962,10 +2094,16 @@ public class MainActivity extends Activity {
     }
 
     private void showPatientList(boolean adminMode, String extraWhere, String[] extraArgs, boolean alreadyScoped) {
+        showPatientList(adminMode, extraWhere, extraArgs, alreadyScoped, null);
+    }
+
+    private void showPatientList(boolean adminMode, String extraWhere, String[] extraArgs, boolean alreadyScoped, String activeShortcut) {
         setPage(adminMode ? "Patient Management" : "Patient Search");
         boolean fullAccess = adminMode && isAdmin();
         String visibleWhere = fullAccess || alreadyScoped ? extraWhere : scopedWhere(extraWhere);
         String[] visibleArgs = fullAccess || alreadyScoped ? extraArgs : scopedArgs(extraArgs);
+        String shortcutBaseWhere = fullAccess ? null : scopedWhere(null);
+        String[] shortcutBaseArgs = fullAccess ? null : scopedArgs(null);
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         content.addView(page, new LinearLayout.LayoutParams(-1, -1));
@@ -1973,12 +2111,12 @@ public class MainActivity extends Activity {
         search.setHint("Search name, mobile, patient ID, village");
         page.addView(searchPanel(search));
         page.addView(scrollingActions(
-                navButton("Completion Due", v -> showPatientList(adminMode, appendWhere(visibleWhere, DELIVERY_COMPLETION_DUE_WHERE), appendArgs(visibleArgs, LocalDate.now().toString(), LocalDate.now().toString()), true)),
-                navButton("Scheduled", v -> showPatientList(adminMode, appendWhere(visibleWhere, SCHEDULED_WHERE), visibleArgs, true)),
-                navButton("Call Pending", v -> showPatientList(adminMode, appendWhere(visibleWhere, SCHEDULED_CALL_PENDING_WHERE), appendArgs(visibleArgs, LocalDate.now().toString()), true)),
-                navButton("Visit Follow-ups", v -> showPatientList(adminMode, appendWhere(visibleWhere, FOLLOWUP_WEEK_WHERE), appendArgs(visibleArgs, followupWeekArgs()), true)),
-                navButton("EDD 30 Days", v -> showPatientList(adminMode, appendWhere(visibleWhere, OPEN_EDD_RANGE_WHERE), appendArgs(visibleArgs, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()), true)),
-                navButton("Locked", v -> showPatientList(adminMode, appendWhere(visibleWhere, "record_locked = 1"), visibleArgs, true))
+                shortcutButton("Completion Due", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, DELIVERY_COMPLETION_DUE_WHERE), appendArgs(shortcutBaseArgs, LocalDate.now().toString(), LocalDate.now().toString()), true, "Completion Due")),
+                shortcutButton("Scheduled", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, SCHEDULED_WHERE), shortcutBaseArgs, true, "Scheduled")),
+                shortcutButton("Call Pending", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, SCHEDULED_CALL_PENDING_WHERE), appendArgs(shortcutBaseArgs, LocalDate.now().toString()), true, "Call Pending")),
+                shortcutButton("Visit Follow-ups", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, FOLLOWUP_WEEK_WHERE), appendArgs(shortcutBaseArgs, followupWeekArgs()), true, "Visit Follow-ups")),
+                shortcutButton("EDD 30 Days", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, OPEN_EDD_RANGE_WHERE), appendArgs(shortcutBaseArgs, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()), true, "EDD 30 Days")),
+                shortcutButton("Locked", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, "record_locked = 1"), shortcutBaseArgs, true, "Locked"))
         ));
         page.addView(scrollingActions(
                 button("Export CSV", v -> exportPatientsCsv(text(search), visibleWhere, visibleArgs)),
@@ -1991,14 +2129,14 @@ public class MainActivity extends Activity {
         list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        Runnable reload = () -> renderPatientRows(list, db.listPatients(text(search), visibleWhere, visibleArgs), adminMode, visibleWhere);
+        Runnable reload = () -> renderPatientRows(list, db.listPatients(text(search), visibleWhere, visibleArgs), adminMode, visibleWhere, activeShortcut);
         search.addTextChangedListener(simpleWatcher(s -> reload.run()));
         reload.run();
     }
 
-    private void renderPatientRows(LinearLayout list, List<Patient> patients, boolean adminMode, String visibleWhere) {
+    private void renderPatientRows(LinearLayout list, List<Patient> patients, boolean adminMode, String visibleWhere, String activeShortcut) {
         list.removeAllViews();
-        list.addView(searchResultHeader(patients.size()));
+        list.addView(searchResultHeader(patients.size(), activeShortcut));
         if (patients.isEmpty()) {
             list.addView(patientListEmptyState(visibleWhere));
             return;
@@ -2033,24 +2171,52 @@ public class MainActivity extends Activity {
                         showPatientList(true);
                     }));
                 }));
-                rowActions.add(button("Delete", v -> confirmDeletePatient(p)));
             }
             card.addView(scrollingActions(rowActions.toArray(new View[0])));
+            if (adminMode && isAdmin()) {
+                card.addView(adminPatientDeleteControl(p));
+            }
             list.addView(card);
         }
     }
 
-    private View searchResultHeader(int count) {
+    private View adminPatientDeleteControl(Patient p) {
+        LinearLayout control = new LinearLayout(this);
+        control.setOrientation(LinearLayout.HORIZONTAL);
+        control.setGravity(Gravity.CENTER_VERTICAL);
+        control.setPadding(dp(9), dp(7), dp(9), dp(7));
+        control.setBackground(rounded(Color.argb(54, Color.red(URGENT), Color.green(URGENT), Color.blue(URGENT)), dp(10), dp(1), Color.argb(120, Color.red(URGENT), Color.green(URGENT), Color.blue(URGENT))));
+        TextView label = label("Admin Patient Control", 12, true);
+        label.setTextColor(URGENT);
+        Button delete = button("Delete Patient", v -> confirmDeletePatient(db.getPatient(p.id)));
+        control.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
+        control.addView(delete);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, dp(4), 0, 0);
+        control.setLayoutParams(lp);
+        return control;
+    }
+
+    private View searchResultHeader(int count, String activeShortcut) {
         LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.HORIZONTAL);
-        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(10), dp(7), dp(10), dp(7));
         box.setBackground(rounded(Color.argb(88, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(180, 255, 255, 255)));
-        TextView title = label("Search Results", 14, true);
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = label(empty(activeShortcut) ? "Search Results" : "Selected Shortcut", 14, true);
         title.setTextColor(PRIMARY_DARK);
-        TextView countChip = chip(count + " found", count == 0 ? WARNING : ACCENT, Color.WHITE);
-        box.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        box.addView(countChip);
+        TextView countChip = chip(count + (empty(activeShortcut) ? " found" : " available"), count == 0 ? WARNING : ACCENT, Color.WHITE);
+        top.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        top.addView(countChip);
+        box.addView(top);
+        if (!empty(activeShortcut)) {
+            TextView selected = label(activeShortcut, 16, true);
+            selected.setTextColor(PRIMARY);
+            selected.setPadding(0, dp(2), 0, 0);
+            box.addView(selected);
+        }
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(7));
         box.setLayoutParams(lp);
@@ -2700,68 +2866,57 @@ public class MainActivity extends Activity {
         filters.setOrientation(LinearLayout.VERTICAL);
         EditText from = input("");
         EditText to = input("");
-        AutoCompleteTextView villageFilter = auto(list());
-        AutoCompleteTextView statusFilter = auto(list("All", "Open", "Locked"));
+        TextView monthFilter = selectorField("All Months");
+        TextView monthLive = smallText("");
+        monthLive.setTextColor(PRIMARY_DARK);
+        Runnable[] render = new Runnable[1];
         from.setHint("From YYYY-MM-DD");
         to.setHint("To YYYY-MM-DD");
-        villageFilter.setHint("Village");
-        statusFilter.setText("All", false);
         attachDatePicker(from);
         attachDatePicker(to);
-        filters.addView(compactTwoColumn(row("From", from), row("To", to)));
-        filters.addView(compactTwoColumn(row("Village", villageFilter), row("Status", statusFilter)));
+        monthFilter.setOnClickListener(v -> showReportMonthPicker(monthFilter, from, to, render[0]));
+        filters.addView(row("Month", monthFilter));
+        filters.addView(reportTwoColumn(row("From", from), row("To", to)));
 
         LinearLayout reportBody = new LinearLayout(this);
         reportBody.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(reportBody);
 
-        Runnable[] render = new Runnable[1];
+        LinearLayout monthlyNewSlot = new LinearLayout(this);
+        monthlyNewSlot.setOrientation(LinearLayout.VERTICAL);
         render[0] = () -> {
-            if (validateReportFilters(text(from), text(to), text(statusFilter), from, to, statusFilter)) {
-                renderReports(reportBody, text(from), text(to), text(villageFilter), text(statusFilter));
+            if (validateReportFilters(text(from), text(to), text(monthFilter), from, to, monthFilter)) {
+                renderNewPatientThisMonth(monthlyNewSlot);
+                renderReports(reportBody, text(from), text(to), "", "All", REPORT_DATE_ENTRY, text(monthFilter));
             }
         };
-        page.addView(section("Report Actions",
+        reportsRefresh = render[0];
+        startReportMonthTicker(monthLive, render[0]);
+        page.addView(section("Report Controls",
+                monthlyNewSlot,
+                filters,
+                monthLive,
+                smallText("Search and export follow the selected month or date range."),
                 scrollingActions(
-                    button("Apply", v -> render[0].run()),
-                    button("Search", v -> {
-                        if (validateReportFilters(text(from), text(to), text(statusFilter), from, to, statusFilter)) {
-                            openFilteredPatientSearch(text(from), text(to), text(villageFilter), text(statusFilter));
-                        }
-                    }),
-                    button("Excel", v -> {
-                        if (validateReportFilters(text(from), text(to), text(statusFilter), from, to, statusFilter)) {
-                            startFilteredExport(text(from), text(to), text(villageFilter), text(statusFilter), REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-                        }
-                    }),
-                    button("PDF", v -> {
-                        if (validateReportFilters(text(from), text(to), text(statusFilter), from, to, statusFilter)) {
-                            startFilteredExport(text(from), text(to), text(villageFilter), text(statusFilter), REQ_EXPORT_PDF, "patients.pdf", "application/pdf");
-                        }
-                    })
-            )
-        ));
-        page.addView(section("Quick Report Filters",
-                scrollingActions(
-                        navButton("Scheduled only", v -> {
-                            if (validateReportFilters(text(from), text(to), text(statusFilter), from, to, statusFilter)) {
-                                openQuickReportFilter(text(from), text(to), text(villageFilter), text(statusFilter), SCHEDULED_WHERE, null);
+                        button("Apply", v -> render[0].run()),
+                        button("View Records", v -> {
+                            if (validateReportFilters(text(from), text(to), text(monthFilter), from, to, monthFilter)) {
+                                openFilteredPatientSearch(text(from), text(to), "", "All", REPORT_DATE_ENTRY);
                             }
                         }),
-                        navButton("Call pending only", v -> {
-                            if (validateReportFilters(text(from), text(to), text(statusFilter), from, to, statusFilter)) {
-                                openQuickReportFilter(text(from), text(to), text(villageFilter), text(statusFilter), SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()});
+                        button("Excel", v -> {
+                            if (validateReportFilters(text(from), text(to), text(monthFilter), from, to, monthFilter)) {
+                                startFilteredExport(text(from), text(to), "", "All", REPORT_DATE_ENTRY, REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
                             }
                         }),
-                        navButton("Completion due", v -> {
-                            if (validateReportFilters(text(from), text(to), text(statusFilter), from, to, statusFilter)) {
-                                openQuickReportFilter(text(from), text(to), text(villageFilter), text(statusFilter), DELIVERY_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().toString()});
+                        button("PDF", v -> {
+                            if (validateReportFilters(text(from), text(to), text(monthFilter), from, to, monthFilter)) {
+                                startFilteredExport(text(from), text(to), "", "All", REPORT_DATE_ENTRY, REQ_EXPORT_PDF, "patients.pdf", "application/pdf");
                             }
                         })
                 )
         ));
-        page.addView(collapsibleSection("Filters", false, filters));
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         render[0].run();
     }
@@ -2799,15 +2954,12 @@ public class MainActivity extends Activity {
         ));
     }
 
-    private boolean validateReportFilters(String from, String to, String statusName, TextView fromField, TextView toField, TextView statusField) {
-        if (fromField != null) {
-            fromField.setError(null);
-        }
-        if (toField != null) {
-            toField.setError(null);
-        }
-        if (statusField != null) {
-            statusField.setError(null);
+    private boolean validateReportFilters(String from, String to, String monthName, TextView fromField, TextView toField, View monthField) {
+        clearFilterError(fromField);
+        clearFilterError(toField);
+        clearFilterError(monthField);
+        if (!validReportMonth(monthName)) {
+            return showFilterError(monthField, "Select a valid report month");
         }
         if (!empty(from) && !PatientRules.validDate(from)) {
             return showFilterError(fromField, "From date must use YYYY-MM-DD");
@@ -2818,29 +2970,144 @@ public class MainActivity extends Activity {
         if (!empty(from) && !empty(to) && LocalDate.parse(from).isAfter(LocalDate.parse(to))) {
             return showFilterError(fromField, "From date cannot be after To date");
         }
-        String status = value(statusName);
-        if (!empty(status) && !"All".equalsIgnoreCase(status) && !"Open".equalsIgnoreCase(status) && !"Locked".equalsIgnoreCase(status)) {
-            return showFilterError(statusField, "Status must be All, Open, or Locked");
-        }
         return true;
     }
 
-    private boolean showFilterError(TextView field, String message) {
+    private void clearFilterError(View field) {
+        if (field instanceof TextView) {
+            ((TextView) field).setError(null);
+        }
+    }
+
+    private boolean showFilterError(View field, String message) {
         toast(message);
         if (field != null) {
-            field.setError(message);
+            if (field instanceof TextView) {
+                ((TextView) field).setError(message);
+            }
             field.requestFocus();
         }
         return false;
     }
 
-    private void renderReports(LinearLayout page, String from, String to, String village, String statusName) {
+    private String reportDateColumn(String dateType) {
+        String value = value(dateType);
+        if (REPORT_DATE_EDD.equalsIgnoreCase(value)) {
+            return "edd_date";
+        }
+        if (REPORT_DATE_SCHEDULED.equalsIgnoreCase(value)) {
+            return "scheduled_delivery_date";
+        }
+        if (REPORT_DATE_COMPLETED.equalsIgnoreCase(value)) {
+            return "final_visit";
+        }
+        return "entry_date";
+    }
+
+    private String reportDateLabel(String dateType) {
+        String value = value(dateType);
+        if (REPORT_DATE_EDD.equalsIgnoreCase(value)) {
+            return REPORT_DATE_EDD;
+        }
+        if (REPORT_DATE_SCHEDULED.equalsIgnoreCase(value)) {
+            return REPORT_DATE_SCHEDULED;
+        }
+        if (REPORT_DATE_COMPLETED.equalsIgnoreCase(value)) {
+            return "Completed / Final Visit";
+        }
+        return REPORT_DATE_ENTRY;
+    }
+
+    private List<String> reportMonthOptions() {
+        List<String> months = new java.util.ArrayList<>();
+        months.add("All Months");
+        YearMonth month = YearMonth.now();
+        for (int i = 0; i < 18; i++) {
+            months.add(month.minusMonths(i).format(REPORT_MONTH_FMT));
+        }
+        return months;
+    }
+
+    private YearMonth parseReportMonth(String monthName) {
+        String selected = value(monthName);
+        if (empty(selected) || "All Months".equalsIgnoreCase(selected)) {
+            return null;
+        }
+        try {
+            return YearMonth.parse(selected, REPORT_MONTH_FMT);
+        } catch (Exception ignored) {
+            return YearMonth.parse(selected);
+        }
+    }
+
+    private boolean validReportMonth(String monthName) {
+        if (empty(monthName) || "All Months".equalsIgnoreCase(value(monthName))) {
+            return true;
+        }
+        try {
+            parseReportMonth(monthName);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void applyReportMonthSelection(String monthValue, EditText from, EditText to) {
+        String selected = value(monthValue);
+        if (empty(selected) || "All Months".equalsIgnoreCase(selected)) {
+            from.setText("");
+            to.setText("");
+            return;
+        }
+        try {
+            YearMonth month = parseReportMonth(selected);
+            from.setText(month.atDay(1).toString());
+            to.setText(month.atEndOfMonth().toString());
+        } catch (Exception ignored) {
+            toast("Select a valid report month");
+        }
+    }
+
+    private void showReportMonthPicker(TextView monthField, EditText from, EditText to, Runnable render) {
+        List<String> months = reportMonthOptions();
+        new AlertDialog.Builder(this)
+                .setTitle("Select Report Month")
+                .setItems(months.toArray(new String[0]), (dialog, which) -> {
+                    String selected = months.get(which);
+                    monthField.setText(selected);
+                    applyReportMonthSelection(selected, from, to);
+                    if (render != null) {
+                        render.run();
+                    }
+                })
+                .show();
+    }
+
+    private void renderNewPatientThisMonth(LinearLayout slot) {
+        slot.removeAllViews();
+        YearMonth current = YearMonth.now();
+        String where = scopedWhere("entry_date BETWEEN ? AND ?");
+        String[] args = scopedArgs(new String[]{current.atDay(1).toString(), current.atEndOfMonth().toString()});
+        int count = db.countPatients(where, args);
+        slot.addView(reportHeroMetric(
+                "New Patient This Month",
+                String.valueOf(count),
+                current.format(DateTimeFormatter.ofPattern("MMM yyyy", java.util.Locale.US)),
+                "Updates automatically from live sync"
+        ));
+    }
+
+    private void renderReports(LinearLayout page, String from, String to, String village, String statusName, String dateType, String monthLabel) {
         page.removeAllViews();
-        ReportFilter filter = reportWhere(from, to, village, statusName);
+        ReportFilter filter = reportWhere(from, to, village, statusName, dateType);
+        ReportFilter baseFilter = reportWhere("", "", village, statusName, dateType);
         String where = scopedWhere(filter.where);
         String[] args = scopedArgs(filter.args);
+        String baseWhere = scopedWhere(baseFilter.where);
+        String[] baseArgs = scopedArgs(baseFilter.args);
         int total = db.countPatients(where, args);
         int locked = db.countPatients(appendWhere(where, "record_locked = 1"), appendArgs(args));
+        int open = Math.max(0, total - locked);
         int edd30 = db.countPatients(appendWhere(where, OPEN_EDD_RANGE_WHERE), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()));
         int scheduled = db.countPatients(appendWhere(where, SCHEDULED_WHERE), args);
         int scheduledPending = db.countPatients(appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()));
@@ -2848,46 +3115,31 @@ public class MainActivity extends Activity {
         int scheduledNotified = db.countPatients(appendWhere(where, SCHEDULED_WHERE + " AND scheduled_delivery_called_at IS NOT NULL AND scheduled_delivery_called_at != ''"), args);
         int followupWeek = db.countPatients(appendWhere(where, FOLLOWUP_WEEK_WHERE), appendArgs(args, followupWeekArgs()));
         int today = db.countPatients(appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()));
-        page.addView(section("Report Overview",
-                statGrid(
-                        stat("Filtered", total, v -> showPatientList(false, where, args, true)),
-                        stat("Today", today, v -> showPatientList(false, appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()), true)),
-                        stat("EDD 30", edd30, v -> showPatientList(false, appendWhere(where, OPEN_EDD_RANGE_WHERE), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()), true)),
-                        stat("Scheduled", scheduled, v -> showPatientList(false, appendWhere(where, SCHEDULED_WHERE), args, true)),
-                        stat("Call Pending", scheduledPending, v -> showPatientList(false, appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()), true)),
-                        stat("Visit Follow-ups", followupWeek, v -> showPatientList(false, appendWhere(where, FOLLOWUP_WEEK_WHERE), appendArgs(args, followupWeekArgs()), true)),
+        page.addView(section("Priority Overview",
+                reportContextLine(from, to, monthLabel),
+                reportOverviewBlock("Needs Attention",
                         stat("Complete Due", deliveryCompletionDue, v -> showPatientList(false, appendWhere(where, DELIVERY_COMPLETION_DUE_WHERE), appendArgs(args, LocalDate.now().toString(), LocalDate.now().toString()), true)),
-                        stat("Completed", locked, v -> showPatientList(false, appendWhere(where, "record_locked = 1"), args, true))
+                        stat("Call Pending", scheduledPending, v -> showPatientList(false, appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()), true)),
+                        stat("EDD 30", edd30, v -> showPatientList(false, appendWhere(where, OPEN_EDD_RANGE_WHERE), appendArgs(args, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()), true)),
+                        stat("Visit Follow-ups", followupWeek, v -> showPatientList(false, appendWhere(where, FOLLOWUP_WEEK_WHERE), appendArgs(args, followupWeekArgs()), true))
+                ),
+                reportOverviewBlock("Patient Records",
+                        stat("Total Registered", total, v -> showPatientList(false, where, args, true)),
+                        stat("Open", open, v -> showPatientList(false, appendWhere(where, "record_locked = 0"), args, true)),
+                        stat("Completed", locked, v -> showPatientList(false, appendWhere(where, "record_locked = 1"), args, true)),
+                        stat("Today", today, v -> showPatientList(false, appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()), true))
                 )
         ));
-        page.addView(section("Active Filters", reportFilterSummary(from, to, village, statusName)));
-        page.addView(section("Scheduled Delivery Report",
-                progressRow("Notified", scheduledNotified, scheduled, scheduled == 0 ? 0 : Math.round(scheduledNotified * 100f / scheduled)),
-                progressRow("Call pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled)),
-                progressRow("Completion due", deliveryCompletionDue, total, total == 0 ? 0 : Math.round(deliveryCompletionDue * 100f / total)),
-                scrollingActions(
-                        navButton("Scheduled Records", v -> showPatientList(false, appendWhere(where, SCHEDULED_WHERE), args, true)),
-                        navButton("Pending Calls", v -> showPatientList(false, appendWhere(where, SCHEDULED_CALL_PENDING_WHERE), appendArgs(args, LocalDate.now().toString()), true)),
-                        navButton("Completion Due", v -> showPatientList(false, appendWhere(where, DELIVERY_COMPLETION_DUE_WHERE), appendArgs(args, LocalDate.now().toString(), LocalDate.now().toString()), true)),
-                        button("Export Excel", v -> startExport("", appendWhere(where, SCHEDULED_WHERE), args, REQ_EXPORT_EXCEL, "scheduled_delivery.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                        button("Export PDF", v -> startExport("", appendWhere(where, SCHEDULED_WHERE), args, REQ_EXPORT_PDF, "scheduled_delivery.pdf", "application/pdf"))
-                )
-        ));
-        page.addView(section("Report Snapshot",
-                progressRow("Open records", Math.max(0, total - locked), total, total == 0 ? 0 : Math.round((total - locked) * 100f / total)),
-                progressRow("Locked records", locked, total, total == 0 ? 0 : Math.round(locked * 100f / total)),
-                progressRow("EDD within 30 days", edd30, total, total == 0 ? 0 : Math.round(edd30 * 100f / total)),
-                progressRow("Visit follow-ups due", followupWeek, total, total == 0 ? 0 : Math.round(followupWeek * 100f / total)),
-                progressRow("Scheduled delivery", scheduled, total, total == 0 ? 0 : Math.round(scheduled * 100f / total)),
-                progressRow("Scheduled calls pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled)),
-                progressRow("Delivery completion due", deliveryCompletionDue, total, total == 0 ? 0 : Math.round(deliveryCompletionDue * 100f / total))
-        ));
+        page.addView(registrationTrendChart(baseWhere, baseArgs));
         if (total == 0) {
             page.addView(section("Report Result", emptyActionState("No records match these filters", "Change the filters or create a patient record first.", "New Patient", v -> showPatientForm(null))));
             return;
         }
-        page.addView(section("Scheduled Delivery Access", scheduledDeliveryView(where, args)));
-        page.addView(section("Visit Follow-up Access", followupWeekView(where, args)));
+        page.addView(section("Scheduled Delivery",
+                progressRow("Patient notified", scheduledNotified, scheduled, scheduled == 0 ? 0 : Math.round(scheduledNotified * 100f / scheduled)),
+                progressRow("Call pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled)),
+                progressRow("Completion due", deliveryCompletionDue, total, total == 0 ? 0 : Math.round(deliveryCompletionDue * 100f / total))
+        ));
         LinearLayout visits = new LinearLayout(this);
         visits.setOrientation(LinearLayout.VERTICAL);
         for (String[] row : db.visitCompletionRows(where, args)) {
@@ -2895,33 +3147,21 @@ public class MainActivity extends Activity {
             int pct = total == 0 ? 0 : Math.round(done * 100f / total);
             visits.addView(progressRow(row[0], done, total, pct));
         }
-        page.addView(section("Visit Date Tracking", visits));
-        page.addView(reportMap("Patients by Village", db.countBy("village_name", where, args)));
-        page.addView(reportMap("Monthly Summary", monthlySummary(where, args)));
+        page.addView(section("Visit Progress", visits));
+        page.addView(villageSummaryView(where, args));
+        page.addView(monthlySummaryView(baseWhere, baseArgs, dateType));
     }
 
-    private View reportFilterSummary(String from, String to, String village, String statusName) {
-        LinearLayout chips = new LinearLayout(this);
-        chips.setOrientation(LinearLayout.HORIZONTAL);
-        chips.addView(chip(empty(from) ? "From: any" : "From: " + from, PRIMARY_SOFT, PRIMARY_DARK));
-        chips.addView(chip(empty(to) ? "To: any" : "To: " + to, PRIMARY_SOFT, PRIMARY_DARK));
-        chips.addView(chip(empty(village) ? "Village: all" : "Village: " + village, PRIMARY_SOFT, PRIMARY_DARK));
-        chips.addView(chip(empty(statusName) ? "Status: All" : "Status: " + statusName, PRIMARY_SOFT, PRIMARY_DARK));
-        HorizontalScrollView scroll = new HorizontalScrollView(this);
-        scroll.setHorizontalScrollBarEnabled(false);
-        scroll.addView(chips);
-        return scroll;
-    }
-
-    private ReportFilter reportWhere(String from, String to, String village, String statusName) {
+    private ReportFilter reportWhere(String from, String to, String village, String statusName, String dateType) {
         List<String> clauses = new java.util.ArrayList<>();
         List<String> args = new java.util.ArrayList<>();
+        String dateColumn = reportDateColumn(dateType);
         if (!empty(from)) {
-            clauses.add("entry_date >= ?");
+            clauses.add(dateColumn + " >= ?");
             args.add(from);
         }
         if (!empty(to)) {
-            clauses.add("entry_date <= ?");
+            clauses.add(dateColumn + " <= ?");
             args.add(to);
         }
         if (!empty(village)) {
@@ -2936,14 +3176,9 @@ public class MainActivity extends Activity {
         return new ReportFilter(clauses.isEmpty() ? null : String.join(" AND ", clauses), args);
     }
 
-    private void openFilteredPatientSearch(String from, String to, String village, String statusName) {
-        ReportFilter filter = reportWhere(from, to, village, statusName);
-        showPatientList(false, filter.where, filter.args);
-    }
-
-    private void openQuickReportFilter(String from, String to, String village, String statusName, String extraWhere, String[] extraArgs) {
-        ReportFilter filter = reportWhere(from, to, village, statusName);
-        showPatientList(false, appendWhere(scopedWhere(filter.where), extraWhere), appendArgs(scopedArgs(filter.args), extraArgs), true);
+    private void openFilteredPatientSearch(String from, String to, String village, String statusName, String dateType) {
+        ReportFilter filter = reportWhere(from, to, village, statusName, dateType);
+        showPatientList(false, scopedWhere(filter.where), scopedArgs(filter.args), true);
     }
 
     private String appendWhere(String where, String extra) {
@@ -2983,30 +3218,129 @@ public class MainActivity extends Activity {
         showPatientList(false, where, args);
     }
 
-    private Map<String, Integer> monthlySummary(String where, String[] args) {
+    private Map<String, Integer> monthlySummary(String where, String[] args, String dateType) {
         java.util.LinkedHashMap<String, Integer> rows = new java.util.LinkedHashMap<>();
         YearMonth month = YearMonth.now().minusMonths(11);
+        String dateColumn = reportDateColumn(dateType);
         for (int i = 0; i < 12; i++) {
-            String prefix = month.plusMonths(i).toString();
-            rows.put(prefix, db.countPatients(appendWhere(where, "entry_date LIKE ?"), appendArgs(args, prefix + "%")));
+            YearMonth current = month.plusMonths(i);
+            rows.put(current.toString(), db.countPatients(
+                    appendWhere(where, dateColumn + " BETWEEN ? AND ?"),
+                    appendArgs(args, current.atDay(1).toString(), current.atEndOfMonth().toString())
+            ));
         }
         return rows;
     }
 
-    private View reportMap(String title, Map<String, Integer> rows) {
+    private View monthlySummaryView(String baseWhere, String[] baseArgs, String dateType) {
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.addView(smallText("Monthly rows use " + reportDateLabel(dateType) + ". Tap a month to open the matching records."));
+        Map<String, Integer> rows = monthlySummary(baseWhere, baseArgs, dateType);
+        int max = 1;
+        for (Integer value : rows.values()) {
+            max = Math.max(max, value);
+        }
+        String dateColumn = reportDateColumn(dateType);
+        for (Map.Entry<String, Integer> row : rows.entrySet()) {
+            String monthKey = row.getKey();
+            int value = row.getValue();
+            LinearLayout monthRow = clickableProgressRow(reportMonthLabel(monthKey), value, max, Math.round(value * 100f / max));
+            monthRow.setOnClickListener(v -> {
+                YearMonth month = YearMonth.parse(monthKey);
+                String monthWhere = appendWhere(baseWhere, dateColumn + " BETWEEN ? AND ?");
+                String[] monthArgs = appendArgs(baseArgs, month.atDay(1).toString(), month.atEndOfMonth().toString());
+                showPatientList(false, monthWhere, monthArgs, true);
+            });
+            body.addView(monthRow);
+        }
+        return section("Monthly Summary", body);
+    }
+
+    private String reportMonthLabel(String monthKey) {
+        try {
+            return YearMonth.parse(monthKey).format(REPORT_MONTH_FMT);
+        } catch (Exception ignored) {
+            return value(monthKey);
+        }
+    }
+
+    private View registrationTrendChart(String baseWhere, String[] baseArgs) {
+        Map<String, Integer> rows = monthlySummary(baseWhere, baseArgs, REPORT_DATE_ENTRY);
+        int max = 1;
+        for (Integer value : rows.values()) {
+            max = Math.max(max, value);
+        }
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout chart = new LinearLayout(this);
+        chart.setOrientation(LinearLayout.HORIZONTAL);
+        chart.setGravity(Gravity.BOTTOM);
+        chart.setPadding(0, dp(4), 0, dp(2));
+        for (Map.Entry<String, Integer> row : rows.entrySet()) {
+            chart.addView(trendBar(row.getKey(), row.getValue(), max));
+        }
+        scroll.addView(chart);
+        return section("Registration Trend", smallText("New patient registrations by month."), scroll);
+    }
+
+    private View trendBar(String monthKey, int count, int max) {
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        column.setPadding(dp(4), 0, dp(4), 0);
+        TextView number = label(String.valueOf(count), 11, true);
+        number.setTextColor(PRIMARY_DARK);
+        number.setGravity(Gravity.CENTER);
+        int height = dp(18 + Math.round((count * 54f) / Math.max(1, max)));
+        TextView bar = new TextView(this);
+        bar.setBackground(rounded(count == 0 ? PRIMARY_SOFT : ACCENT, dp(6), 0, count == 0 ? PRIMARY_SOFT : ACCENT));
+        TextView month = label(shortMonthLabel(monthKey), 10, true);
+        month.setTextColor(MUTED);
+        month.setGravity(Gravity.CENTER);
+        column.addView(number, new LinearLayout.LayoutParams(-1, dp(18)));
+        column.addView(bar, new LinearLayout.LayoutParams(dp(26), height));
+        column.addView(month, new LinearLayout.LayoutParams(-1, dp(20)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(54), dp(104));
+        lp.setMargins(0, 0, dp(4), 0);
+        column.setLayoutParams(lp);
+        return column;
+    }
+
+    private String shortMonthLabel(String monthKey) {
+        try {
+            return YearMonth.parse(monthKey).format(DateTimeFormatter.ofPattern("MMM", java.util.Locale.US));
+        } catch (Exception ignored) {
+            return value(monthKey);
+        }
+    }
+
+    private View villageSummaryView(String where, String[] args) {
+        Map<String, Integer> rows = db.countBy("village_name", where, args);
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
         if (rows.isEmpty()) {
-            body.addView(emptyState("No data", "Records will appear here after matching patients are saved."));
+            body.addView(emptyState("No data", "Village totals will appear after matching patients are saved."));
+            return section("Patients by Village", body);
         }
         int max = 1;
         for (Integer value : rows.values()) {
             max = Math.max(max, value);
         }
         for (Map.Entry<String, Integer> row : rows.entrySet()) {
-            body.addView(progressRow(row.getKey(), row.getValue(), max, Math.round(row.getValue() * 100f / max)));
+            String village = value(row.getKey());
+            int count = row.getValue();
+            LinearLayout item = clickableProgressRow("-".equals(village) || empty(village) ? "Unknown Village" : village, count, max, Math.round(count * 100f / max));
+            item.setOnClickListener(v -> {
+                if ("-".equals(village) || empty(village)) {
+                    showPatientList(false, appendWhere(where, "village_name IS NULL OR village_name = ''"), args, true);
+                } else {
+                    showPatientList(false, appendWhere(where, "village_name = ?"), appendArgs(args, village), true);
+                }
+            });
+            body.addView(item);
         }
-        return section(title, body);
+        return section("Patients by Village", body);
     }
 
     private void showBackup() {
@@ -3061,8 +3395,8 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void startFilteredExport(String from, String to, String village, String statusName, int requestCode, String fileName, String mimeType) {
-        ReportFilter filter = reportWhere(from, to, village, statusName);
+    private void startFilteredExport(String from, String to, String village, String statusName, String dateType, int requestCode, String fileName, String mimeType) {
+        ReportFilter filter = reportWhere(from, to, village, statusName, dateType);
         pendingExportFilter = "";
         pendingExportWhere = scopedWhere(filter.where);
         pendingExportArgs = scopedArgs(filter.args);
@@ -4203,6 +4537,19 @@ public class MainActivity extends Activity {
         return row;
     }
 
+    private LinearLayout reportTwoColumn(View left, View right) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.TOP);
+        LinearLayout.LayoutParams leftLp = new LinearLayout.LayoutParams(0, -2, 1);
+        leftLp.setMargins(0, 0, dp(4), 0);
+        LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(0, -2, 1);
+        rightLp.setMargins(dp(4), 0, 0, 0);
+        row.addView(left, leftLp);
+        row.addView(right, rightLp);
+        return row;
+    }
+
     private View scrollingActions(View... actions) {
         HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -4320,6 +4667,46 @@ public class MainActivity extends Activity {
         meter.addView(new TextView(this), restLp);
         box.addView(label);
         box.addView(meter);
+        return box;
+    }
+
+    private LinearLayout clickableProgressRow(String title, int done, int total, int pct) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(10), dp(8), dp(10), dp(8));
+        box.setBackground(rounded(Color.argb(92, 255, 255, 255), dp(10), dp(1), Color.argb(160, 255, 255, 255)));
+        attachPressAnimation(box, 0.98f);
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        TextView label = label(title, 14, true);
+        label.setTextColor(PRIMARY_DARK);
+        TextView count = label(done + " record(s)", 13, true);
+        count.setTextColor(ACCENT);
+        count.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        TextView arrow = label(">", 17, true);
+        arrow.setTextColor(PRIMARY);
+        arrow.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        top.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
+        top.addView(count, new LinearLayout.LayoutParams(dp(104), -2));
+        top.addView(arrow, new LinearLayout.LayoutParams(dp(22), -2));
+        LinearLayout fill = new LinearLayout(this);
+        fill.setBackground(rounded(ACCENT, dp(4), 0, ACCENT));
+        LinearLayout.LayoutParams fillLp = new LinearLayout.LayoutParams(0, dp(6), Math.max(1, pct));
+        LinearLayout.LayoutParams restLp = new LinearLayout.LayoutParams(0, dp(6), Math.max(1, 100 - pct));
+        LinearLayout meter = new LinearLayout(this);
+        meter.setOrientation(LinearLayout.HORIZONTAL);
+        meter.setBackground(rounded(PRIMARY_SOFT, dp(4), 0, PRIMARY_SOFT));
+        meter.addView(fill, fillLp);
+        meter.addView(new TextView(this), restLp);
+        TextView detail = smallText(pct + "% of highest row");
+        detail.setTextColor(MUTED);
+        box.addView(top);
+        box.addView(detail);
+        box.addView(meter);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(6));
+        box.setLayoutParams(lp);
         return box;
     }
 
@@ -4496,6 +4883,19 @@ public class MainActivity extends Activity {
         return view;
     }
 
+    private TextView selectorField(String value) {
+        TextView view = label(value, 16, true);
+        view.setTextColor(TEXT);
+        view.setGravity(Gravity.CENTER_VERTICAL);
+        view.setBackground(glassInput(false));
+        view.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
+        view.setSingleLine(true);
+        view.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        view.setClickable(true);
+        attachPressAnimation(view, 0.98f);
+        return view;
+    }
+
     private Spinner spinner(List<String> values, String placeholder, String prompt) {
         Spinner view = new Spinner(this);
         List<String> options = new java.util.ArrayList<>();
@@ -4533,6 +4933,16 @@ public class MainActivity extends Activity {
         b.setTextColor(PRIMARY);
         b.setBackground(rounded(PRIMARY_SOFT, dp(BUTTON_RADIUS), dp(1), Color.rgb(184, 207, 225)));
         b.setElevation(dp(1));
+        return b;
+    }
+
+    private Button shortcutButton(String text, String activeShortcut, View.OnClickListener listener) {
+        Button b = navButton(text, listener);
+        if (text.equals(activeShortcut)) {
+            b.setTextColor(Color.WHITE);
+            b.setBackground(gradient(PRIMARY, ACCENT, dp(BUTTON_RADIUS)));
+            b.setElevation(dp(3));
+        }
         return b;
     }
 
