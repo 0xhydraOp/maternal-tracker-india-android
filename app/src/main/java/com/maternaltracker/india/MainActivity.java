@@ -6,6 +6,7 @@ import android.annotation.SuppressLint;
 import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.graphics.Paint;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -13,6 +14,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.InputFilter;
@@ -29,10 +31,13 @@ import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.core.content.FileProvider;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -49,6 +54,8 @@ import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
+import java.security.MessageDigest;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -57,10 +64,10 @@ import org.json.JSONObject;
 
 @SuppressLint("SetTextI18n")
 public class MainActivity extends Activity {
-    private static final int BG_TOP = Color.rgb(202, 235, 255);
-    private static final int BG_BOTTOM = Color.rgb(239, 252, 255);
-    private static final int SURFACE = Color.argb(224, 255, 255, 255);
-    private static final int SURFACE_ALT = Color.argb(176, 255, 255, 255);
+    private static final int BG_TOP = Color.rgb(225, 243, 251);
+    private static final int BG_BOTTOM = Color.rgb(244, 251, 254);
+    private static final int SURFACE = Color.rgb(255, 255, 255);
+    private static final int SURFACE_ALT = Color.rgb(244, 250, 253);
     private static final int SURFACE_WARM = Color.rgb(255, 252, 247);
     private static final int PRIMARY = Color.rgb(7, 84, 117);
     private static final int PRIMARY_DARK = Color.rgb(7, 59, 92);
@@ -71,17 +78,18 @@ public class MainActivity extends Activity {
     private static final int SLATE = Color.rgb(71, 85, 105);
     private static final int TEXT = Color.rgb(23, 43, 58);
     private static final int MUTED = Color.rgb(100, 116, 139);
-    private static final int BORDER = Color.argb(210, 255, 255, 255);
+    private static final int BORDER = Color.rgb(205, 224, 234);
     private static final int ALERT_INFO_BG = Color.rgb(237, 250, 247);
     private static final int ALERT_WARN_BG = Color.rgb(255, 248, 237);
     private static final int SPACE_XS = 4;
     private static final int SPACE_SM = 8;
-    private static final int SPACE_MD = 10;
-    private static final int SPACE_LG = 14;
-    private static final int CARD_RADIUS = 12;
-    private static final int CARD_GAP = 8;
-    private static final int BUTTON_RADIUS = 10;
-    private static final int BUTTON_HEIGHT = 44;
+    private static final int SPACE_MD = 12;
+    private static final int SPACE_LG = 16;
+    private static final int SPACE_XL = 24;
+    private static final int CARD_RADIUS = 8;
+    private static final int CARD_GAP = 10;
+    private static final int BUTTON_RADIUS = 8;
+    private static final int BUTTON_HEIGHT = 48;
     private static final int CHIP_RADIUS = 14;
     private static final int CHIP_PAD_X = 10;
     private static final int CHIP_PAD_Y = 5;
@@ -112,7 +120,6 @@ public class MainActivity extends Activity {
     private static final String REPORT_DATE_EDD = "EDD Date";
     private static final String REPORT_DATE_SCHEDULED = "Scheduled Delivery";
     private static final String REPORT_DATE_COMPLETED = "Completed / Locked";
-    private static final String UPDATE_RELEASES_URL = "https://github.com/0xhydraOp/maternal-tracker-india-android/releases/latest";
 
     private MaternalDbHelper db;
     private FirebaseGateway firebase;
@@ -305,7 +312,7 @@ public class MainActivity extends Activity {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(gradient(BG_TOP, BG_BOTTOM, dp(0)));
-        root.setPadding(dp(10), topSafeInset() + dp(8), dp(10), bottomSafeInset() + dp(8));
+        root.setPadding(dp(8), topSafeInset() + dp(6), dp(8), bottomSafeInset() + dp(6));
         setContentView(root);
 
         root.addView(header());
@@ -324,15 +331,15 @@ public class MainActivity extends Activity {
         status.setSingleLine(true);
         status.setEllipsize(android.text.TextUtils.TruncateAt.END);
         status.setGravity(Gravity.CENTER_VERTICAL);
-        status.setPadding(dp(8), dp(2), dp(8), dp(2));
+        status.setPadding(dp(8), dp(1), dp(8), dp(1));
         root.addView(status);
         bottomNav = new LinearLayout(this);
         bottomNav.setOrientation(LinearLayout.HORIZONTAL);
         bottomNav.setGravity(Gravity.CENTER);
-        bottomNav.setBackground(glassPanel(dp(CARD_RADIUS)));
-        bottomNav.setElevation(dp(4));
-        bottomNav.setPadding(dp(3), dp(3), dp(3), dp(3));
-        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(50)));
+        bottomNav.setBackground(rounded(Color.WHITE, dp(CARD_RADIUS), dp(1), BORDER));
+        bottomNav.setElevation(dp(3));
+        bottomNav.setPadding(dp(4), dp(4), dp(4), dp(4));
+        root.addView(bottomNav, new LinearLayout.LayoutParams(-1, dp(58)));
         rebuildBottomNav();
     }
 
@@ -381,58 +388,49 @@ public class MainActivity extends Activity {
     private View header() {
         LinearLayout box = card(PRIMARY_DARK, 0, PRIMARY_DARK);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackground(gradient(PRIMARY_DARK, ACCENT, dp(CARD_RADIUS)));
-        box.setPadding(dp(SPACE_MD), dp(7), dp(SPACE_MD), dp(7));
+        box.setBackground(gradient(PRIMARY_DARK, PRIMARY, dp(CARD_RADIUS)));
+        box.setPadding(dp(SPACE_MD), dp(8), dp(SPACE_MD), dp(8));
 
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
 
-        TextView mark = label("BBH", 12, true);
+        TextView mark = label("BBH", 11, true);
         mark.setTextColor(PRIMARY_DARK);
         mark.setGravity(Gravity.CENTER);
         mark.setBackground(rounded(Color.WHITE, dp(18), 0, Color.WHITE));
+        mark.setContentDescription("Open profile menu");
         mark.setOnClickListener(v -> toggleProfileMenu());
-        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(32), dp(32));
-        markLp.setMargins(0, 0, dp(8), 0);
-        top.addView(mark, markLp);
+        attachPressAnimation(mark, 0.94f);
+        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(36), dp(36));
+        markLp.setMargins(dp(8), 0, 0, 0);
+
+        backButton = label("<", 20, true);
+        backButton.setTextColor(Color.WHITE);
+        backButton.setGravity(Gravity.CENTER);
+        backButton.setContentDescription("Back");
+        backButton.setBackground(rounded(Color.argb(38, 255, 255, 255), dp(BUTTON_RADIUS), 0, Color.TRANSPARENT));
+        backButton.setVisibility(View.GONE);
+        backButton.setOnClickListener(v -> goBackInApp());
+        attachPressAnimation(backButton, 0.94f);
+        top.addView(backButton, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        TextView hospital = label(HOSPITAL_NAME, 14, true);
+        TextView hospital = label(HOSPITAL_NAME, 13, true);
         hospital.setTextColor(Color.WHITE);
         hospital.setSingleLine(true);
-        headerTitle = label("Dashboard", 13, true);
+        headerTitle = label("Dashboard", 11, true);
         headerTitle.setTextColor(Color.WHITE);
         headerTitle.setAlpha(0.9f);
         titles.addView(hospital);
         titles.addView(headerTitle);
 
         top.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
-        backButton = chip("Back", Color.argb(45, 255, 255, 255), Color.WHITE);
-        backButton.setVisibility(View.GONE);
-        backButton.setOnClickListener(v -> goBackInApp());
-        top.addView(backButton);
-
-        TextView logout = chip("Exit", Color.argb(45, 255, 255, 255), Color.WHITE);
-        logout.setOnClickListener(v -> {
-            firebase.signOut();
-            currentUser = "";
-            currentRole = "";
-            showLogin();
-        });
-        top.addView(logout);
+        syncBadge = chip("SYNCING", Color.argb(58, 255, 255, 255), Color.WHITE);
+        top.addView(syncBadge);
+        top.addView(mark, markLp);
         box.addView(top);
-
-        LinearLayout meta = new LinearLayout(this);
-        meta.setOrientation(LinearLayout.HORIZONTAL);
-        meta.setGravity(Gravity.CENTER_VERTICAL);
-        meta.setPadding(0, dp(3), 0, 0);
-        meta.addView(new TextView(this), new LinearLayout.LayoutParams(0, 1, 1));
-        meta.addView(chip(currentRole, Color.argb(45, 255, 255, 255), Color.WHITE));
-        syncBadge = chip("SYNCING", WARNING, Color.WHITE);
-        meta.addView(syncBadge);
-        box.addView(meta);
         return box;
     }
 
@@ -471,7 +469,7 @@ public class MainActivity extends Activity {
         actions.addView(menuItem("Reports", "Review scheduled, EDD, and village data", SLATE, v -> showReports()));
         actions.addView(menuItem("Export Center", "Create Excel and PDF outputs", PRIMARY_DARK, v -> showExportCenter()));
         actions.addView(menuGroupTitle("System"));
-        actions.addView(menuItem("Check for Updates", "Install the newest app release", WARNING, v -> checkForAppUpdate()));
+        actions.addView(menuItem("Update Center", "Download and install updates inside the app", WARNING, v -> showUpdateCenter()));
         if (isAdmin()) {
             actions.addView(menuItem("Administration", "Manage users and reference data", PRIMARY, v -> showAdmin()));
             actions.addView(menuItem("Patient Recovery", "Restore accidentally deleted records", WARNING, v -> showPatientRecovery()));
@@ -711,14 +709,9 @@ public class MainActivity extends Activity {
         int dueWeek = db.countPatients(appendWhere(scopeWhere, OPEN_EDD_RANGE_WHERE), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
         int scheduledPending = db.countPatients(appendWhere(scopeWhere, SCHEDULED_CALL_PENDING_WHERE), appendArgs(scopeArgs, LocalDate.now().toString()));
         int scheduledWeek = db.countPatients(appendWhere(scopeWhere, SCHEDULED_WEEK_WHERE), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()));
-        int deliveryCompletionDue = db.countPatients(appendWhere(scopeWhere, DELIVERY_COMPLETION_DUE_WHERE), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().toString()));
-        int edd30 = db.countPatients(appendWhere(scopeWhere, OPEN_EDD_RANGE_WHERE), appendArgs(scopeArgs, LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()));
         int locked = db.countPatients(appendWhere(scopeWhere, "record_locked = 1"), scopeArgs);
-        int followupWeek = db.countPatients(appendWhere(scopeWhere, FOLLOWUP_WEEK_WHERE), appendArgs(scopeArgs, followupWeekArgs()));
-        int todayFocus = deliveryCompletionDue + scheduledWeek + dueWeek + followupWeek;
         box.setPadding(0, 0, 0, dp(8));
         box.addView(dashboardStatusStrip(total));
-        box.addView(todayFocusBanner(total, todayFocus));
         if (total == 0) {
             box.addView(zeroDashboardWorkspace());
             box.addView(operationalChecklist());
@@ -727,11 +720,7 @@ public class MainActivity extends Activity {
             return;
         }
         box.addView(todaySummaryStrip(today, dueWeek, scheduledWeek, scheduledPending, locked));
-        View priorityStrip = todayPriorityStrip(deliveryCompletionDue, scheduledWeek, dueWeek, scheduledPending, followupWeek, edd30);
-        if (priorityStrip != null) {
-            box.addView(priorityStrip);
-        }
-        box.addView(section("Today's Work", todayWorkView(scopeWhere, scopeArgs)));
+        box.addView(section("Priority Work", todayWorkView(scopeWhere, scopeArgs)));
         box.addView(verticalGap(4));
         box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
         box.addView(section("Data Quality Alerts", needsAttentionView(scopeWhere, scopeArgs)));
@@ -755,8 +744,8 @@ public class MainActivity extends Activity {
     private View summaryCard(String title, int value, String caption, int color, View.OnClickListener click) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(10), dp(8), dp(10), dp(8));
-        box.setBackground(rounded(Color.argb(88, Color.red(color), Color.green(color), Color.blue(color)), dp(12), dp(1), Color.argb(155, Color.red(color), Color.green(color), Color.blue(color))));
+        box.setPadding(dp(12), dp(10), dp(12), dp(10));
+        box.setBackground(rounded(Color.WHITE, dp(CARD_RADIUS), dp(1), Color.argb(125, Color.red(color), Color.green(color), Color.blue(color))));
         box.setOnClickListener(click);
         attachPressAnimation(box, 0.98f);
         TextView count = label(String.valueOf(value), 24, true);
@@ -770,39 +759,11 @@ public class MainActivity extends Activity {
         box.addView(count);
         box.addView(name);
         box.addView(detail);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(126), -2);
-        lp.setMargins(0, 0, dp(7), dp(3));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(132), -2);
+        lp.setMargins(0, 0, dp(8), dp(3));
         box.setLayoutParams(lp);
         animateIn(box);
         return box;
-    }
-
-    private View todayPriorityStrip(int deliveryCompletionDue, int scheduledWeek, int dueWeek, int scheduledPending, int followupWeek, int edd30) {
-        HorizontalScrollView scroll = new HorizontalScrollView(this);
-        scroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, 0, 0, dp(4));
-        int shown = 0;
-        shown += addFocusCardIf(row, "Complete", deliveryCompletionDue, "Delivery date passed", URGENT, v -> showScopedPatientList(DELIVERY_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().toString()}));
-        shown += addFocusCardIf(row, "Highest", scheduledWeek, "Scheduled delivery in 7 days", URGENT, v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
-        shown += addFocusCardIf(row, "Visits", followupWeek, "Due or next 7 days", WARNING, v -> showScopedPatientList(FOLLOWUP_WEEK_WHERE, followupWeekArgs()));
-        shown += addFocusCardIf(row, "EDD Week", dueWeek, "Delivery dates in 7 days", WARNING, v -> showScopedPatientList(OPEN_EDD_RANGE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}));
-        shown += addFocusCardIf(row, "Call Pending", scheduledPending, "Scheduled delivery calls", ACCENT, v -> showScopedPatientList(SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()}));
-        shown += addFocusCardIf(row, "EDD 30", edd30, "Next 30 days", PRIMARY, v -> showScopedPatientList(OPEN_EDD_RANGE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(30).toString()}));
-        if (shown == 0) {
-            return null;
-        }
-        scroll.addView(row);
-        return section("Today at a Glance", scroll);
-    }
-
-    private int addFocusCardIf(LinearLayout row, String title, int value, String caption, int color, View.OnClickListener click) {
-        if (value <= 0) {
-            return 0;
-        }
-        row.addView(focusCard(title, value, caption, color, click));
-        return 1;
     }
 
     private View focusCard(String title, int value, String caption, int color, View.OnClickListener click) {
@@ -810,7 +771,7 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setOnClickListener(click);
         attachPressAnimation(box, 0.98f);
-        box.setPadding(dp(10), dp(8), dp(10), dp(8));
+        box.setPadding(dp(12), dp(10), dp(12), dp(10));
         box.setBackground(rounded(Color.argb(76, Color.red(color), Color.green(color), Color.blue(color)), dp(12), dp(1), Color.argb(145, Color.red(color), Color.green(color), Color.blue(color))));
         TextView count = label(String.valueOf(value), 24, true);
         count.setTextColor(color);
@@ -831,25 +792,25 @@ public class MainActivity extends Activity {
     private View dashboardStatusStrip(int total) {
         stopDashboardClock();
         LinearLayout box = card();
-        box.setPadding(dp(10), dp(8), dp(10), dp(8));
+        box.setPadding(dp(12), dp(10), dp(12), dp(10));
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = label(isAdmin() ? "Hospital Overview" : "Your Follow-up Work", 14, true);
+        TextView title = label(isAdmin() ? "Hospital Overview" : "My Work Overview", 15, true);
         title.setTextColor(PRIMARY_DARK);
         dashboardClock = label("", 11, true);
         dashboardClock.setTextColor(PRIMARY_DARK);
         dashboardClock.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         dashboardClock.setPadding(dp(8), 0, 0, 0);
-        TextView context = label(isAdmin() ? "Admin view: all Blue Bird records" : "Staff view: records created by you", 11, false);
+        TextView context = label(isAdmin() ? "All Blue Bird maternal records" : "Records assigned to this account", 11, false);
         context.setTextColor(MUTED);
         context.setPadding(0, dp(1), 0, dp(3));
         HorizontalScrollView chipScroll = new HorizontalScrollView(this);
         chipScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
-        chips.addView(chip(DEFAULT_DISTRICT, Color.WHITE, PRIMARY_DARK));
-        chips.addView(chip(DEFAULT_STATE, Color.WHITE, PRIMARY_DARK));
+        chips.addView(chip(DEFAULT_DISTRICT, PRIMARY_SOFT, PRIMARY_DARK));
+        chips.addView(chip(DEFAULT_STATE, PRIMARY_SOFT, PRIMARY_DARK));
         chips.addView(chip(total + " records", ACCENT, Color.WHITE));
         chips.addView(chip(lastSyncText, PRIMARY_SOFT, PRIMARY_DARK));
         chipScroll.addView(chips);
@@ -915,21 +876,6 @@ public class MainActivity extends Activity {
         }
         reportMonthTicker = null;
         reportMonthLiveLabel = null;
-    }
-
-    private View todayFocusBanner(int total, int actionCount) {
-        LinearLayout box = card(actionCount > 0 ? ALERT_WARN_BG : ALERT_INFO_BG, 1, actionCount > 0 ? WARNING : ACCENT);
-        box.setPadding(dp(SPACE_LG), dp(SPACE_MD), dp(SPACE_LG), dp(SPACE_MD));
-        TextView title = label(total == 0 ? "Ready for first patient entry" : (actionCount > 0 ? actionCount + " patient action(s) need attention" : "No priority patient action due"), 15, true);
-        title.setTextColor(actionCount > 0 ? WARNING : ACCENT);
-        TextView sub = smallText(total == 0 ? "Start the Blue Bird registry with a synced patient record." : (actionCount > 0 ? "Work from the patient cards below: completion due first, then scheduled delivery, visit follow-ups, and EDD reminders." : "No scheduled delivery, overdue follow-up, or EDD is due within 7 days."));
-        sub.setTextColor(MUTED);
-        box.addView(title);
-        box.addView(sub);
-        if (total == 0) {
-            box.addView(navButton("Add Patient", v -> showPatientForm(null)));
-        }
-        return box;
     }
 
     private View zeroDashboardWorkspace() {
@@ -1511,7 +1457,7 @@ public class MainActivity extends Activity {
         copy.addView(h);
         TextView number = label(value, 35, true);
         number.setTextColor(Color.WHITE);
-        number.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        number.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         box.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
         box.addView(number, new LinearLayout.LayoutParams(dp(96), -2));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -1691,35 +1637,28 @@ public class MainActivity extends Activity {
         });
 
         boolean lockedForStaff = patient != null && patient.recordLocked && !isAdmin();
+        form.addView(patientFormOverview(patient != null));
         form.addView(formStep("1", "Basic Info", true,
-                row("Patient ID *", patientId),
+                reportTwoColumn(row("Patient ID *", patientId), row("Age *", age)),
                 row("Patient Name *", patientName),
-                row("Age *", age),
-                row("Blood Group *", bloodGroup),
-                row("Mobile Number *", mobile),
+                reportTwoColumn(row("Blood Group *", bloodGroup), row("Mobile Number *", mobile)),
                 row("Motivator Name", motivator),
                 row("Doctor Name *", doctor)
         ));
         form.addView(formStep("2", "Address", true,
-                row("State / UT *", state),
-                row("District *", district),
-                row("Block Name *", localBody),
-                row("Village *", village)
+                reportTwoColumn(row("State / UT *", state), row("District *", district)),
+                reportTwoColumn(row("Block Name *", localBody), row("Village *", village))
         ));
         form.addView(formStep("3", "Pregnancy Dates", true,
-                row("LMP Date *", lmpDate),
-                row("Pregnancy Age", pregnancyAge),
+                reportTwoColumn(row("LMP Date *", lmpDate), row("Pregnancy Age", pregnancyAge)),
                 smallText("Auto-calculated from LMP; freezes after the patient is completed."),
-                row("GRAVIDA *", gravida),
-                row("Method of Last Delivery", lastDeliveryMethod),
-                row("EDD Date *", eddDate),
-                row("Scheduled Delivery Date", scheduledDeliveryDate),
+                reportTwoColumn(row("GRAVIDA *", gravida), row("Method of Last Delivery", lastDeliveryMethod)),
+                reportTwoColumn(row("EDD Date *", eddDate), row("Scheduled Delivery Date", scheduledDeliveryDate)),
                 smallText("Optional doctor-given delivery date. Changing it resets the call reminder."),
                 row("Entry / 1st Visit *", visit1)
         ));
         form.addView(formStep("4", "Visit Tracking", true,
-                row("2nd Visit", visit2),
-                row("3rd Visit", visit3),
+                reportTwoColumn(row("2nd Visit", visit2), row("3rd Visit", visit3)),
                 row("Final Visit", finalVisit)
         ));
 
@@ -1740,6 +1679,47 @@ public class MainActivity extends Activity {
                     (empty(value(patient.visit3)) ? visit3 : finalVisit);
             scrollPatientFieldIntoView(nextVisitField);
         }
+    }
+
+    private View patientFormOverview(boolean editing) {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(SPACE_LG), dp(SPACE_MD), dp(SPACE_LG), dp(SPACE_MD));
+        panel.setBackground(prominentPanel());
+        panel.setElevation(dp(2));
+        TextView title = label(editing ? "Update Patient Record" : "Register New Patient", 17, true);
+        title.setTextColor(Color.WHITE);
+        TextView detail = label(editing ? "Review details and save only the information that changed." : "Complete the four clinical sections. Required fields are marked with *.", 12, false);
+        detail.setTextColor(Color.argb(225, 255, 255, 255));
+        detail.setPadding(0, dp(3), 0, dp(8));
+        HorizontalScrollView progress = new HorizontalScrollView(this);
+        progress.setHorizontalScrollBarEnabled(false);
+        LinearLayout steps = new LinearLayout(this);
+        steps.setOrientation(LinearLayout.HORIZONTAL);
+        steps.addView(formProgressChip("1", "Patient"));
+        steps.addView(formProgressChip("2", "Address"));
+        steps.addView(formProgressChip("3", "Pregnancy"));
+        steps.addView(formProgressChip("4", "Visits"));
+        progress.addView(steps);
+        panel.addView(title);
+        panel.addView(detail);
+        panel.addView(progress);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(CARD_GAP));
+        panel.setLayoutParams(lp);
+        return panel;
+    }
+
+    private View formProgressChip(String number, String title) {
+        TextView chip = label(number + "  " + title, 11, true);
+        chip.setTextColor(Color.WHITE);
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(dp(10), dp(6), dp(10), dp(6));
+        chip.setBackground(rounded(Color.argb(42, 255, 255, 255), dp(CHIP_RADIUS), dp(1), Color.argb(70, 255, 255, 255)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.setMargins(0, 0, dp(6), 0);
+        chip.setLayoutParams(lp);
+        return chip;
     }
 
     private void addPatientValidationWatchers() {
@@ -1847,6 +1827,22 @@ public class MainActivity extends Activity {
 
     private void configureLookupDropdown(AutoCompleteTextView view) {
         view.setThreshold(1);
+        view.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (view.hasFocus() && s != null && s.length() >= view.getThreshold()) {
+                    view.post(view::showDropDown);
+                }
+            }
+        });
         view.setOnClickListener(v -> {
             if (view.getText() != null && view.getText().length() >= view.getThreshold()) {
                 view.showDropDown();
@@ -2935,6 +2931,7 @@ public class MainActivity extends Activity {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         content.addView(page, new LinearLayout.LayoutParams(-1, -1));
+        page.addView(reportPageHeader());
 
         LinearLayout filters = new LinearLayout(this);
         filters.setOrientation(LinearLayout.VERTICAL);
@@ -2967,12 +2964,12 @@ public class MainActivity extends Activity {
         };
         reportsRefresh = render[0];
         startReportMonthTicker(monthLive, render[0]);
-        page.addView(section("Report Controls",
-                monthlyNewSlot,
+        page.addView(monthlyNewSlot);
+        page.addView(collapsibleSection("Report Controls", false,
                 filters,
                 monthLive,
                 smallText("Search and export follow the selected month or date range."),
-                scrollingActions(
+                dashboardActions(
                         button("Apply", v -> render[0].run()),
                         button("View Records", v -> {
                             if (validateReportFilters(text(from), text(to), text(monthFilter), from, to, monthFilter)) {
@@ -2993,6 +2990,28 @@ public class MainActivity extends Activity {
         ));
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         render[0].run();
+    }
+
+    private View reportPageHeader() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(SPACE_LG), dp(SPACE_MD), dp(SPACE_LG), dp(SPACE_MD));
+        panel.setBackground(prominentPanel());
+        panel.setElevation(dp(2));
+        TextView eyebrow = label("LIVE HOSPITAL REPORTING", 10, true);
+        eyebrow.setTextColor(Color.argb(205, 255, 255, 255));
+        TextView title = label("Maternal Care Overview", 18, true);
+        title.setTextColor(Color.WHITE);
+        TextView detail = label("Registration, delivery, follow-up, and completion status in one view.", 12, false);
+        detail.setTextColor(Color.argb(225, 255, 255, 255));
+        detail.setPadding(0, dp(3), 0, 0);
+        panel.addView(eyebrow);
+        panel.addView(title);
+        panel.addView(detail);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(CARD_GAP));
+        panel.setLayoutParams(lp);
+        return panel;
     }
 
     private void showExportCenter() {
@@ -3975,8 +3994,8 @@ public class MainActivity extends Activity {
                 ),
                 smallText("Support note: " + lastSyncText),
                 compactTwoColumn(
-                        adminCommandPanel("App Update", "Check GitHub release updates and install the newest APK.", "Check Update", ACCENT, v -> checkForAppUpdate()),
-                        adminCommandPanel("Release Page", "Open the latest release page for manual support checks.", "Open Releases", SLATE, v -> openUrl(UPDATE_RELEASES_URL))
+                        adminCommandPanel("App Update", "Download, verify, and install the newest APK inside the app.", "Open Update", ACCENT, v -> showUpdateCenter()),
+                        adminCommandPanel("Installed Version", "Current app release: " + BuildConfig.VERSION_NAME + ".", "Check Now", SLATE, v -> showUpdateCenter())
                 )
         ));
         page.addView(collapsibleSection("Audit Trail", false, changeLogView()));
@@ -4032,13 +4051,61 @@ public class MainActivity extends Activity {
     }
 
     private void checkForAppUpdate() {
-        toast("Checking for update...");
+        showUpdateCenter();
+    }
+
+    private void showUpdateCenter() {
+        setPage("App Update");
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(page);
+        content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+
+        LinearLayout updateSlot = new LinearLayout(this);
+        updateSlot.setOrientation(LinearLayout.VERTICAL);
+        page.addView(section("Update Center",
+                updateStatusCard(
+                        "Installed Version",
+                        "Current app version: " + BuildConfig.VERSION_NAME + "\nUpdates download inside Blue Bird Hospital and then open Android's installer for final confirmation.",
+                        PRIMARY
+                ),
+                updateSlot,
+                scrollingActions(
+                        button("Check Now", v -> loadUpdateCenter(updateSlot)),
+                        button("Back to Admin", v -> {
+                            if (isAdmin()) {
+                                showAdmin();
+                            } else {
+                                showDashboard();
+                            }
+                        })
+                )
+        ));
+        loadUpdateCenter(updateSlot);
+    }
+
+    private void loadUpdateCenter(LinearLayout slot) {
+        slot.removeAllViews();
+        slot.addView(updateStatusCard(
+                "Checking Latest Update",
+                "Contacting the secure release source. This should take only a moment.",
+                ACCENT
+        ));
         new Thread(() -> {
             try {
                 UpdateInfo update = fetchLatestUpdate();
-                runOnUiThread(() -> showUpdateResult(update));
+                runOnUiThread(() -> renderUpdateCenter(slot, update));
             } catch (Exception ex) {
-                runOnUiThread(() -> toast("Update check failed: " + ex.getMessage()));
+                runOnUiThread(() -> {
+                    slot.removeAllViews();
+                    slot.addView(updateStatusCard(
+                            "Update Check Failed",
+                            "Could not check for update: " + ex.getMessage(),
+                            URGENT,
+                            button("Try Again", v -> loadUpdateCenter(slot))
+                    ));
+                });
             }
         }).start();
     }
@@ -4058,20 +4125,25 @@ public class MainActivity extends Activity {
         }
         JSONObject json = new JSONObject(body);
         String tag = json.optString("tag_name", "");
-        String pageUrl = json.optString("html_url", UPDATE_RELEASES_URL);
         String apkUrl = "";
+        String apkName = "";
+        String digest = "";
+        long apkSize = 0;
         JSONArray assets = json.optJSONArray("assets");
         if (assets != null) {
             for (int i = 0; i < assets.length(); i++) {
                 JSONObject asset = assets.getJSONObject(i);
                 String name = asset.optString("name", "");
-                if (name.toLowerCase(java.util.Locale.US).endsWith(".apk")) {
+                if (name.toLowerCase(Locale.US).endsWith(".apk")) {
                     apkUrl = asset.optString("browser_download_url", "");
+                    apkName = name;
+                    apkSize = asset.optLong("size", 0);
+                    digest = asset.optString("digest", "");
                     break;
                 }
             }
         }
-        return new UpdateInfo(tag, pageUrl, apkUrl);
+        return new UpdateInfo(tag, apkUrl, apkName, apkSize, digest);
     }
 
     private String readStream(InputStream stream) throws Exception {
@@ -4088,26 +4160,280 @@ public class MainActivity extends Activity {
         return out.toString();
     }
 
-    private void showUpdateResult(UpdateInfo update) {
+    private void renderUpdateCenter(LinearLayout slot, UpdateInfo update) {
+        slot.removeAllViews();
         if (empty(update.tag)) {
-            toast("No release version found");
+            slot.addView(updateStatusCard(
+                    "No Release Found",
+                    "The update source did not return a valid app version.",
+                    WARNING,
+                    button("Try Again", v -> loadUpdateCenter(slot))
+            ));
             return;
         }
         String latest = update.tag.startsWith("v") ? update.tag.substring(1) : update.tag;
         if (compareVersions(latest, BuildConfig.VERSION_NAME) <= 0) {
-            new AlertDialog.Builder(this)
-                    .setTitle("App is up to date")
-                    .setMessage("Current version: " + BuildConfig.VERSION_NAME + "\nLatest version: " + update.tag)
-                    .setPositiveButton("OK", null)
-                    .show();
+            slot.addView(updateStatusCard(
+                    "App Is Up To Date",
+                    "Current version: " + BuildConfig.VERSION_NAME + "\nLatest version: " + update.tag + "\nNo staff action is required.",
+                    ACCENT,
+                    button("Check Again", v -> loadUpdateCenter(slot))
+            ));
             return;
         }
+        if (empty(update.apkUrl)) {
+            slot.addView(updateStatusCard(
+                    "Update Found, APK Missing",
+                    "Latest version: " + update.tag + "\nThe release does not include an APK asset for in-app installation.",
+                    URGENT,
+                    button("Check Again", v -> loadUpdateCenter(slot))
+            ));
+            return;
+        }
+        slot.addView(updateStatusCard(
+                "Update Available",
+                "Current version: " + BuildConfig.VERSION_NAME
+                        + "\nLatest version: " + update.tag
+                        + "\nFile: " + value(update.apkName)
+                        + "\nSize: " + formatBytes(update.apkSize)
+                        + "\nVerification: " + (empty(update.digest) ? "package check only" : "SHA-256 + package check"),
+                WARNING,
+                button("Download Update", v -> downloadAndInstallUpdate(update)),
+                button("Check Again", v -> loadUpdateCenter(slot))
+        ));
+    }
+
+    private View updateStatusCard(String title, String message, int color, View... actions) {
+        LinearLayout box = card(Color.argb(74, Color.red(color), Color.green(color), Color.blue(color)), 1, color);
+        TextView heading = label(title, 16, true);
+        heading.setTextColor(PRIMARY_DARK);
+        TextView body = label(message, 13, true);
+        body.setTextColor(TEXT);
+        body.setPadding(0, dp(4), 0, dp(6));
+        box.addView(heading);
+        box.addView(body);
+        if (actions != null && actions.length > 0) {
+            box.addView(scrollingActions(actions));
+        }
+        return box;
+    }
+
+    private void downloadAndInstallUpdate(UpdateInfo update) {
+        if (requiresInstallPermission()) {
+            showInstallPermissionDialog();
+            return;
+        }
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM), 0);
+        TextView statusText = label("Preparing download...", 13, true);
+        statusText.setTextColor(TEXT);
+        ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setMax(100);
+        progress.setIndeterminate(update.apkSize <= 0);
+        box.addView(statusText);
+        box.addView(progress, new LinearLayout.LayoutParams(-1, dp(28)));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Downloading Update")
+                .setView(box)
+                .create();
+        dialog.setCanceledOnTouchOutside(false);
+        dialog.setCancelable(false);
+        dialog.show();
+
+        new Thread(() -> {
+            try {
+                File apk = downloadUpdateApk(update, progress, statusText);
+                runOnUiThread(() -> statusText.setText("Verifying update..."));
+                verifyDownloadedUpdate(apk, update);
+                runOnUiThread(() -> {
+                    dialog.dismiss();
+                    showInstallReadyDialog(apk, update);
+                });
+            } catch (Exception ex) {
+                runOnUiThread(() -> {
+                    dialog.dismiss();
+                    new AlertDialog.Builder(this)
+                            .setTitle("Update Failed")
+                            .setMessage(ex.getMessage())
+                            .setPositiveButton("OK", null)
+                            .show();
+                });
+            }
+        }).start();
+    }
+
+    private File downloadUpdateApk(UpdateInfo update, ProgressBar progress, TextView statusText) throws Exception {
+        File dir = updateApkDir();
+        File apk = new File(dir, safeApkName(update));
+        HttpURLConnection connection = (HttpURLConnection) new URL(update.apkUrl).openConnection();
+        connection.setInstanceFollowRedirects(true);
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(30000);
+        connection.setRequestProperty("Accept", "application/octet-stream");
+        connection.setRequestProperty("User-Agent", "BlueBirdHospital/" + BuildConfig.VERSION_NAME);
+        try {
+            int statusCode = connection.getResponseCode();
+            if (statusCode < 200 || statusCode >= 300) {
+                throw new IllegalStateException("Download failed with HTTP " + statusCode);
+            }
+            long total = connection.getContentLengthLong();
+            if (total <= 0) {
+                total = update.apkSize;
+            }
+            final long totalBytes = total;
+            runOnUiThread(() -> {
+                progress.setIndeterminate(totalBytes <= 0);
+                statusText.setText("Downloading update...");
+            });
+            try (InputStream in = connection.getInputStream(); FileOutputStream out = new FileOutputStream(apk, false)) {
+                byte[] buffer = new byte[8192];
+                long downloaded = 0;
+                int lastPercent = -1;
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                    downloaded += read;
+                    if (totalBytes > 0) {
+                        int percent = (int) Math.min(100, Math.round(downloaded * 100f / totalBytes));
+                        if (percent != lastPercent) {
+                            lastPercent = percent;
+                            int visiblePercent = percent;
+                            long visibleDownloaded = downloaded;
+                            runOnUiThread(() -> {
+                                progress.setProgress(visiblePercent);
+                                statusText.setText("Downloading update " + visiblePercent + "% (" + formatBytes(visibleDownloaded) + " of " + formatBytes(totalBytes) + ")");
+                            });
+                        }
+                    } else {
+                        long visibleDownloaded = downloaded;
+                        runOnUiThread(() -> statusText.setText("Downloading update... " + formatBytes(visibleDownloaded)));
+                    }
+                }
+            }
+        } finally {
+            connection.disconnect();
+        }
+        return apk;
+    }
+
+    private void verifyDownloadedUpdate(File apk, UpdateInfo update) throws Exception {
+        if (!apk.exists() || apk.length() == 0) {
+            throw new IllegalStateException("Downloaded APK is empty");
+        }
+        String expected = normalizedSha256(update.digest);
+        if (!empty(expected)) {
+            String actual = sha256(apk);
+            if (!expected.equals(actual)) {
+                throw new IllegalStateException("Update verification failed. SHA-256 does not match.");
+            }
+        }
+        PackageInfo packageInfo = getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(), 0);
+        if (packageInfo == null) {
+            throw new IllegalStateException("Downloaded file is not a valid Android APK");
+        }
+        if (!getPackageName().equals(packageInfo.packageName)) {
+            throw new IllegalStateException("Downloaded APK package does not match Blue Bird Hospital");
+        }
+        if (!empty(packageInfo.versionName) && compareVersions(packageInfo.versionName, BuildConfig.VERSION_NAME) <= 0) {
+            throw new IllegalStateException("Downloaded APK is not newer than the installed app");
+        }
+    }
+
+    private void showInstallReadyDialog(File apk, UpdateInfo update) {
         new AlertDialog.Builder(this)
-                .setTitle("Update Available")
-                .setMessage("Current version: " + BuildConfig.VERSION_NAME + "\nLatest version: " + update.tag + "\n\nDownload and install the latest APK from the release page.")
-                .setPositiveButton("Download APK", (dialog, which) -> openUrl(empty(update.apkUrl) ? update.pageUrl : update.apkUrl))
+                .setTitle("Update Ready")
+                .setMessage("Version " + update.tag + " downloaded and verified inside the app.\n\nAndroid will ask for final install confirmation.")
+                .setPositiveButton("Install Update", (dialog, which) -> installUpdateApk(apk))
                 .setNegativeButton("Later", null)
                 .show();
+    }
+
+    private void installUpdateApk(File apk) {
+        if (requiresInstallPermission()) {
+            showInstallPermissionDialog();
+            return;
+        }
+        try {
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apk);
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        } catch (Exception ex) {
+            toast("Installer unavailable: " + ex.getMessage());
+        }
+    }
+
+    private boolean requiresInstallPermission() {
+        return !getPackageManager().canRequestPackageInstalls();
+    }
+
+    private void showInstallPermissionDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("Allow In-App Updates")
+                .setMessage("Android requires one-time permission before Blue Bird Hospital can open its downloaded update installer.\n\nEnable install permission, then return to the app and tap Download Update again.")
+                .setPositiveButton("Open Settings", (dialog, which) -> {
+                    try {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()));
+                        startActivity(intent);
+                    } catch (Exception ex) {
+                        toast("Cannot open install settings: " + ex.getMessage());
+                    }
+                })
+                .setNegativeButton("Later", null)
+                .show();
+    }
+
+    private File updateApkDir() {
+        File dir = new File(getCacheDir(), "updates");
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        return dir;
+    }
+
+    private String safeApkName(UpdateInfo update) {
+        String name = empty(update.apkName) ? "blue_bird_hospital_" + value(update.tag) + ".apk" : update.apkName;
+        return name.replaceAll("[^A-Za-z0-9._-]", "_");
+    }
+
+    private String normalizedSha256(String digest) {
+        String value = value(digest).toLowerCase(Locale.US).trim();
+        if (value.startsWith("sha256:")) {
+            value = value.substring("sha256:".length());
+        }
+        return value.matches("[0-9a-f]{64}") ? value : "";
+    }
+
+    private String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream in = new FileInputStream(file)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        StringBuilder out = new StringBuilder();
+        for (byte b : digest.digest()) {
+            out.append(String.format(Locale.US, "%02x", b));
+        }
+        return out.toString();
+    }
+
+    private String formatBytes(long bytes) {
+        if (bytes <= 0) {
+            return "Unknown";
+        }
+        double mb = bytes / (1024d * 1024d);
+        if (mb >= 1d) {
+            return String.format(Locale.US, "%.1f MB", mb);
+        }
+        double kb = bytes / 1024d;
+        return String.format(Locale.US, "%.0f KB", kb);
     }
 
     private int compareVersions(String left, String right) {
@@ -4132,27 +4458,19 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void openUrl(String url) {
-        if (empty(url)) {
-            toast("Update link unavailable");
-            return;
-        }
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-        } catch (Exception ex) {
-            toast("Cannot open link: " + ex.getMessage());
-        }
-    }
-
     private static final class UpdateInfo {
         final String tag;
-        final String pageUrl;
         final String apkUrl;
+        final String apkName;
+        final long apkSize;
+        final String digest;
 
-        UpdateInfo(String tag, String pageUrl, String apkUrl) {
+        UpdateInfo(String tag, String apkUrl, String apkName, long apkSize, String digest) {
             this.tag = tag;
-            this.pageUrl = pageUrl;
             this.apkUrl = apkUrl;
+            this.apkName = apkName;
+            this.apkSize = apkSize;
+            this.digest = digest;
         }
     }
 
@@ -4564,8 +4882,10 @@ public class MainActivity extends Activity {
         TextView heading = label(title, 15, true);
         heading.setTextColor(PRIMARY_DARK);
         head.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
-        head.setPadding(0, 0, 0, dp(SPACE_SM));
+        head.setPadding(dp(SPACE_SM), dp(6), dp(SPACE_SM), dp(6));
+        head.setBackground(rounded(PRIMARY_SOFT, dp(6), 0, PRIMARY_SOFT));
         box.addView(head);
+        box.addView(verticalGap(SPACE_SM));
         for (View row : rows) {
             box.addView(row);
         }
@@ -4577,6 +4897,8 @@ public class MainActivity extends Activity {
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(dp(SPACE_SM), dp(5), dp(2), dp(5));
+        head.setBackground(rounded(PRIMARY_SOFT, dp(6), 0, PRIMARY_SOFT));
         TextView heading = label(title, 14, true);
         heading.setTextColor(PRIMARY_DARK);
         TextView indicator = label(expanded ? "-" : "+", 18, true);
@@ -4600,6 +4922,7 @@ public class MainActivity extends Activity {
             }
         });
         box.addView(head);
+        body.setPadding(0, dp(SPACE_SM), 0, 0);
         box.addView(body);
         return box;
     }
@@ -4609,6 +4932,8 @@ public class MainActivity extends Activity {
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(dp(SPACE_SM), dp(6), dp(2), dp(6));
+        head.setBackground(rounded(PRIMARY_SOFT, dp(6), 0, PRIMARY_SOFT));
         TextView badge = label(number, 14, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
@@ -4640,6 +4965,7 @@ public class MainActivity extends Activity {
             }
         });
         box.addView(head);
+        body.setPadding(0, dp(SPACE_SM), 0, 0);
         box.addView(body);
         return box;
     }
@@ -4749,18 +5075,23 @@ public class MainActivity extends Activity {
         LinearLayout item = new LinearLayout(this);
         item.setOrientation(LinearLayout.VERTICAL);
         item.setGravity(Gravity.CENTER);
-        item.setPadding(dp(2), dp(3), dp(2), dp(3));
+        item.setPadding(dp(2), dp(4), dp(2), dp(3));
         item.setContentDescription(text);
-        item.setBackground(rounded(active ? PRIMARY : Color.TRANSPARENT, dp(BUTTON_RADIUS), 0, Color.TRANSPARENT));
+        item.setBackground(rounded(active ? PRIMARY_SOFT : Color.TRANSPARENT, dp(BUTTON_RADIUS), 0, Color.TRANSPARENT));
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconRes);
-        icon.setColorFilter(active ? Color.WHITE : PRIMARY_DARK);
-        TextView caption = label(text, 9, true);
+        icon.setColorFilter(active ? ACCENT : PRIMARY_DARK);
+        TextView caption = label(text, 10, true);
         caption.setGravity(Gravity.CENTER);
         caption.setSingleLine(true);
-        caption.setTextColor(active ? Color.WHITE : PRIMARY_DARK);
-        item.addView(icon, new LinearLayout.LayoutParams(dp(21), dp(21)));
+        caption.setTextColor(active ? PRIMARY : PRIMARY_DARK);
+        item.addView(icon, new LinearLayout.LayoutParams(dp(22), dp(22)));
         item.addView(caption, new LinearLayout.LayoutParams(-1, -2));
+        TextView indicator = new TextView(this);
+        indicator.setBackground(rounded(active ? ACCENT : Color.TRANSPARENT, dp(2), 0, Color.TRANSPARENT));
+        LinearLayout.LayoutParams indicatorLp = new LinearLayout.LayoutParams(dp(24), dp(3));
+        indicatorLp.setMargins(0, dp(2), 0, 0);
+        item.addView(indicator, indicatorLp);
         item.setOnClickListener(listener);
         attachPressAnimation(item, 0.96f);
         return item;
@@ -4838,10 +5169,10 @@ public class MainActivity extends Activity {
         label.setTextColor(PRIMARY_DARK);
         TextView count = label(done + " record(s)", 13, true);
         count.setTextColor(ACCENT);
-        count.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        count.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         TextView arrow = label(">", 17, true);
         arrow.setTextColor(PRIMARY);
-        arrow.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        arrow.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         top.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
         top.addView(count, new LinearLayout.LayoutParams(dp(104), -2));
         top.addView(arrow, new LinearLayout.LayoutParams(dp(22), -2));
@@ -4901,14 +5232,10 @@ public class MainActivity extends Activity {
     private LinearLayout card(int color, int strokeWidth, int strokeColor) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        if (color == SURFACE) {
-            box.setBackground(glassPanel(dp(CARD_RADIUS)));
-        } else {
-            int border = strokeWidth == 0 ? 0 : Color.argb(170, Color.red(strokeColor), Color.green(strokeColor), Color.blue(strokeColor));
-            box.setBackground(rounded(color, dp(CARD_RADIUS), strokeWidth == 0 ? 0 : dp(strokeWidth), border));
-        }
+        int border = strokeWidth == 0 ? 0 : (color == SURFACE ? BORDER : Color.argb(170, Color.red(strokeColor), Color.green(strokeColor), Color.blue(strokeColor)));
+        box.setBackground(rounded(color, dp(CARD_RADIUS), strokeWidth == 0 ? 0 : dp(strokeWidth), border));
         box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
-        box.setElevation(dp(4));
+        box.setElevation(dp(1));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(CARD_GAP));
         box.setLayoutParams(lp);
@@ -5032,6 +5359,9 @@ public class MainActivity extends Activity {
         view.setHintTextColor(Color.rgb(135, 151, 166));
         view.setBackground(glassInput(false));
         view.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
+        view.setDropDownHeight(dp(280));
+        view.setDropDownVerticalOffset(dp(4));
+        view.setDropDownBackgroundDrawable(rounded(Color.WHITE, dp(CARD_RADIUS), dp(1), BORDER));
         view.setOnFocusChangeListener((v, hasFocus) ->
                 view.setBackground(glassInput(hasFocus)));
         setAdapter(view, values);
@@ -5180,7 +5510,7 @@ public class MainActivity extends Activity {
         chip.setPadding(dp(CHIP_PAD_X), dp(CHIP_PAD_Y), dp(CHIP_PAD_X), dp(CHIP_PAD_Y));
         chip.setBackground(rounded(bg, dp(CHIP_RADIUS), 0, bg));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-        lp.setMargins(0, dp(SPACE_XS), 0, dp(2));
+        lp.setMargins(dp(2), dp(SPACE_XS), dp(2), dp(2));
         chip.setLayoutParams(lp);
         return chip;
     }
@@ -5270,12 +5600,12 @@ public class MainActivity extends Activity {
         GradientDrawable drawable = new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
                 new int[]{
-                        focused ? Color.argb(236, 255, 255, 255) : Color.argb(150, 255, 255, 255),
-                        focused ? Color.argb(210, 238, 249, 255) : Color.argb(108, 226, 242, 250)
+                        Color.WHITE,
+                        focused ? Color.rgb(239, 249, 252) : Color.rgb(250, 253, 254)
                 }
         );
         drawable.setCornerRadius(dp(BUTTON_RADIUS));
-        drawable.setStroke(dp(1), focused ? PRIMARY : Color.argb(210, 255, 255, 255));
+        drawable.setStroke(dp(focused ? 2 : 1), focused ? PRIMARY : BORDER);
         return drawable;
     }
 

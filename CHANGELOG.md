@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.23 - 2026-08-04
+
+- Introduced a unified hospital UI system with consistent spacing, surfaces, typography, controls, chips, and alert colors.
+- Rebuilt the compact header and bottom navigation with clearer Back, profile, sync, and active-page states.
+- Consolidated the home dashboard into live summary metrics and one priority-work queue without duplicate status panels.
+- Reorganized patient entry with a clinical progress header, paired fields, clearer section hierarchy, and persistent save controls.
+- Reworked Reports around a live monthly-registration metric, collapsible controls, grouped priority metrics, and existing filtered exports.
+- Added an in-app Update Center that downloads, verifies, and launches installation of signed release APKs without opening a browser.
+- Fixed report-header placement and made doctor/motivator autocomplete suggestions open reliably while typing.
+
 ## v1.1.22 - 2026-08-01
 
 - Replaced admin patient deletion with a recoverable soft-delete flow.
