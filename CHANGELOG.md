@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.24 - 2026-08-04
+
+- Compacted dashboard priority patient cards and action layouts to reduce vertical scrolling.
+- Merged the Reports introduction and live monthly registration metric into one overview surface.
+- Added fading edges and live position indicators to horizontally scrollable summary and shortcut strips.
+- Replaced the text Back control with a proper vector navigation icon.
+- Converted Admin overview metrics into a compact horizontal strip.
+- Introduced consistent primary, secondary, and destructive button hierarchy throughout the app.
+- Added lightweight Firebase refresh placeholders without changing cached-data or sync behavior.
+
 ## v1.1.23 - 2026-08-04
 
 - Introduced a unified hospital UI system with consistent spacing, surfaces, typography, controls, chips, and alert colors.
