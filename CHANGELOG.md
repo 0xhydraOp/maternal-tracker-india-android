@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.1.26 - 2026-08-28
+
+- Added adaptive compact headers on inner screens and removed idle sync text above bottom navigation.
+- Grouped dashboard priorities by action reason, omitted empty groups, and tightened patient-card density.
+- Added a persistent patient-form progress strip, collapsed non-current sections, and an inline validation summary.
+- Reorganized Admin tools into focused collapsible operational groups.
+- Fixed Reports so valid filter application closes controls, dismisses the keyboard, and reveals refreshed results.
+- Restyled the live New Patient This Month metric as a crisp brown-and-gold report banner.
+- Exposed recoverable soft-delete controls on every patient search and detail record for admins.
+
+## v1.1.25 - 2026-08-05
+
+- Enlarged the hospital identity into a responsive two-line mobile header.
+- Separated the BBH brand mark from a dedicated profile-menu control.
+- Redesigned bottom navigation as a slimmer hospital operations dock.
+- Unified navigation icons with a consistent outlined visual style.
+- Replaced the duplicate active underline with one compact selection capsule.
+- Replaced decorative green and teal with a clinical royal-blue and controlled gold visual system.
+
 ## v1.1.24 - 2026-08-04
 
 - Compacted dashboard priority patient cards and action layouts to reduce vertical scrolling.
