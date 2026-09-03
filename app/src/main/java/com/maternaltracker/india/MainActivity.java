@@ -6,6 +6,7 @@ import android.annotation.SuppressLint;
 import android.app.DatePickerDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.pm.PackageInfo;
 import android.graphics.Paint;
 import android.graphics.Color;
@@ -14,6 +15,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.pdf.PdfDocument;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.InputType;
@@ -99,6 +101,16 @@ public class MainActivity extends Activity {
     private static final int CHIP_PAD_Y = 5;
     private static final int SECTION_ACCENT_WIDTH = 4;
     private static final int SECTION_ACCENT_HEIGHT = 22;
+    private static final int MOTION_FAST_MS = 120;
+    private static final int MOTION_STANDARD_MS = 180;
+    private static final long ACTION_DEBOUNCE_MS = 500L;
+    private static final int TYPE_SCREEN_TITLE = 19;
+    private static final int TYPE_SECTION_TITLE = 14;
+    private static final int TYPE_CARD_TITLE = 15;
+    private static final int TYPE_BODY = 13;
+    private static final int TYPE_LABEL = 12;
+    private static final int TYPE_CHIP = 12;
+    private static final int DASHBOARD_PRIORITY_LIMIT = 2;
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("hh:mm a");
     private static final DateTimeFormatter DASHBOARD_CLOCK_FMT = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy | hh:mm a");
     private static final DateTimeFormatter REPORT_MONTH_FMT = DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale.US);
@@ -143,7 +155,9 @@ public class MainActivity extends Activity {
     private TextView headerHospitalName;
     private TextView headerGoldLine;
     private TextView patientValidationBanner;
+    private TextView patientInlineError;
     private TextView dashboardClock;
+    private ScrollView dashboardScroll;
     private Runnable dashboardClockTicker;
     private TextView reportMonthLiveLabel;
     private Runnable reportMonthTicker;
@@ -180,6 +194,24 @@ public class MainActivity extends Activity {
     private EditText finalVisit;
     private Button savePatientButton;
     private Patient editingPatient;
+    private final List<LinearLayout> patientFormSections = new java.util.ArrayList<>();
+    private final List<TextView> patientFormProgressChips = new java.util.ArrayList<>();
+    private boolean patientFormDirty;
+    private boolean patientSaveInProgress;
+    private boolean suppressPatientDirtyTracking;
+    private boolean lastPatientDetailAdminMode;
+    private boolean restorePatientListState;
+    private boolean lastPatientListAdminMode;
+    private boolean lastPatientListAlreadyScoped;
+    private String lastPatientListWhere;
+    private String[] lastPatientListArgs;
+    private String lastPatientListShortcut;
+    private String lastPatientSearchQuery = "";
+    private String patientFormOriginPage = "Dashboard";
+    private String patientDetailOriginPage = "Dashboard";
+    private final java.util.Set<Long> patientOperationsInFlight = new java.util.HashSet<>();
+    private Patient recentlyDeletedPatient;
+    private long lastBackPressedAt;
     private String selectedStateCode;
     private String selectedDistrictCode;
     private String selectedSubdistrictCode;
@@ -206,11 +238,27 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        stopDashboardClock();
+        stopScreenActivity();
         if (firebase != null) {
             firebase.stopPatientListener();
         }
         super.onDestroy();
+    }
+
+    @Override
+    protected void onStop() {
+        pauseScreenActivity();
+        super.onStop();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if ("Dashboard".equals(currentPage) && dashboardClock != null && dashboardClockTicker == null) {
+            startDashboardClock();
+        } else if ("Reports".equals(currentPage) && reportMonthLiveLabel != null && reportMonthTicker == null) {
+            startReportMonthTicker(reportMonthLiveLabel, reportsRefresh);
+        }
     }
 
     private void showLogin() {
@@ -416,7 +464,7 @@ public class MainActivity extends Activity {
         backButton.setContentDescription("Back");
         backButton.setBackground(rounded(Color.argb(38, 255, 255, 255), dp(BUTTON_RADIUS), 0, Color.TRANSPARENT));
         backButton.setVisibility(View.GONE);
-        backButton.setOnClickListener(v -> goBackInApp());
+        setDebouncedClick(backButton, v -> goBackInApp());
         attachPressAnimation(backButton, 0.94f);
         top.addView(backButton, new LinearLayout.LayoutParams(dp(40), dp(40)));
         top.addView(headerBrandMark, markLp);
@@ -424,9 +472,9 @@ public class MainActivity extends Activity {
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setGravity(Gravity.CENTER_VERTICAL);
-        headerHospitalName = label(HOSPITAL_NAME, 19, true);
+        headerHospitalName = label(HOSPITAL_NAME, TYPE_SCREEN_TITLE, true);
         headerHospitalName.setTextColor(Color.WHITE);
-        headerHospitalName.setMaxLines(2);
+        headerHospitalName.setMaxLines(3);
         headerHospitalName.setEllipsize(android.text.TextUtils.TruncateAt.END);
         headerHospitalName.setIncludeFontPadding(false);
         headerTitle = label("Dashboard", 12, true);
@@ -447,7 +495,7 @@ public class MainActivity extends Activity {
         profile.setPadding(dp(10), dp(10), dp(10), dp(10));
         profile.setBackground(rounded(Color.WHITE, dp(20), 0, Color.WHITE));
         profile.setContentDescription("Open profile menu");
-        profile.setOnClickListener(v -> toggleProfileMenu());
+        setDebouncedClick(profile, v -> toggleProfileMenu());
         attachPressAnimation(profile, 0.94f);
         top.addView(profile, new LinearLayout.LayoutParams(dp(40), dp(40)));
         headerContainer.addView(top);
@@ -464,13 +512,17 @@ public class MainActivity extends Activity {
             return;
         }
         bottomNav.removeAllViews();
-        bottomNav.addView(bottomNavItem("Dashboard", R.drawable.ic_nav_home, "Home", v -> showDashboard()), new LinearLayout.LayoutParams(0, -1, 1));
-        bottomNav.addView(bottomNavItem("Patient Entry", R.drawable.ic_nav_entry, "Entry", v -> showPatientForm(null)), new LinearLayout.LayoutParams(0, -1, 1));
-        bottomNav.addView(bottomNavItem("Patient Search", R.drawable.ic_nav_search, "Search", v -> showPatientList(false)), new LinearLayout.LayoutParams(0, -1, 1));
-        bottomNav.addView(bottomNavItem("Reports", R.drawable.ic_nav_reports, "Reports", v -> showReports()), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Dashboard", R.drawable.ic_nav_home, "Home", navigateTo(this::showDashboard)), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Patient Entry", R.drawable.ic_nav_entry, "Entry", navigateTo(() -> showPatientForm(null))), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Patient Search", R.drawable.ic_nav_search, "Search", navigateTo(() -> showPatientList(false))), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Reports", R.drawable.ic_nav_reports, "Reports", navigateTo(this::showReports)), new LinearLayout.LayoutParams(0, -1, 1));
         if (isAdmin()) {
-            bottomNav.addView(bottomNavItem("Administration", R.drawable.ic_nav_admin, "Admin", v -> showAdmin()), new LinearLayout.LayoutParams(0, -1, 1));
+            bottomNav.addView(bottomNavItem("Administration", R.drawable.ic_nav_admin, "Admin", navigateTo(this::showAdmin)), new LinearLayout.LayoutParams(0, -1, 1));
         }
+    }
+
+    private View.OnClickListener navigateTo(Runnable destination) {
+        return v -> requestNavigation(destination);
     }
 
     private LinearLayout profileMenu() {
@@ -488,17 +540,17 @@ public class MainActivity extends Activity {
         actionScroll.addView(actions);
 
         actions.addView(menuGroupTitle("Patient Work"));
-        actions.addView(menuItem("New Patient", "Register a new maternal record", ACCENT, v -> showPatientForm(null)));
-        actions.addView(menuItem("Search Patients", "Find records and update visits", PRIMARY, v -> showPatientList(false)));
+        actions.addView(menuItem("New Patient", "Register a new maternal record", ACCENT, navigateTo(() -> showPatientForm(null))));
+        actions.addView(menuItem("Search Patients", "Find records and update visits", PRIMARY, navigateTo(() -> showPatientList(false))));
         actions.addView(menuGroupTitle("Reports & Export"));
-        actions.addView(menuItem("Reports", "Review scheduled, EDD, and village data", SLATE, v -> showReports()));
-        actions.addView(menuItem("Export Center", "Create Excel and PDF outputs", PRIMARY_DARK, v -> showExportCenter()));
+        actions.addView(menuItem("Reports", "Review scheduled, EDD, and village data", SLATE, navigateTo(this::showReports)));
+        actions.addView(menuItem("Export Center", "Create Excel and PDF outputs", PRIMARY_DARK, navigateTo(this::showExportCenter)));
         actions.addView(menuGroupTitle("System"));
-        actions.addView(menuItem("Update Center", "Download and install updates inside the app", WARNING, v -> showUpdateCenter()));
+        actions.addView(menuItem("Update Center", "Download and install updates inside the app", WARNING, navigateTo(this::showUpdateCenter)));
         if (isAdmin()) {
-            actions.addView(menuItem("Administration", "Manage users and reference data", PRIMARY, v -> showAdmin()));
-            actions.addView(menuItem("Patient Recovery", "Restore accidentally deleted records", WARNING, v -> showPatientRecovery()));
-            actions.addView(menuItem("Backup Manager", "Create or restore database backup", SLATE, v -> showBackup()));
+            actions.addView(menuItem("Administration", "Manage users and reference data", PRIMARY, navigateTo(this::showAdmin)));
+            actions.addView(menuItem("Patient Recovery", "Restore accidentally deleted records", WARNING, navigateTo(this::showPatientRecovery)));
+            actions.addView(menuItem("Backup Manager", "Create or restore database backup", SLATE, navigateTo(this::showBackup)));
         }
         actions.addView(menuGroupTitle("Session"));
         actions.addView(menuItem("Sign Out", "Close this secure session", URGENT, v -> {
@@ -595,7 +647,7 @@ public class MainActivity extends Activity {
         item.addView(accent, new LinearLayout.LayoutParams(dp(4), dp(34)));
         item.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
         item.addView(arrow, new LinearLayout.LayoutParams(dp(18), dp(34)));
-        item.setOnClickListener(v -> {
+        setDebouncedClick(item, v -> {
             closeProfileMenu();
             listener.onClick(v);
         });
@@ -618,7 +670,7 @@ public class MainActivity extends Activity {
             refreshProfileMenuStatus();
             profileMenu.setTranslationX(-dp(36));
             profileMenu.setAlpha(0f);
-            profileMenu.animate().translationX(0f).alpha(1f).setDuration(180).start();
+            profileMenu.animate().translationX(0f).alpha(1f).setDuration(MOTION_STANDARD_MS).start();
         }
     }
 
@@ -663,11 +715,8 @@ public class MainActivity extends Activity {
     }
 
     private void setPage(String title) {
-        if (!"Dashboard".equals(title)) {
-            stopDashboardClock();
-        }
+        stopScreenActivity();
         if (!"Reports".equals(title)) {
-            stopReportMonthTicker();
             reportsRefresh = null;
         }
         currentPage = title;
@@ -694,7 +743,7 @@ public class MainActivity extends Activity {
                 .translationY(0f)
                 .scaleX(1f)
                 .scaleY(1f)
-                .setDuration(240)
+                .setDuration(MOTION_STANDARD_MS)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
                 .start();
     }
@@ -723,6 +772,13 @@ public class MainActivity extends Activity {
             goBackInApp();
             return;
         }
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastBackPressedAt > 1800L) {
+            lastBackPressedAt = now;
+            toast("Press Back again to exit");
+            return;
+        }
+        stopScreenActivity();
         super.onBackPressed();
     }
 
@@ -734,17 +790,133 @@ public class MainActivity extends Activity {
         if (content == null || "Dashboard".equals(currentPage)) {
             return;
         }
-        showDashboard();
+        requestNavigation(this::performBackRoute);
+    }
+
+    private void performBackRoute() {
+        String page = currentPage;
+        if ("Patient Detail".equals(page)) {
+            if ("Patient Search".equals(patientDetailOriginPage) || "Patient Management".equals(patientDetailOriginPage)) {
+                restoreLastPatientList();
+            } else if ("Reports".equals(patientDetailOriginPage)) {
+                showReports();
+            } else if ("Administration".equals(patientDetailOriginPage)) {
+                showAdmin();
+            } else {
+                showDashboard();
+            }
+        } else if ("Edit Patient".equals(page) && editingPatient != null) {
+            showPatientDetail(db.getPatient(editingPatient.id), lastPatientDetailAdminMode);
+        } else if ("Patient Entry".equals(page)) {
+            if ("Patient Search".equals(patientFormOriginPage) || "Patient Management".equals(patientFormOriginPage)) {
+                restoreLastPatientList();
+            } else if ("Reports".equals(patientFormOriginPage)) {
+                showReports();
+            } else if ("Administration".equals(patientFormOriginPage)) {
+                showAdmin();
+            } else {
+                showDashboard();
+            }
+        } else if ("App Update".equals(page)) {
+            if (isAdmin()) {
+                showAdmin();
+            } else {
+                showDashboard();
+            }
+        } else if ("Patient Management".equals(page)
+                || "Patient Recovery".equals(page)
+                || "Backup Manager".equals(page)) {
+            showAdmin();
+        } else if ("Export Center".equals(page)) {
+            showReports();
+        } else {
+            showDashboard();
+        }
+    }
+
+    private void restoreLastPatientList() {
+        restorePatientListState = true;
+        showPatientList(lastPatientListAdminMode, lastPatientListWhere, lastPatientListArgs,
+                lastPatientListAlreadyScoped, lastPatientListShortcut);
+    }
+
+    private void requestNavigation(Runnable destination) {
+        if (destination == null) {
+            return;
+        }
+        hideKeyboard();
+        if (isPatientFormPage() && patientSaveInProgress) {
+            toast("Please wait while the patient is saved online");
+            return;
+        }
+        if (isPatientFormPage() && patientFormDirty && !patientSaveInProgress) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Discard Unsaved Changes?")
+                    .setMessage("The information entered on this patient form has not been saved.")
+                    .setPositiveButton("Discard", (dialog, which) -> {
+                        patientFormDirty = false;
+                        destination.run();
+                    })
+                    .setNegativeButton("Keep Editing", null)
+                    .show();
+            return;
+        }
+        destination.run();
+    }
+
+    private boolean isPatientFormPage() {
+        return "Patient Entry".equals(currentPage) || "Edit Patient".equals(currentPage);
+    }
+
+    private void stopScreenActivity() {
+        stopDashboardClock();
+        stopReportMonthTicker();
+        hideKeyboard();
+        if (content != null) {
+            cancelViewAnimations(content);
+        }
+    }
+
+    private void pauseScreenActivity() {
+        if (dashboardClock != null && dashboardClockTicker != null) {
+            dashboardClock.removeCallbacks(dashboardClockTicker);
+            dashboardClockTicker = null;
+        }
+        if (reportMonthLiveLabel != null && reportMonthTicker != null) {
+            reportMonthLiveLabel.removeCallbacks(reportMonthTicker);
+            reportMonthTicker = null;
+        }
+        hideKeyboard();
+        if (content != null) {
+            cancelViewAnimations(content);
+        }
+    }
+
+    private void cancelViewAnimations(View view) {
+        if (view == null) {
+            return;
+        }
+        view.animate().cancel();
+        view.clearAnimation();
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                cancelViewAnimations(group.getChildAt(i));
+            }
+        }
     }
 
     private void showDashboard() {
+        int restoreScrollY = "Dashboard".equals(currentPage) && dashboardScroll != null
+                ? dashboardScroll.getScrollY() : 0;
         setPage("Dashboard");
         ScrollView scroll = new ScrollView(this);
+        dashboardScroll = scroll;
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(box);
         content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
-        scroll.post(() -> scroll.scrollTo(0, 0));
+        scroll.post(() -> scroll.scrollTo(0, restoreScrollY));
 
         String scopeWhere = dashboardScopeWhere();
         String[] scopeArgs = dashboardScopeArgs();
@@ -780,7 +952,7 @@ public class MainActivity extends Activity {
         row.setPadding(0, 0, 0, dp(3));
         row.addView(summaryCard("New Today", today, "Registered", ACCENT, v -> showScopedPatientList("entry_date = ?", new String[]{LocalDate.now().toString()})));
         row.addView(summaryCard("EDD 7 Days", dueWeek, "Delivery window", WARNING, v -> showScopedPatientList(OPEN_EDD_RANGE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})));
-        row.addView(summaryCard("Scheduled", scheduledWeek, "Doctor date", URGENT, v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})));
+        row.addView(summaryCard("Scheduled", scheduledWeek, "Doctor date", WARNING, v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})));
         row.addView(summaryCard("Calls Pending", scheduledPending, "Need call", WARNING, v -> showScopedPatientList(SCHEDULED_CALL_PENDING_WHERE, new String[]{LocalDate.now().toString()})));
         row.addView(summaryCard("Completed", locked, "Locked records", PRIMARY, v -> showScopedPatientList("record_locked = 1", null)));
         scroll.addView(row);
@@ -792,13 +964,13 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(12), dp(10), dp(12), dp(10));
         box.setBackground(rounded(Color.WHITE, dp(CARD_RADIUS), dp(1), Color.argb(125, Color.red(color), Color.green(color), Color.blue(color))));
-        box.setOnClickListener(click);
+        setDebouncedClick(box, click);
         attachPressAnimation(box, 0.98f);
         TextView count = label(String.valueOf(value), 24, true);
         count.setTextColor(color);
         TextView name = label(title, 12, true);
         name.setTextColor(PRIMARY_DARK);
-        name.setSingleLine(true);
+        name.setMaxLines(2);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         TextView detail = label(caption, 9, true);
         detail.setTextColor(MUTED);
@@ -808,14 +980,13 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(132), -2);
         lp.setMargins(0, 0, dp(8), dp(3));
         box.setLayoutParams(lp);
-        animateIn(box);
         return box;
     }
 
     private View focusCard(String title, int value, String caption, int color, View.OnClickListener click) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setOnClickListener(click);
+        setDebouncedClick(box, click);
         attachPressAnimation(box, 0.98f);
         box.setPadding(dp(12), dp(10), dp(12), dp(10));
         box.setBackground(rounded(Color.argb(76, Color.red(color), Color.green(color), Color.blue(color)), dp(12), dp(1), Color.argb(145, Color.red(color), Color.green(color), Color.blue(color))));
@@ -840,8 +1011,10 @@ public class MainActivity extends Activity {
         LinearLayout box = card();
         box.setPadding(dp(12), dp(10), dp(12), dp(10));
         LinearLayout head = new LinearLayout(this);
-        head.setOrientation(LinearLayout.HORIZONTAL);
-        head.setGravity(Gravity.CENTER_VERTICAL);
+        boolean compactHeader = getResources().getConfiguration().screenWidthDp < 420
+                || getResources().getConfiguration().fontScale > 1.15f;
+        head.setOrientation(compactHeader ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        head.setGravity(compactHeader ? Gravity.START : Gravity.CENTER_VERTICAL);
         TextView title = label(isAdmin() ? "Hospital Overview" : "My Work Overview", 15, true);
         title.setTextColor(PRIMARY_DARK);
         dashboardClock = label("", 11, true);
@@ -851,19 +1024,24 @@ public class MainActivity extends Activity {
         TextView context = label(isAdmin() ? "All Blue Bird maternal records" : "Records assigned to this account", 11, false);
         context.setTextColor(MUTED);
         context.setPadding(0, dp(1), 0, dp(3));
-        HorizontalScrollView chipScroll = horizontalScroller();
         LinearLayout chips = new LinearLayout(this);
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.addView(chip(DEFAULT_DISTRICT, PRIMARY_SOFT, PRIMARY_DARK));
         chips.addView(chip(DEFAULT_STATE, PRIMARY_SOFT, PRIMARY_DARK));
-        chips.addView(chip(total + " records", ACCENT, Color.WHITE));
-        chips.addView(chip(lastSyncText, PRIMARY_SOFT, PRIMARY_DARK));
-        chipScroll.addView(chips);
-        head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        head.addView(dashboardClock, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView operationalMeta = label(total + " registered  |  " + lastSyncText, 11, true);
+        operationalMeta.setTextColor(PRIMARY);
+        operationalMeta.setPadding(0, dp(3), 0, 0);
+        if (compactHeader) {
+            head.addView(title);
+            head.addView(dashboardClock);
+        } else {
+            head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+            head.addView(dashboardClock, new LinearLayout.LayoutParams(0, -2, 1));
+        }
         box.addView(head);
         box.addView(context);
-        box.addView(chipScroll);
+        box.addView(chips);
+        box.addView(operationalMeta);
         startDashboardClock();
         return box;
     }
@@ -937,7 +1115,7 @@ public class MainActivity extends Activity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
         panel.setBackground(rounded(Color.argb(86, Color.red(color), Color.green(color), Color.blue(color)), dp(CARD_RADIUS), dp(1), Color.argb(140, Color.red(color), Color.green(color), Color.blue(color))));
-        TextView heading = label(title, 14, true);
+        TextView heading = label(title, TYPE_SECTION_TITLE, true);
         heading.setTextColor(color);
         TextView body = smallText(message);
         body.setTextColor(MUTED);
@@ -1074,7 +1252,7 @@ public class MainActivity extends Activity {
                 "Scheduled delivery",
                 "Scheduled delivery",
                 "Doctor-given date within 7 days",
-                URGENT,
+                WARNING,
                 "Call"
         );
         shown = addTodayWorkGroup(
@@ -1102,23 +1280,19 @@ public class MainActivity extends Activity {
         if (shown == 0) {
             list.addView(emptyState("No priority patient action", "Scheduled delivery, visit follow-up, and EDD alerts within 7 days will appear here."));
         } else {
-            list.addView(dashboardActions(
-                    navButton("Completion Due", v -> showScopedPatientList(DELIVERY_COMPLETION_DUE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().toString()})),
-                    navButton("Scheduled", v -> showScopedPatientList(SCHEDULED_WEEK_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()})),
-                    navButton("Follow-ups", v -> showScopedPatientList(FOLLOWUP_WEEK_WHERE, followupWeekArgs())),
-                    navButton("EDD Week", v -> showScopedPatientList(OPEN_EDD_RANGE_WHERE, new String[]{LocalDate.now().toString(), LocalDate.now().plusDays(7).toString()}))
-            ));
+            list.addView(navButton("View All Priority", v ->
+                    showPatientList(false, adminPriorityWhere(), adminPriorityArgs())));
         }
         return list;
     }
 
     private int addTodayWorkGroup(LinearLayout list, List<Patient> patients, int shown, java.util.Set<String> seenPatientIds, String groupTitle, String badge, String reason, int color, String primaryAction) {
-        if (patients == null || patients.isEmpty() || shown >= 6) {
+        if (patients == null || patients.isEmpty() || shown >= DASHBOARD_PRIORITY_LIMIT) {
             return shown;
         }
         List<Patient> visible = new java.util.ArrayList<>();
         for (Patient p : patients) {
-            if (shown + visible.size() >= 6) {
+            if (shown + visible.size() >= DASHBOARD_PRIORITY_LIMIT) {
                 break;
             }
             String patientKey = value(p.patientId);
@@ -1152,6 +1326,7 @@ public class MainActivity extends Activity {
 
     private View todayWorkPatientCard(Patient p, String badge, String reason, int color, String primaryAction) {
         LinearLayout item = card(Color.WHITE, 1, color);
+        item.setElevation(dp(1));
         item.setPadding(dp(SPACE_SM), dp(6), dp(SPACE_SM), dp(6));
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
@@ -1213,7 +1388,8 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(9), dp(7), dp(9), dp(7));
         row.setBackground(rounded(Color.argb(count > 0 ? 72 : 34, Color.red(color), Color.green(color), Color.blue(color)), dp(CARD_RADIUS), dp(1), Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))));
-        row.setOnClickListener(v -> showScopedPatientList(where, args));
+        setDebouncedClick(row, v -> showScopedPatientList(where, args));
+        attachPressAnimation(row, 0.985f);
         TextView badge = chip(severity, count > 0 ? color : PRIMARY_SOFT, count > 0 ? Color.WHITE : MUTED);
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
@@ -1249,7 +1425,8 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(-1, -2);
             itemLp.setMargins(0, 0, 0, dp(7));
             item.setLayoutParams(itemLp);
-            item.setOnClickListener(v -> showPatientDetail(db.getPatientByPatientId(row[0]), false));
+            setDebouncedClick(item, v -> showPatientDetail(db.getPatientByPatientId(row[0]), false));
+            attachPressAnimation(item, 0.985f);
 
             LinearLayout top = new LinearLayout(this);
             top.setOrientation(LinearLayout.HORIZONTAL);
@@ -1386,7 +1563,8 @@ public class MainActivity extends Activity {
             Patient p = patients.get(i);
             TextView item = smallText(value(p.patientId) + " | " + value(p.patientName) + " | " + value(p.villageName) + " | EDD " + value(p.eddDate));
             item.setTextColor(TEXT);
-            item.setOnClickListener(v -> showPatientDetail(db.getPatient(p.id), false));
+            setDebouncedClick(item, v -> showPatientDetail(db.getPatient(p.id), false));
+            attachPressAnimation(item, 0.985f);
             list.addView(item);
         }
         list.addView(navButton("Open Search", v -> showPatientList(false)));
@@ -1428,7 +1606,7 @@ public class MainActivity extends Activity {
 
     private View stat(String title, int value, View.OnClickListener click) {
         LinearLayout box = card();
-        box.setOnClickListener(click);
+        setDebouncedClick(box, click);
         attachPressAnimation(box, 0.98f);
         box.setBackground(glassPanel(dp(CARD_RADIUS)));
         box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
@@ -1506,13 +1684,17 @@ public class MainActivity extends Activity {
 
     private int reportTone(String title) {
         String normalized = value(title).toLowerCase(java.util.Locale.US);
-        if (normalized.contains("complete due") || normalized.contains("call pending")) {
+        if (normalized.contains("complete due")) {
             return URGENT;
         }
-        if (normalized.contains("scheduled") || normalized.contains("edd") || normalized.contains("follow")) {
+        if (normalized.contains("call pending") || normalized.contains("scheduled")
+                || normalized.contains("edd") || normalized.contains("follow")) {
             return WARNING;
         }
-        if (normalized.contains("completed") || normalized.contains("today")) {
+        if (normalized.contains("completed")) {
+            return SLATE;
+        }
+        if (normalized.contains("today")) {
             return ACCENT;
         }
         return PRIMARY;
@@ -1520,7 +1702,7 @@ public class MainActivity extends Activity {
 
     private View workTile(String title, int value, String captionText, View.OnClickListener click) {
         LinearLayout box = card();
-        box.setOnClickListener(click);
+        setDebouncedClick(box, click);
         attachPressAnimation(box, 0.98f);
         box.setPadding(dp(12), dp(10), dp(12), dp(10));
         TextView count = label(String.valueOf(value), 28, true);
@@ -1553,8 +1735,17 @@ public class MainActivity extends Activity {
     }
 
     private void showPatientForm(Patient patient, boolean jumpToVisits) {
+        if (!isPatientFormPage()) {
+            patientFormOriginPage = currentPage;
+        }
         setPage(patient == null ? "Patient Entry" : "Edit Patient");
         editingPatient = patient;
+        patientFormSections.clear();
+        patientFormProgressChips.clear();
+        patientInlineError = null;
+        patientFormDirty = false;
+        patientSaveInProgress = false;
+        suppressPatientDirtyTracking = true;
         selectedStateCode = null;
         selectedDistrictCode = null;
         selectedSubdistrictCode = null;
@@ -1674,6 +1865,7 @@ public class MainActivity extends Activity {
                     setAdapter(ward, db.listWards(selectedLocalBodyCode));
                 }
                 setStatusMessage("");
+                markPatientFormDirty();
             }
 
             @Override
@@ -1683,35 +1875,44 @@ public class MainActivity extends Activity {
 
         boolean lockedForStaff = patient != null && patient.recordLocked && !isAdmin();
         form.addView(patientFormOverview(patient != null));
-        form.addView(formStep("1", "Basic Info", patient == null,
+        LinearLayout basicStep = formStep("1", "Basic Info", patient == null,
                 reportTwoColumn(row("Patient ID *", patientId), row("Age *", age)),
                 row("Patient Name *", patientName),
                 reportTwoColumn(row("Blood Group *", bloodGroup), row("Mobile Number *", mobile)),
                 row("Motivator Name", motivator),
                 row("Doctor Name *", doctor)
-        ));
-        form.addView(formStep("2", "Address", false,
+        );
+        LinearLayout addressStep = formStep("2", "Address", false,
                 reportTwoColumn(row("State / UT *", state), row("District *", district)),
                 reportTwoColumn(row("Block Name *", localBody), row("Village *", village))
-        ));
-        form.addView(formStep("3", "Pregnancy Dates", false,
+        );
+        LinearLayout pregnancyStep = formStep("3", "Pregnancy Dates", false,
                 reportTwoColumn(row("LMP Date *", lmpDate), row("Pregnancy Age", pregnancyAge)),
                 smallText("Auto-calculated from LMP; freezes after the patient is completed."),
                 reportTwoColumn(row("GRAVIDA *", gravida), row("Method of Last Delivery", lastDeliveryMethod)),
                 reportTwoColumn(row("EDD Date *", eddDate), row("Scheduled Delivery Date", scheduledDeliveryDate)),
                 smallText("Optional doctor-given delivery date. Changing it resets the call reminder."),
                 row("Entry / 1st Visit *", visit1)
-        ));
-        form.addView(formStep("4", "Visit Tracking", jumpToVisits,
+        );
+        LinearLayout visitsStep = formStep("4", "Visit Tracking", jumpToVisits,
                 reportTwoColumn(row("2nd Visit", visit2), row("3rd Visit", visit3)),
                 row("Final Visit", finalVisit)
-        ));
+        );
+        patientFormSections.add(basicStep);
+        patientFormSections.add(addressStep);
+        patientFormSections.add(pregnancyStep);
+        patientFormSections.add(visitsStep);
+        for (int i = 0; i < patientFormSections.size(); i++) {
+            appendFormStepNavigation(patientFormSections.get(i), i);
+            form.addView(patientFormSections.get(i));
+        }
+        stylePatientProgress(jumpToVisits ? 3 : 0);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
         actions.setGravity(Gravity.END);
         actions.setBackground(glassPanel(dp(12)));
-        actions.addView(button("Clear", v -> showPatientForm(null)));
+        actions.addView(button("Clear", navigateTo(() -> showPatientForm(null))));
         savePatientButton = button(patient == null ? "Save Patient" : "Update Patient", v -> savePatient());
         savePatientButton.setEnabled(!lockedForStaff);
         actions.addView(savePatientButton);
@@ -1724,6 +1925,11 @@ public class MainActivity extends Activity {
                     (empty(value(patient.visit3)) ? visit3 : finalVisit);
             scrollPatientFieldIntoView(nextVisitField);
         }
+        addPatientDirtyWatchers();
+        screen.post(() -> screen.post(() -> {
+            patientFormDirty = false;
+            suppressPatientDirtyTracking = false;
+        }));
     }
 
     private View patientFormOverview(boolean editing) {
@@ -1751,24 +1957,81 @@ public class MainActivity extends Activity {
         progress.setPadding(dp(SPACE_SM), dp(5), dp(SPACE_SM), dp(5));
         LinearLayout steps = new LinearLayout(this);
         steps.setOrientation(LinearLayout.HORIZONTAL);
-        steps.addView(formProgressChip("1", "Patient"));
-        steps.addView(formProgressChip("2", "Address"));
-        steps.addView(formProgressChip("3", "Pregnancy"));
-        steps.addView(formProgressChip("4", "Visits"));
+        steps.addView(formProgressChip("1", "Patient", 0));
+        steps.addView(formProgressChip("2", "Address", 1));
+        steps.addView(formProgressChip("3", "Pregnancy", 2));
+        steps.addView(formProgressChip("4", "Visits", 3));
         progress.addView(steps);
         return progress;
     }
 
-    private View formProgressChip(String number, String title) {
+    private View formProgressChip(String number, String title, int index) {
         TextView chip = label(number + "  " + title, 11, true);
         chip.setTextColor(PRIMARY_DARK);
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(10), dp(6), dp(10), dp(6));
         chip.setBackground(rounded(PRIMARY_SOFT, dp(CHIP_RADIUS), dp(1), GOLD));
+        chip.setContentDescription("Open " + title + " section");
+        setDebouncedClick(chip, v -> openPatientFormStep(index));
+        attachPressAnimation(chip, 0.96f);
+        patientFormProgressChips.add(chip);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
         lp.setMargins(0, 0, dp(6), 0);
         chip.setLayoutParams(lp);
         return chip;
+    }
+
+    private void openPatientFormStep(int index) {
+        if (index < 0 || index >= patientFormSections.size()) {
+            return;
+        }
+        for (int i = 0; i < patientFormSections.size(); i++) {
+            setCollapsibleSectionExpanded(patientFormSections.get(i), i == index);
+        }
+        stylePatientProgress(index);
+        LinearLayout target = patientFormSections.get(index);
+        if (patientFormScroll != null) {
+            patientFormScroll.post(() -> patientFormScroll.smoothScrollTo(0, Math.max(0, target.getTop() - dp(8))));
+        }
+    }
+
+    private void stylePatientProgress(int selectedIndex) {
+        for (int i = 0; i < patientFormProgressChips.size(); i++) {
+            TextView chip = patientFormProgressChips.get(i);
+            boolean selected = i == selectedIndex;
+            chip.setTextColor(selected ? Color.WHITE : PRIMARY_DARK);
+            chip.setBackground(rounded(selected ? PRIMARY : PRIMARY_SOFT, dp(CHIP_RADIUS), dp(1), selected ? PRIMARY : GOLD));
+            chip.setContentDescription(chip.getText() + (selected ? ", selected" : ""));
+        }
+    }
+
+    private void appendFormStepNavigation(LinearLayout section, int index) {
+        if (section == null || section.getChildCount() < 2 || !(section.getChildAt(1) instanceof LinearLayout)) {
+            return;
+        }
+        LinearLayout navigation = new LinearLayout(this);
+        navigation.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        if (index > 0) {
+            navigation.addView(navButton("Previous", v -> openPatientFormStep(index - 1)));
+        }
+        if (index < 3) {
+            navigation.addView(button("Next", v -> openPatientFormStep(index + 1)));
+        }
+        ((LinearLayout) section.getChildAt(1)).addView(navigation);
+    }
+
+    private void addPatientDirtyWatchers() {
+        TextView[] fields = {patientName, age, mobile, village, gravida, lastDeliveryMethod, lmpDate,
+                eddDate, scheduledDeliveryDate, motivator, doctor, visit2, visit3, finalVisit};
+        for (TextView field : fields) {
+            field.addTextChangedListener(simpleWatcher(s -> markPatientFormDirty()));
+        }
+    }
+
+    private void markPatientFormDirty() {
+        if (!suppressPatientDirtyTracking && !patientSaveInProgress) {
+            patientFormDirty = true;
+        }
     }
 
     private void addPatientValidationWatchers() {
@@ -1776,19 +2039,16 @@ public class MainActivity extends Activity {
         for (TextView field : fields) {
             field.addTextChangedListener(simpleWatcher(s -> {
                 field.setError(null);
-                if (patientValidationBanner != null) {
-                    patientValidationBanner.setVisibility(View.GONE);
-                }
+                clearPatientValidationFeedback();
                 setStatusMessage("");
             }));
         }
         bloodGroup.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (patientValidationBanner != null) {
-                    patientValidationBanner.setVisibility(View.GONE);
-                }
+                clearPatientValidationFeedback();
                 setStatusMessage("");
+                markPatientFormDirty();
             }
 
             @Override
@@ -1908,6 +2168,7 @@ public class MainActivity extends Activity {
     }
 
     private void savePatient() {
+        clearPatientValidationFeedback();
         Patient p = editingPatient == null ? new Patient() : editingPatient;
         Patient old = editingPatient == null ? null : db.getPatient(editingPatient.id);
         p.patientId = text(patientId);
@@ -1952,6 +2213,25 @@ public class MainActivity extends Activity {
             showPatientValidationError(p, validation);
             return;
         }
+        Patient duplicate = findDuplicatePatient(p);
+        if (duplicate != null) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Possible Duplicate Patient")
+                    .setMessage(value(duplicate.patientName) + " already uses mobile " + value(duplicate.mobileNumber)
+                            + ". Open the existing record or save this patient only if they are different people.")
+                    .setPositiveButton("Open Existing", (dialog, which) -> {
+                        patientFormDirty = false;
+                        showPatientDetail(db.getPatient(duplicate.id), false);
+                    })
+                    .setNegativeButton("Keep Editing", null)
+                    .setNeutralButton("Save Anyway", (dialog, which) -> continuePatientSave(p, old))
+                    .show();
+            return;
+        }
+        continuePatientSave(p, old);
+    }
+
+    private void continuePatientSave(Patient p, Patient old) {
         boolean shouldLockAfterSave = shouldConfirmFinalLock(old, p);
         p.recordLocked = old != null && old.recordLocked;
         if (shouldLockAfterSave) {
@@ -1967,6 +2247,21 @@ public class MainActivity extends Activity {
             return;
         }
         persistPatient(p, old);
+    }
+
+    private Patient findDuplicatePatient(Patient candidate) {
+        if (candidate == null || empty(candidate.mobileNumber)) {
+            return null;
+        }
+        for (Patient existing : db.listPatients("")) {
+            if (candidate.id > 0 && existing.id == candidate.id) {
+                continue;
+            }
+            if (PatientRules.sameMobile(candidate.mobileNumber, existing.mobileNumber)) {
+                return existing;
+            }
+        }
+        return null;
     }
 
     private boolean shouldConfirmFinalLock(Patient old, Patient p) {
@@ -1991,24 +2286,35 @@ public class MainActivity extends Activity {
                 if (error != null) {
                     rollbackPatientCache(p, old, creating);
                     setPatientSaveBusy(false);
+                    patientFormDirty = true;
+                    setStatusMessage("Online save failed. Review the connection and try again.");
                     toast("Cloud save failed: " + error.getMessage());
                     return;
                 }
+                patientFormDirty = false;
+                setPatientSaveBusy(false);
                 toast(creating ? "Patient saved online" : "Patient updated online");
-                showPatientList(false);
+                if (creating) {
+                    showPatientList(false);
+                } else {
+                    showPatientDetail(db.getPatient(p.id), lastPatientDetailAdminMode);
+                }
             }));
         } catch (Exception ex) {
             setPatientSaveBusy(false);
+            patientFormDirty = true;
             toast("Save failed: " + ex.getMessage());
         }
     }
 
     private void setPatientSaveBusy(boolean busy) {
-        if (savePatientButton == null) {
-            return;
+        patientSaveInProgress = busy;
+        if (savePatientButton != null) {
+            savePatientButton.setEnabled(!busy);
+            savePatientButton.setAlpha(busy ? 0.66f : 1f);
+            savePatientButton.setText(busy ? "Saving Online..." : (editingPatient == null ? "Save Patient" : "Update Patient"));
+            savePatientButton.setContentDescription(busy ? "Saving patient online" : savePatientButton.getText());
         }
-        savePatientButton.setEnabled(!busy);
-        savePatientButton.setText(busy ? "Saving..." : (editingPatient == null ? "Save Patient" : "Update Patient"));
     }
 
     private void rollbackPatientCache(Patient p, Patient old, boolean creating) {
@@ -2092,9 +2398,32 @@ public class MainActivity extends Activity {
             if (target instanceof TextView) {
                 ((TextView) target).setError(message);
             }
+            showInlinePatientError(target, message);
             target.requestFocus();
             scrollPatientFieldIntoView(target);
         }
+    }
+
+    private void showInlinePatientError(View target, String message) {
+        if (!(target.getParent() instanceof LinearLayout)) {
+            return;
+        }
+        LinearLayout fieldRow = (LinearLayout) target.getParent();
+        patientInlineError = label(message, TYPE_CHIP, true);
+        patientInlineError.setTextColor(URGENT);
+        patientInlineError.setPadding(dp(2), dp(4), dp(2), 0);
+        patientInlineError.setContentDescription("Validation error: " + message);
+        fieldRow.addView(patientInlineError, Math.min(fieldRow.indexOfChild(target) + 1, fieldRow.getChildCount()));
+    }
+
+    private void clearPatientValidationFeedback() {
+        if (patientValidationBanner != null) {
+            patientValidationBanner.setVisibility(View.GONE);
+        }
+        if (patientInlineError != null && patientInlineError.getParent() instanceof LinearLayout) {
+            ((LinearLayout) patientInlineError.getParent()).removeView(patientInlineError);
+        }
+        patientInlineError = null;
     }
 
     private void scrollPatientFieldIntoView(View target) {
@@ -2120,15 +2449,11 @@ public class MainActivity extends Activity {
         View current = target;
         while (current != null && current != patientFormScroll) {
             if (current.getVisibility() != View.VISIBLE) {
-                current.setVisibility(View.VISIBLE);
                 if (current.getParent() instanceof LinearLayout) {
                     LinearLayout section = (LinearLayout) current.getParent();
-                    if (section.getChildCount() > 0 && section.getChildAt(0) instanceof LinearLayout) {
-                        LinearLayout header = (LinearLayout) section.getChildAt(0);
-                        if (header.getChildCount() > 0 && header.getChildAt(header.getChildCount() - 1) instanceof TextView) {
-                            ((TextView) header.getChildAt(header.getChildCount() - 1)).setText("-");
-                        }
-                    }
+                    setCollapsibleSectionExpanded(section, true);
+                } else {
+                    current.setVisibility(View.VISIBLE);
                 }
             }
             if (!(current.getParent() instanceof View)) {
@@ -2173,6 +2498,14 @@ public class MainActivity extends Activity {
     }
 
     private void showPatientList(boolean adminMode, String extraWhere, String[] extraArgs, boolean alreadyScoped, String activeShortcut) {
+        String restoredQuery = restorePatientListState ? lastPatientSearchQuery : "";
+        restorePatientListState = false;
+        lastPatientListAdminMode = adminMode;
+        lastPatientListWhere = extraWhere;
+        lastPatientListArgs = extraArgs == null ? null : java.util.Arrays.copyOf(extraArgs, extraArgs.length);
+        lastPatientListAlreadyScoped = alreadyScoped;
+        lastPatientListShortcut = activeShortcut;
+        lastPatientSearchQuery = restoredQuery;
         setPage(adminMode ? "Patient Management" : "Patient Search");
         boolean fullAccess = adminMode && isAdmin();
         String visibleWhere = fullAccess || alreadyScoped ? extraWhere : scopedWhere(extraWhere);
@@ -2184,7 +2517,11 @@ public class MainActivity extends Activity {
         content.addView(page, new LinearLayout.LayoutParams(-1, -1));
         EditText search = input("");
         search.setHint("Search name, mobile, patient ID, village");
+        search.setText(restoredQuery);
         page.addView(searchPanel(search));
+        if (isAdmin() && recentlyDeletedPatient != null) {
+            page.addView(recentDeleteUndoBanner());
+        }
         page.addView(scrollingShortcutActions(
                 shortcutButton("Completion Due", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, DELIVERY_COMPLETION_DUE_WHERE), appendArgs(shortcutBaseArgs, LocalDate.now().toString(), LocalDate.now().toString()), true, "Completion Due")),
                 shortcutButton("Scheduled", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, SCHEDULED_WHERE), shortcutBaseArgs, true, "Scheduled")),
@@ -2205,7 +2542,10 @@ public class MainActivity extends Activity {
         scroll.addView(list);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         Runnable reload = () -> renderPatientRows(list, db.listPatients(text(search), visibleWhere, visibleArgs), adminMode, visibleWhere, activeShortcut);
-        search.addTextChangedListener(simpleWatcher(s -> reload.run()));
+        search.addTextChangedListener(simpleWatcher(s -> {
+            lastPatientSearchQuery = s;
+            reload.run();
+        }));
         reload.run();
     }
 
@@ -2216,12 +2556,14 @@ public class MainActivity extends Activity {
             list.addView(patientListEmptyState(visibleWhere));
             return;
         }
+        int rowIndex = 0;
         for (Patient p : patients) {
             LinearLayout card = patientSearchCard(p);
             if (!empty(p.scheduledDeliveryDate)) {
                 card.addView(statusLine("Scheduled delivery", value(p.scheduledDeliveryDate), scheduledDeliveryStatusText(p), scheduledDeliveryStatusColor(p)));
             }
-            card.setOnClickListener(v -> showPatientDetail(db.getPatient(p.id), adminMode));
+            setDebouncedClick(card, v -> showPatientDetail(db.getPatient(p.id), adminMode));
+            attachPressAnimation(card, 0.985f);
             List<View> rowActions = new java.util.ArrayList<>();
             rowActions.add(button("Call Patient", v -> callPatient(db.getPatient(p.id))));
             rowActions.add(button("Open Record", v -> showPatientDetail(db.getPatient(p.id), adminMode)));
@@ -2252,6 +2594,7 @@ public class MainActivity extends Activity {
                 card.addView(adminPatientDeleteControl(p));
             }
             list.addView(card);
+            animateListRow(card, rowIndex++);
         }
     }
 
@@ -2323,6 +2666,7 @@ public class MainActivity extends Activity {
 
     private LinearLayout patientSearchCard(Patient p) {
         LinearLayout card = card();
+        card.setElevation(dp(1));
         card.setPadding(dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM), dp(6));
         int tone = patientStatusColor(p);
         LinearLayout top = new LinearLayout(this);
@@ -2336,7 +2680,7 @@ public class MainActivity extends Activity {
         LinearLayout identity = new LinearLayout(this);
         identity.setOrientation(LinearLayout.VERTICAL);
         identity.setPadding(dp(SPACE_SM), 0, dp(SPACE_SM), 0);
-        TextView name = label(value(p.patientName), 15, true);
+        TextView name = label(value(p.patientName), TYPE_CARD_TITLE, true);
         name.setTextColor(PRIMARY_DARK);
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -2344,7 +2688,7 @@ public class MainActivity extends Activity {
         id.setTextColor(MUTED);
         TextView contact = label(value(p.mobileNumber) + " | " + value(p.villageName) + ", " + value(p.localBodyName), 11, true);
         contact.setTextColor(SLATE);
-        contact.setSingleLine(true);
+        contact.setMaxLines(2);
         contact.setEllipsize(android.text.TextUtils.TruncateAt.END);
         identity.addView(name);
         identity.addView(id);
@@ -2387,10 +2731,13 @@ public class MainActivity extends Activity {
 
     private int patientStatusColor(Patient p) {
         if (p.recordLocked) {
-            return ACCENT;
+            return SLATE;
         }
-        if (deliveryCompletionDue(p) || dateWithinDays(p.scheduledDeliveryDate, 7)) {
+        if (deliveryCompletionDue(p)) {
             return URGENT;
+        }
+        if (deliveryCompletionEligible(p) || dateWithinDays(p.scheduledDeliveryDate, 7)) {
+            return WARNING;
         }
         if (!empty(p.scheduledDeliveryDate) && empty(p.scheduledDeliveryCalledAt)) {
             return WARNING;
@@ -2407,15 +2754,15 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setPadding(0, dp(7), 0, dp(4));
-        row.addView(chip(p.recordLocked ? "Locked" : "Active", p.recordLocked ? ACCENT : PRIMARY_SOFT, p.recordLocked ? Color.WHITE : PRIMARY_DARK));
+        row.addView(chip(p.recordLocked ? "Locked" : "Active", p.recordLocked ? SLATE : PRIMARY_SOFT, p.recordLocked ? Color.WHITE : PRIMARY_DARK));
         if (deliveryCompletionDue(p)) {
             row.addView(chip(deliveryWindowChipText(p), URGENT, Color.WHITE));
         } else if (deliveryCompletionEligible(p)) {
-            row.addView(chip(deliveryWindowChipText(p), URGENT, Color.WHITE));
+            row.addView(chip(deliveryWindowChipText(p), WARNING, Color.WHITE));
         } else if (dateWithinDays(p.scheduledDeliveryDate, 7)) {
-            row.addView(chip("Scheduled delivery within 7 days", URGENT, Color.WHITE));
+            row.addView(chip("Scheduled delivery within 7 days", WARNING, Color.WHITE));
         } else if (!empty(p.scheduledDeliveryDate)) {
-            row.addView(chip("Scheduled delivery", ALERT_WARN_BG, WARNING));
+            row.addView(chip("Scheduled delivery", PRIMARY_SOFT, PRIMARY_DARK));
         }
         if (!empty(p.scheduledDeliveryDate) && empty(p.scheduledDeliveryCalledAt) && !p.recordLocked) {
             row.addView(chip("Call pending", WARNING, Color.WHITE));
@@ -2461,6 +2808,10 @@ public class MainActivity extends Activity {
             toast("Patient not found");
             return;
         }
+        if (!"Edit Patient".equals(currentPage)) {
+            patientDetailOriginPage = currentPage;
+        }
+        lastPatientDetailAdminMode = adminMode;
         setPage("Patient Detail");
         ScrollView scroll = new ScrollView(this);
         LinearLayout page = new LinearLayout(this);
@@ -2495,7 +2846,7 @@ public class MainActivity extends Activity {
         }
 
         java.util.List<View> actions = new java.util.ArrayList<>();
-        actions.add(navButton("Back to Search", v -> showPatientList(adminMode)));
+        actions.add(navButton("Back", v -> performBackRoute()));
         if (!p.recordLocked || isAdmin()) {
             actions.add(button("Update Visits", v -> showPatientForm(db.getPatient(p.id), true)));
             actions.add(button("Edit Patient", v -> showPatientForm(db.getPatient(p.id))));
@@ -2526,7 +2877,7 @@ public class MainActivity extends Activity {
             }));
             actions.add(button("Delete", v -> confirmDeletePatient(p)));
         }
-        panel.addView(scrollingActions(actions.toArray(new View[0])));
+        panel.addView(dashboardActions(actions.toArray(new View[0])));
         panel.addView(deliveryStatusBlock(p));
 
         panel.addView(detailGroup("Patient",
@@ -2852,6 +3203,9 @@ public class MainActivity extends Activity {
             toast("Delivery completion is available only within the 7 day delivery window");
             return;
         }
+        if (!beginPatientOperation(p.id)) {
+            return;
+        }
         if (empty(p.finalVisit) || !PatientRules.validDate(p.finalVisit) || LocalDate.parse(p.finalVisit).isAfter(LocalDate.now())) {
             p.finalVisit = PatientRules.deliveryCompletionVisitDate(old, LocalDate.now()).toString();
         }
@@ -2865,14 +3219,17 @@ public class MainActivity extends Activity {
             firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
                 if (error != null) {
                     db.savePatient(old);
+                    endPatientOperation(p.id);
                     toast("Completion sync failed: " + error.getMessage());
                     return;
                 }
+                endPatientOperation(p.id);
                 toast("Patient marked completed");
                 showDashboard();
             }));
         } catch (Exception ex) {
             db.savePatient(old);
+            endPatientOperation(p.id);
             toast("Completion failed: " + ex.getMessage());
         }
     }
@@ -2935,26 +3292,41 @@ public class MainActivity extends Activity {
             toast("Patient not found");
             return;
         }
+        if (!beginPatientOperation(p.id)) {
+            return;
+        }
         String oldDeletedAt = value(p.deletedAt);
         String oldDeletedBy = value(p.deletedBy);
         String oldUpdatedBy = value(p.updatedBy);
         p.deletedAt = LocalDateTime.now().toString();
         p.deletedBy = currentUser;
         p.updatedBy = currentUser;
-        db.savePatient(p);
-        firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
-            if (error != null) {
-                p.deletedAt = oldDeletedAt;
-                p.deletedBy = oldDeletedBy;
-                p.updatedBy = oldUpdatedBy;
-                db.savePatient(p);
-                toast("Delete sync failed: " + error.getMessage());
-                return;
-            }
-            db.logActivity("PATIENT_DELETE", p.patientId + " moved to recovery", currentUser);
-            toast("Patient moved to recovery");
-            showPatientList(true);
-        }));
+        try {
+            db.savePatient(p);
+            firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
+                if (error != null) {
+                    p.deletedAt = oldDeletedAt;
+                    p.deletedBy = oldDeletedBy;
+                    p.updatedBy = oldUpdatedBy;
+                    db.savePatient(p);
+                    endPatientOperation(p.id);
+                    toast("Delete sync failed: " + error.getMessage());
+                    return;
+                }
+                endPatientOperation(p.id);
+                db.logActivity("PATIENT_DELETE", p.patientId + " moved to recovery", currentUser);
+                recentlyDeletedPatient = db.getPatient(p.id);
+                toast("Patient moved to recovery");
+                showPatientList(true);
+            }));
+        } catch (Exception ex) {
+            p.deletedAt = oldDeletedAt;
+            p.deletedBy = oldDeletedBy;
+            p.updatedBy = oldUpdatedBy;
+            db.savePatient(p);
+            endPatientOperation(p.id);
+            toast("Delete failed: " + ex.getMessage());
+        }
     }
 
     private void confirmRestorePatient(Patient p) {
@@ -2980,26 +3352,74 @@ public class MainActivity extends Activity {
             toast("Patient not found");
             return;
         }
+        if (!beginPatientOperation(p.id)) {
+            return;
+        }
         String oldDeletedAt = value(p.deletedAt);
         String oldDeletedBy = value(p.deletedBy);
         String oldUpdatedBy = value(p.updatedBy);
         p.deletedAt = "";
         p.deletedBy = "";
         p.updatedBy = currentUser;
-        db.savePatient(p);
-        firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
-            if (error != null) {
-                p.deletedAt = oldDeletedAt;
-                p.deletedBy = oldDeletedBy;
-                p.updatedBy = oldUpdatedBy;
-                db.savePatient(p);
-                toast("Restore sync failed: " + error.getMessage());
-                return;
-            }
-            db.logActivity("PATIENT_RESTORE", p.patientId + " restored from recovery", currentUser);
-            toast("Patient restored");
-            showPatientRecovery();
-        }));
+        try {
+            db.savePatient(p);
+            firebase.savePatient(p, (unused, error) -> runOnUiThread(() -> {
+                if (error != null) {
+                    p.deletedAt = oldDeletedAt;
+                    p.deletedBy = oldDeletedBy;
+                    p.updatedBy = oldUpdatedBy;
+                    db.savePatient(p);
+                    endPatientOperation(p.id);
+                    toast("Restore sync failed: " + error.getMessage());
+                    return;
+                }
+                endPatientOperation(p.id);
+                db.logActivity("PATIENT_RESTORE", p.patientId + " restored from recovery", currentUser);
+                if (recentlyDeletedPatient != null && recentlyDeletedPatient.id == p.id) {
+                    recentlyDeletedPatient = null;
+                }
+                toast("Patient restored");
+                showPatientRecovery();
+            }));
+        } catch (Exception ex) {
+            p.deletedAt = oldDeletedAt;
+            p.deletedBy = oldDeletedBy;
+            p.updatedBy = oldUpdatedBy;
+            db.savePatient(p);
+            endPatientOperation(p.id);
+            toast("Restore failed: " + ex.getMessage());
+        }
+    }
+
+    private boolean beginPatientOperation(long patientId) {
+        if (patientOperationsInFlight.contains(patientId)) {
+            toast("This patient update is already in progress");
+            return false;
+        }
+        patientOperationsInFlight.add(patientId);
+        setStatusMessage("Updating patient record online...");
+        return true;
+    }
+
+    private void endPatientOperation(long patientId) {
+        patientOperationsInFlight.remove(patientId);
+        setStatusMessage("");
+    }
+
+    private View recentDeleteUndoBanner() {
+        LinearLayout banner = new LinearLayout(this);
+        banner.setOrientation(LinearLayout.HORIZONTAL);
+        banner.setGravity(Gravity.CENTER_VERTICAL);
+        banner.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM));
+        banner.setBackground(rounded(GOLD_SOFT, dp(CARD_RADIUS), dp(1), GOLD));
+        TextView message = label(value(recentlyDeletedPatient.patientName) + " moved to Recovery", 12, true);
+        message.setTextColor(GOLD_DARK);
+        banner.addView(message, new LinearLayout.LayoutParams(0, -2, 1));
+        banner.addView(button("Undo", v -> restoreDeletedPatient(recentlyDeletedPatient)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(CARD_GAP));
+        banner.setLayoutParams(lp);
+        return banner;
     }
 
     private void showReports() {
@@ -3028,7 +3448,7 @@ public class MainActivity extends Activity {
         reportBody.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(reportBody);
-        monthFilter.setOnClickListener(v -> showReportMonthPicker(monthFilter, from, to, () -> {
+        setDebouncedClick(monthFilter, v -> showReportMonthPicker(monthFilter, from, to, () -> {
             render[0].run();
             revealReportResults(controlsSection[0], scroll);
         }));
@@ -3426,7 +3846,7 @@ public class MainActivity extends Activity {
             String monthKey = row.getKey();
             int value = row.getValue();
             LinearLayout monthRow = clickableProgressRow(reportMonthLabel(monthKey), value, max, Math.round(value * 100f / max));
-            monthRow.setOnClickListener(v -> {
+            setDebouncedClick(monthRow, v -> {
                 YearMonth month = YearMonth.parse(monthKey);
                 String monthWhere = appendWhere(baseWhere, dateColumn + " BETWEEN ? AND ?");
                 String[] monthArgs = appendArgs(baseArgs, month.atDay(1).toString(), month.atEndOfMonth().toString());
@@ -3511,7 +3931,7 @@ public class MainActivity extends Activity {
             String village = value(row.getKey());
             int count = row.getValue();
             LinearLayout item = clickableProgressRow("-".equals(village) || empty(village) ? "Unknown Village" : village, count, max, Math.round(count * 100f / max));
-            item.setOnClickListener(v -> {
+            setDebouncedClick(item, v -> {
                 if ("-".equals(village) || empty(village)) {
                     showPatientList(false, appendWhere(where, "village_name IS NULL OR village_name = ''"), args, true);
                 } else {
@@ -4089,7 +4509,9 @@ public class MainActivity extends Activity {
 
     private View adminCommandPanel(String title, String message, String action, int color, View.OnClickListener listener) {
         LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.HORIZONTAL);
+        boolean compact = getResources().getConfiguration().screenWidthDp < 420
+                || getResources().getConfiguration().fontScale > 1.15f;
+        panel.setOrientation(compact ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         panel.setGravity(Gravity.CENTER_VERTICAL);
         panel.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
         panel.setBackground(rounded(Color.argb(138, 255, 255, 255), dp(CARD_RADIUS), dp(1), Color.argb(210, 255, 255, 255)));
@@ -4105,9 +4527,15 @@ public class MainActivity extends Activity {
         copy.addView(heading);
         copy.addView(body);
         Button cta = button(action, listener);
-        panel.addView(rail, new LinearLayout.LayoutParams(dp(4), dp(56)));
-        panel.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
-        panel.addView(cta);
+        if (compact) {
+            panel.addView(rail, new LinearLayout.LayoutParams(-1, dp(3)));
+            panel.addView(copy, new LinearLayout.LayoutParams(-1, -2));
+            panel.addView(cta, new LinearLayout.LayoutParams(-1, -2));
+        } else {
+            panel.addView(rail, new LinearLayout.LayoutParams(dp(4), dp(56)));
+            panel.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+            panel.addView(cta);
+        }
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, dp(7), dp(7));
         panel.setLayoutParams(lp);
@@ -4199,6 +4627,7 @@ public class MainActivity extends Activity {
         }
         JSONObject json = new JSONObject(body);
         String tag = json.optString("tag_name", "");
+        String releaseNotes = releaseNotesPreview(json.optString("body", ""));
         String apkUrl = "";
         String apkName = "";
         String digest = "";
@@ -4217,7 +4646,18 @@ public class MainActivity extends Activity {
                 }
             }
         }
-        return new UpdateInfo(tag, apkUrl, apkName, apkSize, digest);
+        return new UpdateInfo(tag, apkUrl, apkName, apkSize, digest, releaseNotes);
+    }
+
+    private String releaseNotesPreview(String notes) {
+        if (empty(notes)) {
+            return "No release notes supplied.";
+        }
+        String clean = notes.replace("\r", "").replaceAll("(?m)^#+\\s*", "").trim();
+        if (clean.length() > 320) {
+            clean = clean.substring(0, 317).trim() + "...";
+        }
+        return clean;
     }
 
     private String readStream(InputStream stream) throws Exception {
@@ -4270,7 +4710,8 @@ public class MainActivity extends Activity {
                         + "\nLatest version: " + update.tag
                         + "\nFile: " + value(update.apkName)
                         + "\nSize: " + formatBytes(update.apkSize)
-                        + "\nVerification: " + (empty(update.digest) ? "package check only" : "SHA-256 + package check"),
+                        + "\nVerification: " + (empty(update.digest) ? "package check only" : "SHA-256 + package check")
+                        + "\n\nWhat's new\n" + value(update.releaseNotes),
                 WARNING,
                 button("Download Update", v -> downloadAndInstallUpdate(update)),
                 button("Check Again", v -> loadUpdateCenter(slot))
@@ -4538,13 +4979,15 @@ public class MainActivity extends Activity {
         final String apkName;
         final long apkSize;
         final String digest;
+        final String releaseNotes;
 
-        UpdateInfo(String tag, String apkUrl, String apkName, long apkSize, String digest) {
+        UpdateInfo(String tag, String apkUrl, String apkName, long apkSize, String digest, String releaseNotes) {
             this.tag = tag;
             this.apkUrl = apkUrl;
             this.apkName = apkName;
             this.apkSize = apkSize;
             this.digest = digest;
+            this.releaseNotes = releaseNotes;
         }
     }
 
@@ -4924,7 +5367,7 @@ public class MainActivity extends Activity {
 
     private void attachDatePicker(EditText field) {
         field.setFocusable(false);
-        field.setOnClickListener(v -> showDatePicker(field));
+        setDebouncedClick(field, v -> showDatePicker(field));
     }
 
     private void showDatePicker(EditText field) {
@@ -4944,7 +5387,7 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout section(String title, View... rows) {
-        LinearLayout box = card();
+        LinearLayout box = sectionSurface();
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
@@ -4953,7 +5396,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams accentLp = new LinearLayout.LayoutParams(dp(SECTION_ACCENT_WIDTH), dp(SECTION_ACCENT_HEIGHT));
         accentLp.setMargins(0, 0, dp(SPACE_SM), 0);
         head.addView(accent, accentLp);
-        TextView heading = label(title, 15, true);
+        TextView heading = label(title, TYPE_CARD_TITLE, true);
         heading.setTextColor(PRIMARY_DARK);
         head.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
         head.setPadding(dp(SPACE_SM), dp(6), dp(SPACE_SM), dp(6));
@@ -4967,17 +5410,20 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout collapsibleSection(String title, boolean expanded, View... rows) {
-        LinearLayout box = card();
+        LinearLayout box = sectionSurface();
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
         head.setPadding(dp(SPACE_SM), dp(5), dp(2), dp(5));
         head.setBackground(rounded(PRIMARY_SOFT, dp(6), 0, PRIMARY_SOFT));
-        TextView heading = label(title, 14, true);
+        TextView heading = label(title, TYPE_SECTION_TITLE, true);
         heading.setTextColor(PRIMARY_DARK);
         TextView indicator = label(expanded ? "-" : "+", 18, true);
         indicator.setTextColor(PRIMARY);
         indicator.setGravity(Gravity.CENTER);
+        indicator.setContentDescription(expanded ? "Collapse section" : "Expand section");
+        head.setContentDescription(title + (expanded ? ", expanded" : ", collapsed"));
+        head.setFocusable(true);
         head.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
         head.addView(indicator, new LinearLayout.LayoutParams(dp(34), dp(34)));
         LinearLayout body = new LinearLayout(this);
@@ -4986,15 +5432,11 @@ public class MainActivity extends Activity {
         for (View row : rows) {
             body.addView(row);
         }
-        head.setOnClickListener(v -> {
+        setDebouncedClick(head, v -> {
             boolean open = body.getVisibility() != View.VISIBLE;
-            indicator.setText(open ? "-" : "+");
-            body.setVisibility(open ? View.VISIBLE : View.GONE);
-            body.setAlpha(open ? 0f : 1f);
-            if (open) {
-                body.animate().alpha(1f).setDuration(160).start();
-            }
+            setExpandableState(body, indicator, open);
         });
+        attachPressAnimation(head, 0.99f);
         box.addView(head);
         body.setPadding(0, dp(SPACE_SM), 0, 0);
         box.addView(body);
@@ -5007,13 +5449,66 @@ public class MainActivity extends Activity {
         }
         View header = section.getChildAt(0);
         View body = section.getChildAt(1);
-        body.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        TextView indicator = null;
         if (header instanceof LinearLayout) {
             LinearLayout headerRow = (LinearLayout) header;
             if (headerRow.getChildCount() > 0 && headerRow.getChildAt(headerRow.getChildCount() - 1) instanceof TextView) {
-                ((TextView) headerRow.getChildAt(headerRow.getChildCount() - 1)).setText(expanded ? "-" : "+");
+                indicator = (TextView) headerRow.getChildAt(headerRow.getChildCount() - 1);
             }
         }
+        body.animate().cancel();
+        body.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        body.setAlpha(1f);
+        body.setTranslationY(0f);
+        if (indicator != null) {
+            indicator.setText(expanded ? "-" : "+");
+            indicator.setContentDescription(expanded ? "Collapse section" : "Expand section");
+        }
+        updateExpandableHeader(body, expanded);
+    }
+
+    private void setExpandableState(View body, TextView indicator, boolean expanded) {
+        if (body == null) {
+            return;
+        }
+        body.animate().cancel();
+        if (indicator != null) {
+            indicator.setText(expanded ? "-" : "+");
+            indicator.setContentDescription(expanded ? "Collapse section" : "Expand section");
+        }
+        updateExpandableHeader(body, expanded);
+        if (expanded) {
+            body.setVisibility(View.VISIBLE);
+            body.setAlpha(0f);
+            body.setTranslationY(-dp(4));
+            body.animate().alpha(1f).translationY(0f).setDuration(MOTION_STANDARD_MS).start();
+        } else if (body.getVisibility() == View.VISIBLE) {
+            body.animate().alpha(0f).translationY(-dp(4)).setDuration(MOTION_FAST_MS)
+                    .withEndAction(() -> {
+                        body.setVisibility(View.GONE);
+                        body.setAlpha(1f);
+                        body.setTranslationY(0f);
+                    }).start();
+        } else {
+            body.setVisibility(View.GONE);
+        }
+    }
+
+    private void updateExpandableHeader(View body, boolean expanded) {
+        if (!(body.getParent() instanceof LinearLayout)) {
+            return;
+        }
+        LinearLayout section = (LinearLayout) body.getParent();
+        if (section.getChildCount() == 0) {
+            return;
+        }
+        View header = section.getChildAt(0);
+        CharSequence description = header.getContentDescription();
+        if (description == null) {
+            return;
+        }
+        String title = description.toString().split(",", 2)[0];
+        header.setContentDescription(title + (expanded ? ", expanded" : ", collapsed"));
     }
 
     private LinearLayout formStep(String number, String title, boolean expanded, View... rows) {
@@ -5027,7 +5522,7 @@ public class MainActivity extends Activity {
         badge.setTextColor(PRIMARY_DARK);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(rounded(GOLD, dp(CHIP_RADIUS), 0, GOLD));
-        TextView heading = label(title, 15, true);
+        TextView heading = label(title, TYPE_CARD_TITLE, true);
         heading.setTextColor(PRIMARY_DARK);
         TextView state = chip(
                 "Visit Tracking".equals(title) ? "Optional dates" : ("Pregnancy Dates".equals(title) ? "Required + optional" : "Required"),
@@ -5037,6 +5532,9 @@ public class MainActivity extends Activity {
         TextView indicator = label(expanded ? "-" : "+", 18, true);
         indicator.setTextColor(PRIMARY);
         indicator.setGravity(Gravity.CENTER);
+        indicator.setContentDescription(expanded ? "Collapse section" : "Expand section");
+        head.setContentDescription(title + (expanded ? ", expanded" : ", collapsed"));
+        head.setFocusable(true);
         head.addView(badge, new LinearLayout.LayoutParams(dp(30), dp(30)));
         heading.setPadding(dp(SPACE_SM), 0, 0, 0);
         head.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
@@ -5048,15 +5546,17 @@ public class MainActivity extends Activity {
         for (View row : rows) {
             body.addView(row);
         }
-        head.setOnClickListener(v -> {
+        setDebouncedClick(head, v -> {
             boolean open = body.getVisibility() != View.VISIBLE;
-            indicator.setText(open ? "-" : "+");
-            body.setVisibility(open ? View.VISIBLE : View.GONE);
-            body.setAlpha(open ? 0f : 1f);
+            setExpandableState(body, indicator, open);
             if (open) {
-                body.animate().alpha(1f).translationY(0f).setDuration(160).start();
+                try {
+                    stylePatientProgress(Integer.parseInt(number) - 1);
+                } catch (NumberFormatException ignored) {
+                }
             }
         });
+        attachPressAnimation(head, 0.99f);
         box.addView(head);
         body.setPadding(0, dp(SPACE_SM), 0, 0);
         box.addView(body);
@@ -5113,8 +5613,15 @@ public class MainActivity extends Activity {
 
     private LinearLayout reportTwoColumn(View left, View right) {
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
+        boolean stack = getResources().getConfiguration().screenWidthDp < 340
+                || getResources().getConfiguration().fontScale > 1.2f;
+        row.setOrientation(stack ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.TOP);
+        if (stack) {
+            row.addView(left, new LinearLayout.LayoutParams(-1, -2));
+            row.addView(right, new LinearLayout.LayoutParams(-1, -2));
+            return row;
+        }
         LinearLayout.LayoutParams leftLp = new LinearLayout.LayoutParams(0, -2, 1);
         leftLp.setMargins(0, 0, dp(4), 0);
         LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(0, -2, 1);
@@ -5203,10 +5710,12 @@ public class MainActivity extends Activity {
             View action = actions[i];
             if (action instanceof TextView) {
                 TextView text = (TextView) action;
-                text.setSingleLine(true);
+                text.setSingleLine(false);
+                text.setMaxLines(2);
                 text.setEllipsize(android.text.TextUtils.TruncateAt.END);
             }
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(BUTTON_HEIGHT), 1);
+            action.setMinimumHeight(dp(BUTTON_HEIGHT));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
             lp.setMargins(dp(SPACE_XS), dp(SPACE_XS), dp(SPACE_XS), dp(SPACE_XS));
             row.addView(action, lp);
         }
@@ -5228,11 +5737,13 @@ public class MainActivity extends Activity {
             if (action instanceof TextView) {
                 TextView text = (TextView) action;
                 text.setTextSize(11);
-                text.setSingleLine(true);
+                text.setSingleLine(false);
+                text.setMaxLines(2);
                 text.setEllipsize(android.text.TextUtils.TruncateAt.END);
                 text.setPadding(dp(5), 0, dp(5), 0);
             }
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(40), 1);
+            action.setMinimumHeight(dp(BUTTON_HEIGHT));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
             lp.setMargins(dp(3), dp(3), dp(3), dp(3));
             row.addView(action, lp);
         }
@@ -5266,7 +5777,7 @@ public class MainActivity extends Activity {
         selection.addView(icon, new LinearLayout.LayoutParams(dp(23), dp(23)));
         selection.addView(caption, new LinearLayout.LayoutParams(-1, -2));
         item.addView(selection, new LinearLayout.LayoutParams(dp(64), dp(52)));
-        item.setOnClickListener(listener);
+        setDebouncedClick(item, listener);
         attachPressAnimation(item, 0.95f);
         return item;
     }
@@ -5375,6 +5886,8 @@ public class MainActivity extends Activity {
         wrap.setOrientation(LinearLayout.HORIZONTAL);
         TextView line = new TextView(this);
         line.setBackground(rounded(Color.argb(120, 255, 255, 255), dp(5), dp(1), Color.argb(120, 255, 255, 255)));
+        line.setAlpha(0.55f);
+        line.post(() -> line.animate().alpha(1f).setDuration(MOTION_STANDARD_MS).start());
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(10), Math.max(1, widthPercent));
         lp.setMargins(0, dp(4), 0, dp(4));
         wrap.addView(line, lp);
@@ -5415,15 +5928,28 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(dp(2), dp(SPACE_XS), dp(2), dp(SPACE_XS));
-        TextView tv = label(label, 13, true);
+        TextView tv = label(label, TYPE_BODY, true);
         tv.setTextColor(SLATE);
         row.addView(tv);
-        row.addView(input, new LinearLayout.LayoutParams(-1, dp(BUTTON_HEIGHT)));
+        input.setMinimumHeight(dp(BUTTON_HEIGHT));
+        row.addView(input, new LinearLayout.LayoutParams(-1, -2));
         return row;
     }
 
     private LinearLayout card() {
         return card(SURFACE, 1, BORDER);
+    }
+
+    private LinearLayout sectionSurface() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
+        box.setBackground(rounded(Color.argb(238, 255, 255, 255), dp(4), 0, Color.TRANSPARENT));
+        box.setElevation(0f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(CARD_GAP));
+        box.setLayoutParams(lp);
+        return box;
     }
 
     private LinearLayout card(int color, int strokeWidth, int strokeColor) {
@@ -5432,11 +5958,10 @@ public class MainActivity extends Activity {
         int border = strokeWidth == 0 ? 0 : (color == SURFACE ? BORDER : Color.argb(170, Color.red(strokeColor), Color.green(strokeColor), Color.blue(strokeColor)));
         box.setBackground(rounded(color, dp(CARD_RADIUS), strokeWidth == 0 ? 0 : dp(strokeWidth), border));
         box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
-        box.setElevation(dp(1));
+        box.setElevation(0f);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(CARD_GAP));
         box.setLayoutParams(lp);
-        animateIn(box);
         return box;
     }
 
@@ -5457,6 +5982,8 @@ public class MainActivity extends Activity {
         tv.setText(text);
         tv.setTextSize(sp);
         tv.setTextColor(TEXT);
+        tv.setIncludeFontPadding(false);
+        tv.setLineSpacing(0f, 1.08f);
         if (bold) {
             tv.setTypeface(tv.getTypeface(), Typeface.BOLD);
         }
@@ -5464,7 +5991,7 @@ public class MainActivity extends Activity {
     }
 
     private TextView smallText(String text) {
-        TextView tv = label(text, 13, false);
+        TextView tv = label(text, TYPE_BODY, false);
         tv.setPadding(0, dp(3), 0, dp(3));
         return tv;
     }
@@ -5533,6 +6060,7 @@ public class MainActivity extends Activity {
         edit.setHintTextColor(Color.rgb(135, 151, 166));
         edit.setBackground(glassInput(false));
         edit.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
+        edit.setMinHeight(dp(BUTTON_HEIGHT));
         edit.setOnFocusChangeListener((v, hasFocus) ->
                 edit.setBackground(glassInput(hasFocus)));
         return edit;
@@ -5556,6 +6084,7 @@ public class MainActivity extends Activity {
         view.setHintTextColor(Color.rgb(135, 151, 166));
         view.setBackground(glassInput(false));
         view.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
+        view.setMinHeight(dp(BUTTON_HEIGHT));
         view.setDropDownHeight(dp(280));
         view.setDropDownVerticalOffset(dp(4));
         view.setDropDownBackgroundDrawable(rounded(Color.WHITE, dp(CARD_RADIUS), dp(1), BORDER));
@@ -5574,6 +6103,7 @@ public class MainActivity extends Activity {
         view.setSingleLine(true);
         view.setEllipsize(android.text.TextUtils.TruncateAt.END);
         view.setClickable(true);
+        view.setMinHeight(dp(BUTTON_HEIGHT));
         attachPressAnimation(view, 0.98f);
         return view;
     }
@@ -5590,6 +6120,7 @@ public class MainActivity extends Activity {
         view.setAdapter(adapter);
         view.setBackground(glassInput(false));
         view.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
+        view.setMinimumHeight(dp(BUTTON_HEIGHT));
         view.setPrompt(prompt);
         return view;
     }
@@ -5642,6 +6173,9 @@ public class MainActivity extends Activity {
         b.setTextSize(14);
         b.setTypeface(b.getTypeface(), Typeface.BOLD);
         b.setAllCaps(false);
+        b.setGravity(Gravity.CENTER);
+        b.setMaxLines(2);
+        b.setEllipsize(android.text.TextUtils.TruncateAt.END);
         b.setMinWidth(0);
         b.setMinimumWidth(0);
         b.setMinHeight(dp(BUTTON_HEIGHT));
@@ -5664,19 +6198,53 @@ public class MainActivity extends Activity {
             b.setBackground(rounded(Color.WHITE, dp(BUTTON_RADIUS), dp(1), Color.rgb(174, 204, 219)));
             b.setElevation(0);
         }
-        b.setOnClickListener(listener);
-        b.setOnTouchListener((view, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                view.animate().scaleX(0.97f).scaleY(0.97f).setDuration(80).start();
-            } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
-                view.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
-            }
-            return false;
-        });
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(BUTTON_HEIGHT));
+        int icon = actionIcon(text);
+        if (icon != 0) {
+            b.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0);
+            b.setCompoundDrawablePadding(dp(6));
+            b.setCompoundDrawableTintList(ColorStateList.valueOf(b.getCurrentTextColor()));
+        }
+        b.setContentDescription(text);
+        setDebouncedClick(b, listener);
+        attachPressAnimation(b, 0.97f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
         lp.setMargins(dp(SPACE_XS), dp(SPACE_XS), dp(SPACE_XS), dp(SPACE_XS));
         b.setLayoutParams(lp);
         return b;
+    }
+
+    private int actionIcon(String text) {
+        String action = value(text).toLowerCase(java.util.Locale.US);
+        if (action.contains("call")) {
+            return R.drawable.ic_action_call;
+        }
+        if (action.equals("back") || action.startsWith("back to")) {
+            return R.drawable.ic_back;
+        }
+        if (action.contains("delete") || action.contains("remove") || action.contains("sign out")) {
+            return R.drawable.ic_action_delete;
+        }
+        if (action.contains("excel") || action.contains("pdf") || action.contains("export")
+                || action.contains("download") || action.contains("backup")) {
+            return R.drawable.ic_action_download;
+        }
+        if (action.contains("edit") || action.contains("update visit")) {
+            return R.drawable.ic_action_edit;
+        }
+        if (action.contains("open") || action.contains("view") || action.contains("review")) {
+            return R.drawable.ic_action_open;
+        }
+        if (action.contains("save") || action.contains("apply") || action.contains("complete")
+                || action.contains("restore") || action.contains("next") || action.contains("sign in")) {
+            return R.drawable.ic_action_check;
+        }
+        if (action.contains("new patient") || action.contains("add patient")) {
+            return R.drawable.ic_nav_entry;
+        }
+        if (action.contains("search")) {
+            return R.drawable.ic_nav_search;
+        }
+        return 0;
     }
 
     private boolean isPrimaryAction(String text) {
@@ -5721,9 +6289,10 @@ public class MainActivity extends Activity {
     }
 
     private TextView chip(String text, int bg, int fg) {
-        TextView chip = label(text, 12, true);
+        TextView chip = label(text, TYPE_CHIP, true);
         chip.setTextColor(fg);
         chip.setGravity(Gravity.CENTER);
+        chip.setMaxLines(2);
         chip.setPadding(dp(CHIP_PAD_X), dp(CHIP_PAD_Y), dp(CHIP_PAD_X), dp(CHIP_PAD_Y));
         chip.setBackground(rounded(bg, dp(CHIP_RADIUS), 0, bg));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
@@ -5738,7 +6307,22 @@ public class MainActivity extends Activity {
         view.post(() -> view.animate()
                 .alpha(1f)
                 .translationY(0f)
-                .setDuration(220)
+                .setDuration(MOTION_STANDARD_MS)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .start());
+    }
+
+    private void animateListRow(View view, int index) {
+        if (view == null || index >= 8) {
+            return;
+        }
+        view.setAlpha(0f);
+        view.setTranslationY(dp(5));
+        view.post(() -> view.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay(Math.min(index, 7) * 22L)
+                .setDuration(MOTION_STANDARD_MS)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator())
                 .start());
     }
@@ -5746,12 +6330,30 @@ public class MainActivity extends Activity {
     @SuppressLint("ClickableViewAccessibility")
     private void attachPressAnimation(View view, float scale) {
         view.setOnTouchListener((target, event) -> {
+            if (!target.isEnabled()) {
+                return false;
+            }
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                target.animate().scaleX(scale).scaleY(scale).setDuration(70).start();
+                target.animate().scaleX(scale).scaleY(scale).alpha(0.86f).setDuration(MOTION_FAST_MS / 2).start();
             } else if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
-                target.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
+                target.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(MOTION_FAST_MS).start();
             }
             return false;
+        });
+    }
+
+    private void setDebouncedClick(View view, View.OnClickListener listener) {
+        if (view == null || listener == null) {
+            return;
+        }
+        final long[] lastClickAt = {0L};
+        view.setOnClickListener(v -> {
+            long now = SystemClock.elapsedRealtime();
+            if (!view.isEnabled() || now - lastClickAt[0] < ACTION_DEBOUNCE_MS) {
+                return;
+            }
+            lastClickAt[0] = now;
+            listener.onClick(v);
         });
     }
 

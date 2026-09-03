@@ -28,6 +28,17 @@ public class PatientRulesTest {
     }
 
     @Test
+    public void mobileComparisonAcceptsIndianPrefixAndFormatting() {
+        assertEquals(true, PatientRules.sameMobile("+91 98765-43210", "9876543210"));
+    }
+
+    @Test
+    public void mobileComparisonRejectsShortOrDifferentNumbers() {
+        assertEquals(false, PatientRules.sameMobile("12345", "12345"));
+        assertEquals(false, PatientRules.sameMobile("9876543210", "9876543211"));
+    }
+
+    @Test
     public void validationRejectsVisitOrderRegression() {
         Patient p = validPatient();
         p.visit2 = "2026-05-31";

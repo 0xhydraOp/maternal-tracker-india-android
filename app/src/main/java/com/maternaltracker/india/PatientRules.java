@@ -80,6 +80,16 @@ final class PatientRules {
         }
     }
 
+    static String normalizedMobile(String value) {
+        String digits = value == null ? "" : value.replaceAll("\\D", "");
+        return digits.length() > 10 ? digits.substring(digits.length() - 10) : digits;
+    }
+
+    static boolean sameMobile(String left, String right) {
+        String normalizedLeft = normalizedMobile(left);
+        return normalizedLeft.length() == 10 && normalizedLeft.equals(normalizedMobile(right));
+    }
+
     static boolean scheduledDeliveryNeedsCompletion(Patient p, LocalDate today) {
         return activeRecord(p) && dateBefore(p.scheduledDeliveryDate, safeToday(today));
     }

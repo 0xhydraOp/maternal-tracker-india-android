@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.1.28 - 2026-09-03
+
+- Reduced decorative elevation so only interactive patient and navigation surfaces carry visual depth.
+- Limited Home to the two highest-priority patient records with one clear View All Priority action.
+- Standardized patient status colors for overdue, seven-day, informational, and completed states.
+- Preserved dashboard position during live synchronization and refined lightweight loading placeholders.
+- Added persistent inline validation messages and automatic navigation to the first invalid patient field.
+- Added restrained staggered transitions to visible patient search results and unified press feedback.
+- Centralized core typography sizes and improved collapsible-section accessibility feedback.
+- Verified compact layouts at 360dp, 393dp, and 412dp with 100%, 115%, and 130% font scales.
+
+## v1.1.27 - 2026-09-03
+
+- Reworked Back navigation to stop screen activity, preserve meaningful destinations, protect unsaved forms, and require a second Back press to exit.
+- Added lifecycle cleanup for timers, animations, keyboards, and external-app transitions.
+- Unified buttons with icon-led action styles, accessible sizing, consistent motion, and rapid-tap protection.
+- Replaced repetitive framed page sections with quieter full-width content bands and clearer screen-specific hierarchy.
+- Made patient-form progress steps interactive with Previous and Next controls and visible selected state.
+- Added duplicate-mobile detection, clearer online save states, and guarded patient operations.
+- Added one-tap undo after recoverable patient deletion while retaining Patient Recovery.
+- Preserved active search text, shortcut scope, and route context when opening and returning from patient records.
+- Improved compact-screen and large-font behavior for dashboard metadata, forms, patient cards, and Admin actions.
+- Added release-note previews to the in-app Update Center while retaining verified download progress and package checks.
+
 ## v1.1.26 - 2026-08-28
 
 - Added adaptive compact headers on inner screens and removed idle sync text above bottom navigation.
