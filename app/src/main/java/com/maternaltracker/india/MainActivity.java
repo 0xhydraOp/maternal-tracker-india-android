@@ -5,9 +5,12 @@ import android.app.AlertDialog;
 import android.annotation.SuppressLint;
 import android.app.DatePickerDialog;
 import android.content.Context;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.pm.PackageInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Paint;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -136,6 +139,38 @@ public class MainActivity extends Activity {
     private static final String REPORT_DATE_EDD = "EDD Date";
     private static final String REPORT_DATE_SCHEDULED = "Scheduled Delivery";
     private static final String REPORT_DATE_COMPLETED = "Completed / Locked";
+    private static final String EPSON_SMART_PANEL_PACKAGE = "com.epson.epsonsmart";
+    private static final int PRINT_PRESCRIPTION = 0;
+    private static final int PRINT_OT_PAPER = 1;
+    private static final int PRINT_BABY_FORM = 2;
+    private static final String[] PRESCRIPTION_DOCTORS = {
+            "DR. SUYETA NASRIN",
+            "DR. ARNAB SAHA",
+            "DR. SUDIPTA BISWAS",
+            "DR. PIARUL SK"
+    };
+    private static final String[] PRESCRIPTION_CREDENTIALS = {
+            "MBBS, DNB, DGO (NEW DELHI) | Consultant Obstetrician & Gynaecologist | REG NO.: 79831 (WBMC)",
+            "M.B.B.S., M.S. (Obstetrics & Gynaecology) | Consultant Obstetrician & Gynaecologist Surgeon | REG NO-78415 (WBMC)",
+            "MBBS, PGPN, DCH | Child Specialist | REG NO.: 68725 (WBMC)",
+            "MBBS, MS (General Surgeon) | Consultant Laparoscopic & General Surgeon | REG NO.: 76636 (WBMC)"
+    };
+    private static final String[] PRESCRIPTION_ASSETS = {
+            "print_forms/prescription_suyeta_nasrin.jpg",
+            "print_forms/prescription_arnab_saha.jpg",
+            "print_forms/prescription_sudipta_biswas.jpg",
+            "print_forms/prescription_piarul_sk.jpg"
+    };
+    private static final String[] OT_PAPER_NAMES = {
+            "BHT / Input & Output Chart - Bed Sheet",
+            "Anaesthetic Note",
+            "OT Note"
+    };
+    private static final String[] OT_PAPER_ASSETS = {
+            "print_forms/ot_bht_bed_sheet.jpg",
+            "print_forms/ot_anaesthetic_note.jpg",
+            "print_forms/ot_note.jpg"
+    };
 
     private MaternalDbHelper db;
     private FirebaseGateway firebase;
@@ -539,6 +574,10 @@ public class MainActivity extends Activity {
         actions.setOrientation(LinearLayout.VERTICAL);
         actionScroll.addView(actions);
 
+        actions.addView(menuGroupTitle("Print Desk"));
+        actions.addView(menuItem("Print Prescriptions", "Select a doctor prescription", PRIMARY, navigateTo(this::showPrescriptionPrintCenter)));
+        actions.addView(menuItem("Print OT Papers", "Select one OT hospital paper", GOLD_DARK, navigateTo(this::showOtPrintCenter)));
+        actions.addView(menuItem("Print Baby Birth Form", "Baby identification form", ACCENT, navigateTo(this::showBabyPrintCenter)));
         actions.addView(menuGroupTitle("Patient Work"));
         actions.addView(menuItem("New Patient", "Register a new maternal record", ACCENT, navigateTo(() -> showPatientForm(null))));
         actions.addView(menuItem("Search Patients", "Find records and update visits", PRIMARY, navigateTo(() -> showPatientList(false))));
@@ -3540,6 +3579,619 @@ public class MainActivity extends Activity {
         ));
     }
 
+    private void showPrescriptionPrintCenter() {
+        showPrintDesk(PRINT_PRESCRIPTION);
+    }
+
+    private void showOtPrintCenter() {
+        showPrintDesk(PRINT_OT_PAPER);
+    }
+
+    private void showBabyPrintCenter() {
+        showPrintDesk(PRINT_BABY_FORM);
+    }
+
+    private void showPrintDesk(int activeCategory) {
+        setPage("Print Desk");
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout page = printPage(scroll);
+        page.addView(printDeskHeader());
+        page.addView(printCategoryTabs(activeCategory));
+        if (activeCategory == PRINT_PRESCRIPTION) {
+            page.addView(prescriptionPrintWorkspace());
+        } else if (activeCategory == PRINT_OT_PAPER) {
+            page.addView(otPrintWorkspace());
+        } else {
+            page.addView(babyPrintWorkspace());
+        }
+    }
+
+    private LinearLayout printPage(ScrollView scroll) {
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(0, 0, 0, dp(SPACE_XL));
+        scroll.addView(page);
+        content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+        return page;
+    }
+
+    private View printDeskHeader() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.HORIZONTAL);
+        panel.setGravity(Gravity.CENTER_VERTICAL);
+        panel.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG));
+        panel.setBackground(prominentPanel());
+        panel.setElevation(dp(3));
+        LinearLayout.LayoutParams panelLp = new LinearLayout.LayoutParams(-1, -2);
+        panelLp.setMargins(0, 0, 0, dp(CARD_GAP));
+        panel.setLayoutParams(panelLp);
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.drawable.ic_action_print);
+        icon.setImageTintList(ColorStateList.valueOf(PRIMARY_DARK));
+        icon.setPadding(dp(12), dp(12), dp(12), dp(12));
+        icon.setBackground(rounded(Color.WHITE, dp(26), 0, Color.WHITE));
+        panel.addView(icon, new LinearLayout.LayoutParams(dp(52), dp(52)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(SPACE_MD), 0, 0, 0);
+        TextView title = label("Hospital Print Desk", 18, true);
+        title.setTextColor(Color.WHITE);
+        TextView detail = label("Select, verify and print the original hospital document", TYPE_BODY, false);
+        detail.setTextColor(Color.argb(225, 255, 255, 255));
+        detail.setPadding(0, dp(3), 0, 0);
+        copy.addView(title);
+        copy.addView(detail);
+        panel.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        return panel;
+    }
+
+    private View printCategoryTabs(int activeCategory) {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setPadding(0, 0, 0, dp(SPACE_SM));
+        String[] labels = {"Prescriptions", "OT Papers", "Baby Form"};
+        for (int i = 0; i < labels.length; i++) {
+            final int category = i;
+            Button tab = shortcutButton(labels[i], labels[activeCategory], v -> showPrintDesk(category));
+            tab.setMinWidth(dp(118));
+            tabs.addView(tab);
+        }
+        scroll.addView(tabs);
+        return scroll;
+    }
+
+    private View prescriptionPrintWorkspace() {
+        int[] selected = {-1};
+        TextView selection = printSelectionField("Choose doctor prescription");
+        TextView credentials = printSupportingText("Select a doctor to review credentials and document preview.");
+        ImageView preview = printPreview(null, false);
+        TextView documentValue = printSummaryValue("Not selected");
+        TextView orientationValue = printSummaryValue("A4 portrait");
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> {
+            if (selected[0] < 0) {
+                toast("Select a doctor prescription");
+                selection.performClick();
+                return;
+            }
+            confirmHospitalPrint(
+                    "Prescription - " + PRESCRIPTION_DOCTORS[selected[0]],
+                    PRESCRIPTION_ASSETS[selected[0]],
+                    false,
+                    true
+            );
+        });
+        Button other = printSecondaryButton("Other Printers / Save as PDF", v -> {
+            if (selected[0] < 0) {
+                toast("Select a doctor prescription");
+                selection.performClick();
+                return;
+            }
+            confirmHospitalPrint(
+                    "Prescription - " + PRESCRIPTION_DOCTORS[selected[0]],
+                    PRESCRIPTION_ASSETS[selected[0]],
+                    false,
+                    false
+            );
+        });
+        setPrintActionEnabled(epson, false);
+        setPrintActionEnabled(other, false);
+        actions.addView(epson);
+        actions.addView(other);
+        actions.addView(printSettingsButton());
+
+        selection.setOnClickListener(v -> showPrintChoiceDialog(
+                "Choose Prescription",
+                "Select the doctor whose original prescription will be printed.",
+                PRESCRIPTION_DOCTORS,
+                PRESCRIPTION_CREDENTIALS,
+                selected[0],
+                which -> {
+                    selected[0] = which;
+                    selection.setText(PRESCRIPTION_DOCTORS[which]);
+                    selection.setTextColor(PRIMARY_DARK);
+                    selection.setBackground(rounded(GOLD_SOFT, dp(BUTTON_RADIUS), dp(2), GOLD));
+                    credentials.setText(PRESCRIPTION_CREDENTIALS[which]);
+                    documentValue.setText(PRESCRIPTION_DOCTORS[which] + " prescription");
+                    setPrintPreview(preview, PRESCRIPTION_ASSETS[which], false);
+                    setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+                    setPrintActionEnabled(other, true);
+                }
+        ));
+
+        return printWorkspaceCard(
+                "Prescription",
+                "Select doctor",
+                selection,
+                credentials,
+                preview,
+                printSummary(documentValue, orientationValue),
+                actions
+        );
+    }
+
+    private View otPrintWorkspace() {
+        int[] selected = {-1};
+        TextView selection = printSelectionField("Choose OT paper");
+        TextView support = printSupportingText("BHT prints in landscape. Anaesthetic Note and OT Note print in portrait.");
+        ImageView preview = printPreview(null, false);
+        TextView documentValue = printSummaryValue("Not selected");
+        TextView orientationValue = printSummaryValue("Select a document");
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> {
+            if (selected[0] < 0) {
+                toast("Select an OT paper");
+                selection.performClick();
+                return;
+            }
+            confirmHospitalPrint(
+                    OT_PAPER_NAMES[selected[0]],
+                    OT_PAPER_ASSETS[selected[0]],
+                    selected[0] == 0,
+                    true
+            );
+        });
+        Button other = printSecondaryButton("Other Printers / Save as PDF", v -> {
+            if (selected[0] < 0) {
+                toast("Select an OT paper");
+                selection.performClick();
+                return;
+            }
+            confirmHospitalPrint(
+                    OT_PAPER_NAMES[selected[0]],
+                    OT_PAPER_ASSETS[selected[0]],
+                    selected[0] == 0,
+                    false
+            );
+        });
+        setPrintActionEnabled(epson, false);
+        setPrintActionEnabled(other, false);
+        actions.addView(epson);
+        actions.addView(other);
+        actions.addView(printSettingsButton());
+
+        String[] paperDetails = {
+                "A4 landscape | Input and output chart",
+                "A4 portrait | Anaesthetic record",
+                "A4 portrait | Operation theatre note"
+        };
+        selection.setOnClickListener(v -> showPrintChoiceDialog(
+                "Choose OT Paper",
+                "Select one original hospital document for this print job.",
+                OT_PAPER_NAMES,
+                paperDetails,
+                selected[0],
+                which -> {
+                    selected[0] = which;
+                    boolean landscape = which == 0;
+                    selection.setText(OT_PAPER_NAMES[which]);
+                    selection.setTextColor(PRIMARY_DARK);
+                    selection.setBackground(rounded(GOLD_SOFT, dp(BUTTON_RADIUS), dp(2), GOLD));
+                    documentValue.setText(OT_PAPER_NAMES[which]);
+                    orientationValue.setText(landscape ? "A4 landscape" : "A4 portrait");
+                    setPrintPreview(preview, OT_PAPER_ASSETS[which], landscape);
+                    setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+                    setPrintActionEnabled(other, true);
+                }
+        ));
+
+        return printWorkspaceCard(
+                "OT Papers",
+                "Select document",
+                selection,
+                support,
+                preview,
+                printSummary(documentValue, orientationValue),
+                actions
+        );
+    }
+
+    private View babyPrintWorkspace() {
+        String assetPath = "print_forms/baby_identification_form.jpg";
+        TextView documentValue = printSummaryValue("Baby Identification Form");
+        TextView orientationValue = printSummaryValue("A4 portrait");
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
+                "Baby Identification Form", assetPath, false, true));
+        setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+        actions.addView(epson);
+        actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
+                "Baby Identification Form", assetPath, false, false)));
+        actions.addView(printSettingsButton());
+        return printWorkspaceCard(
+                "Baby Identification",
+                "Selected document",
+                printSelectedDocumentCard(
+                        "BABY IDENTIFICATION FORM",
+                        "Original Blue Bird hospital form",
+                        "A4 PORTRAIT"
+                ),
+                printSupportingText("Review the full document below before continuing."),
+                printPreview(assetPath, false),
+                printSummary(documentValue, orientationValue),
+                actions
+        );
+    }
+
+    private void showPrintChoiceDialog(
+            String title,
+            String helper,
+            String[] names,
+            String[] details,
+            int selected,
+            java.util.function.IntConsumer onSelect
+    ) {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_MD));
+        content.setBackground(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
+
+        TextView eyebrow = label("BLUE BIRD PRINT DESK", 11, true);
+        eyebrow.setTextColor(GOLD_DARK);
+        TextView heading = label(title, 20, true);
+        heading.setTextColor(PRIMARY_DARK);
+        heading.setPadding(0, dp(3), 0, 0);
+        TextView explanation = label(helper, TYPE_BODY, false);
+        explanation.setTextColor(SLATE);
+        explanation.setPadding(0, dp(SPACE_XS), 0, dp(SPACE_MD));
+        content.addView(eyebrow);
+        content.addView(heading);
+        content.addView(explanation);
+
+        LinearLayout choices = new LinearLayout(this);
+        choices.setOrientation(LinearLayout.VERTICAL);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(content)
+                .setNegativeButton("Cancel", null)
+                .create();
+        for (int i = 0; i < names.length; i++) {
+            final int index = i;
+            boolean active = i == selected;
+            View choice = printChoiceItem(
+                    names[i],
+                    details != null && i < details.length ? details[i] : "",
+                    active
+            );
+            setDebouncedClick(choice, v -> {
+                dialog.dismiss();
+                onSelect.accept(index);
+            });
+            choices.addView(choice);
+        }
+        content.addView(choices);
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
+                int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.92f);
+                dialog.getWindow().setLayout(width, android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+            }
+        });
+        dialog.show();
+    }
+
+    private View printChoiceItem(String title, String detail, boolean selected) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.HORIZONTAL);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
+        item.setBackground(rounded(
+                selected ? GOLD_SOFT : Color.WHITE,
+                dp(CARD_RADIUS),
+                dp(selected ? 2 : 1),
+                selected ? GOLD : BORDER
+        ));
+        item.setElevation(selected ? dp(2) : 0);
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        TextView name = label(title, 15, true);
+        name.setTextColor(PRIMARY_DARK);
+        name.setLetterSpacing(0f);
+        copy.addView(name);
+        if (!empty(detail)) {
+            TextView supporting = label(detail, 11, true);
+            supporting.setTextColor(SLATE);
+            supporting.setPadding(0, dp(4), 0, 0);
+            supporting.setMaxLines(3);
+            copy.addView(supporting);
+        }
+        item.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+
+        TextView state = selected
+                ? chip("SELECTED", GOLD, Color.WHITE)
+                : label(">", 18, true);
+        state.setTextColor(selected ? Color.WHITE : PRIMARY);
+        state.setGravity(Gravity.CENTER);
+        item.addView(state);
+        attachPressAnimation(item, 0.98f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(SPACE_SM));
+        item.setLayoutParams(lp);
+        return item;
+    }
+
+    private View printSelectedDocumentCard(String title, String detail, String format) {
+        LinearLayout card = (LinearLayout) printChoiceItem(title, detail, true);
+        TextView formatBadge = chip(format, PRIMARY_SOFT, PRIMARY_DARK);
+        formatBadge.setPadding(dp(CHIP_PAD_X), dp(CHIP_PAD_Y), dp(CHIP_PAD_X), dp(CHIP_PAD_Y));
+        card.addView(formatBadge);
+        card.setContentDescription(title + ", selected, " + format);
+        return card;
+    }
+
+    private LinearLayout printWorkspaceCard(
+            String title,
+            String selectorLabel,
+            View selector,
+            View supporting,
+            View preview,
+            View summary,
+            View actions
+    ) {
+        LinearLayout box = sectionSurface();
+        TextView titleView = label(title, 18, true);
+        titleView.setTextColor(PRIMARY_DARK);
+        TextView helper = label(selectorLabel.toUpperCase(Locale.US), 11, true);
+        helper.setTextColor(GOLD_DARK);
+        helper.setPadding(0, dp(SPACE_MD), 0, dp(SPACE_XS));
+        box.addView(titleView);
+        box.addView(helper);
+        box.addView(selector);
+        box.addView(supporting);
+        TextView previewTitle = label("DOCUMENT PREVIEW", 11, true);
+        previewTitle.setTextColor(MUTED);
+        previewTitle.setPadding(0, dp(SPACE_MD), 0, dp(SPACE_XS));
+        box.addView(previewTitle);
+        box.addView(preview);
+        box.addView(summary);
+        box.addView(actions);
+        animateIn(box);
+        return box;
+    }
+
+    private TextView printSelectionField(String text) {
+        TextView field = selectorField(text + "  >");
+        field.setTextColor(MUTED);
+        field.setBackground(rounded(Color.WHITE, dp(BUTTON_RADIUS), dp(2), BORDER));
+        field.setContentDescription(text);
+        return field;
+    }
+
+    private TextView printSupportingText(String text) {
+        TextView view = label(text, TYPE_BODY, false);
+        view.setTextColor(SLATE);
+        view.setPadding(dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM));
+        return view;
+    }
+
+    private ImageView printPreview(String assetPath, boolean landscape) {
+        ImageView preview = new ImageView(this);
+        preview.setAdjustViewBounds(false);
+        preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        preview.setPadding(dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM));
+        preview.setBackground(rounded(Color.WHITE, dp(CARD_RADIUS), dp(1), BORDER));
+        setPrintPreview(preview, assetPath, landscape);
+        return preview;
+    }
+
+    private void setPrintPreview(ImageView preview, String assetPath, boolean landscape) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(landscape ? 230 : 340));
+        lp.setMargins(0, 0, 0, dp(SPACE_MD));
+        preview.setLayoutParams(lp);
+        if (assetPath == null || assetPath.isEmpty()) {
+            preview.setImageResource(R.drawable.ic_action_print);
+            preview.setColorFilter(PRIMARY_SOFT);
+            preview.setContentDescription("Select a document to show its preview");
+            return;
+        }
+        try (InputStream input = getAssets().open(assetPath)) {
+            Bitmap bitmap = BitmapFactory.decodeStream(input);
+            preview.clearColorFilter();
+            preview.setImageBitmap(bitmap);
+            preview.setContentDescription("Selected hospital document preview");
+        } catch (Exception error) {
+            preview.setImageResource(R.drawable.ic_action_print);
+            preview.setColorFilter(MUTED);
+            preview.setContentDescription("Document preview unavailable");
+        }
+    }
+
+    private View printSummary(TextView documentValue, TextView orientationValue) {
+        LinearLayout summary = card(SURFACE_ALT, 1, BORDER);
+        TextView title = label("Print summary", TYPE_CARD_TITLE, true);
+        title.setTextColor(PRIMARY_DARK);
+        summary.addView(title);
+        summary.addView(printSummaryLine("Document", documentValue));
+        summary.addView(printSummaryLine("Paper", orientationValue));
+        summary.addView(printSummaryLine("Pages", printSummaryValue("1")));
+        summary.addView(printSummaryLine("Quality", printSummaryValue("Original image - no recompression")));
+        summary.addView(printSummaryLine("Destination", printSummaryValue(
+                epsonSmartPanelAvailable() ? "Epson Smart Panel" : "Choose on device")));
+        return summary;
+    }
+
+    private TextView printSummaryValue(String text) {
+        TextView value = label(text, TYPE_BODY, true);
+        value.setTextColor(TEXT);
+        value.setGravity(Gravity.END);
+        return value;
+    }
+
+    private View printSummaryLine(String key, TextView value) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(SPACE_SM), 0, 0);
+        TextView label = label(key, TYPE_BODY, false);
+        label.setTextColor(MUTED);
+        row.addView(label, new LinearLayout.LayoutParams(0, -2, 0.38f));
+        row.addView(value, new LinearLayout.LayoutParams(0, -2, 0.62f));
+        return row;
+    }
+
+    private Button printPrimaryButton(String text, View.OnClickListener listener) {
+        Button action = button(text, listener);
+        action.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(54)));
+        return action;
+    }
+
+    private Button printSecondaryButton(String text, View.OnClickListener listener) {
+        Button action = navButton(text, listener);
+        action.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(50)));
+        return action;
+    }
+
+    private Button printSettingsButton() {
+        Button settings = navButton("Manage Print Services", v -> openPrintServiceSettings());
+        settings.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(48)));
+        return settings;
+    }
+
+    private void setPrintActionEnabled(Button button, boolean enabled) {
+        button.setEnabled(enabled);
+        button.setAlpha(enabled ? 1f : 0.45f);
+    }
+
+    private void openPrintServiceSettings() {
+        pauseScreenActivity();
+        try {
+            startActivity(new Intent(Settings.ACTION_PRINT_SETTINGS));
+        } catch (RuntimeException error) {
+            toast("Print service settings are unavailable on this device");
+        }
+    }
+
+    private boolean epsonSmartPanelAvailable() {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("image/jpeg");
+        intent.setPackage(EPSON_SMART_PANEL_PACKAGE);
+        return intent.resolveActivity(getPackageManager()) != null;
+    }
+
+    private void confirmHospitalPrint(String jobName, String assetPath, boolean landscape, boolean epson) {
+        LinearLayout confirmation = new LinearLayout(this);
+        confirmation.setOrientation(LinearLayout.VERTICAL);
+        confirmation.setPadding(dp(SPACE_LG), dp(SPACE_SM), dp(SPACE_LG), 0);
+        confirmation.addView(printPreview(assetPath, landscape));
+        TextView summary = label(
+                (landscape ? "A4 landscape" : "A4 portrait")
+                        + " | 1 page | "
+                        + (epson ? "Original image to Epson" : "Android print service"),
+                TYPE_BODY,
+                true
+        );
+        summary.setTextColor(PRIMARY_DARK);
+        summary.setGravity(Gravity.CENTER);
+        confirmation.addView(summary);
+        new AlertDialog.Builder(this)
+                .setTitle("Confirm Print")
+                .setMessage(jobName)
+                .setView(confirmation)
+                .setPositiveButton(epson ? "Continue to Epson" : "Continue", (dialog, which) -> {
+                    if (epson) {
+                        if (epsonSmartPanelAvailable()) {
+                            startEpsonSmartPanelPrint(jobName, assetPath, landscape);
+                        } else {
+                            toast("Epson Smart Panel is unavailable");
+                        }
+                    } else {
+                        startAndroidPrint(jobName, assetPath, landscape);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void startEpsonSmartPanelPrint(String jobName, String assetPath, boolean landscape) {
+        pauseScreenActivity();
+        LinearLayout progressContent = new LinearLayout(this);
+        progressContent.setOrientation(LinearLayout.HORIZONTAL);
+        progressContent.setGravity(Gravity.CENTER_VERTICAL);
+        progressContent.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG));
+        ProgressBar progress = new ProgressBar(this);
+        progress.setIndeterminate(true);
+        progressContent.addView(progress, new LinearLayout.LayoutParams(dp(38), dp(38)));
+        TextView progressText = label("Preparing original full-resolution image", TYPE_BODY, true);
+        progressText.setTextColor(PRIMARY_DARK);
+        progressText.setPadding(dp(SPACE_MD), 0, 0, 0);
+        progressContent.addView(progressText, new LinearLayout.LayoutParams(0, -2, 1));
+        AlertDialog preparing = new AlertDialog.Builder(this)
+                .setTitle("Preparing Print")
+                .setView(progressContent)
+                .setCancelable(false)
+                .create();
+        preparing.show();
+        new Thread(() -> {
+            try {
+                File image = HospitalPrintManager.copyOriginalImage(this, jobName, assetPath);
+                runOnUiThread(() -> {
+                    progressText.setText("Opening Epson Smart Panel");
+                    new android.os.Handler(getMainLooper()).postDelayed(() -> {
+                        preparing.dismiss();
+                        launchEpsonSmartPanel(image);
+                    }, MOTION_STANDARD_MS);
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    preparing.dismiss();
+                    toast(error.getMessage() == null
+                            ? "Unable to prepare the Epson document"
+                            : error.getMessage());
+                });
+            }
+        }, "epson-original-image-export").start();
+    }
+
+    private void launchEpsonSmartPanel(File image) {
+        try {
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", image);
+            Intent intent = new Intent(Intent.ACTION_SEND);
+            intent.setType("image/jpeg");
+            intent.setPackage(EPSON_SMART_PANEL_PACKAGE);
+            intent.putExtra(Intent.EXTRA_STREAM, uri);
+            intent.putExtra(Intent.EXTRA_TITLE, image.getName());
+            intent.setClipData(ClipData.newRawUri("Original hospital document", uri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(intent);
+        } catch (RuntimeException error) {
+            toast("Epson Smart Panel could not open this document");
+        }
+    }
+
+    private void startAndroidPrint(String jobName, String assetPath, boolean landscape) {
+        pauseScreenActivity();
+        if (!HospitalPrintManager.print(this, jobName, assetPath, landscape)) {
+            toast("Android print service is unavailable");
+        }
+    }
+
     private boolean validateReportFilters(String from, String to, String monthName, TextView fromField, TextView toField, View monthField) {
         clearFilterError(fromField);
         clearFilterError(toField);
@@ -6146,6 +6798,7 @@ public class MainActivity extends Activity {
         b.setTextColor(PRIMARY);
         b.setBackground(rounded(PRIMARY_SOFT, dp(BUTTON_RADIUS), dp(1), Color.rgb(184, 207, 225)));
         b.setElevation(dp(1));
+        b.setCompoundDrawableTintList(ColorStateList.valueOf(PRIMARY));
         return b;
     }
 
@@ -6215,6 +6868,9 @@ public class MainActivity extends Activity {
 
     private int actionIcon(String text) {
         String action = value(text).toLowerCase(java.util.Locale.US);
+        if (action.contains("print")) {
+            return R.drawable.ic_action_print;
+        }
         if (action.contains("call")) {
             return R.drawable.ic_action_call;
         }
@@ -6249,7 +6905,8 @@ public class MainActivity extends Activity {
 
     private boolean isPrimaryAction(String text) {
         String action = value(text).toLowerCase(java.util.Locale.US);
-        return action.contains("call patient")
+        return action.contains("print")
+                || action.contains("call patient")
                 || action.contains("save patient")
                 || action.contains("update patient")
                 || action.equals("apply")

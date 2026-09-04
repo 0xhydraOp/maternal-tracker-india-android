@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.1.31 - 2026-09-04
+
+- Rebuilt the printing area as a unified visual Print Desk with category navigation, exact document previews, structured selections, and a compact print summary.
+- Made Epson Smart Panel the primary print action when available, with Android printers / Save as PDF and print-service management retained as secondary actions.
+- Changed the Epson route from generated PDF to the untouched bundled JPEG so Epson receives the original color image bytes without recompression.
+- Added pre-print document confirmation and a professional preparation state before Epson Smart Panel opens.
+- Added clear selected states, original-quality status, A4 orientation details, and consistent Blue Bird blue/gold print styling.
+- Replaced stock doctor and OT dropdown dialogs with bold custom document-selection sheets and gave the Baby Identification form the same selected-document styling.
+
+## v1.1.30 - 2026-09-04
+
+- Added an in-app printing-system chooser for Epson Smart Panel, Android printers / Save as PDF, and print-service management.
+- Added direct one-page A4 PDF handoff to the installed Epson Smart Panel document-print activity.
+- Kept Android's secure print chooser as the fallback for other enabled printers and Save as PDF.
+- Retained one-page A4 output with only BHT in landscape and every other hospital document in portrait.
+
+## v1.1.29 - 2026-09-03
+
+- Added Print Prescriptions, Print OT Papers, and Print Baby Birth Form to the top of the profile panel for admins and staff.
+- Added doctor selection for the four supplied prescription documents, including the printed qualifications and registration details.
+- Added one-paper OT selection for BHT / Input & Output Chart, Anaesthetic Note, and OT Note.
+- Integrated Android's native print service with A4 as the default paper size and user-controlled printer, media, copy, and color settings.
+- Bundled every supplied hospital document byte-for-byte without redrawing, transcribing, or recompressing its artwork.
+- Preserved portrait orientation for prescriptions, Anaesthetic Note, OT Note, and Baby Identification; BHT uses landscape A4.
+
 ## v1.1.28 - 2026-09-03
 
 - Reduced decorative elevation so only interactive patient and navigation surfaces carry visual depth.

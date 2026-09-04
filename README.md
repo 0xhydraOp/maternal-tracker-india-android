@@ -2,7 +2,7 @@
 
 Native Android maternal follow-up app for `BLUE BIRD A GENERAL HOSPITAL`, backed by Firebase Authentication, Firestore sync, and a local SQLite cache for reports/exports.
 
-Current version: `v1.1.18`
+Current version: `v1.1.31`
 
 ## Current Scope
 
@@ -11,6 +11,7 @@ Current version: `v1.1.18`
 - Firebase login, admin/staff roles, and online patient sync.
 - Scheduled delivery, EDD, planned visit, call-pending, and completed-record workflows.
 - Excel/PDF export support through Android document picker/share flow.
+- Visual Print Desk for exact hospital prescription, OT, and baby identification documents, with untouched full-color image handoff to Epson Smart Panel.
 - Admin-managed doctor and motivator autocomplete lists.
 
 The lower-level India location database is designed to be imported from official LGD/data.gov.in CSV exports because districts, panchayats, municipalities, wards, and villages change frequently. The official LGD catalog is published by the Ministry of Panchayati Raj and was updated in May 2026.
@@ -47,7 +48,7 @@ Build signed release APK:
 Output:
 
 ```text
-release\MaternalTrackerIndia-v1.1.18-release.apk
+release\MaternalTrackerIndia-v1.1.31-release.apk
 ```
 
 Install to an attached phone/emulator:

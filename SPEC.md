@@ -1,7 +1,7 @@
 # Blue Bird Maternal Tracker Specification
 
-Last updated: 2026-07-02  
-Current app version: `1.1.18` / versionCode `26`
+Last updated: 2026-09-04
+Current app version: `1.1.31` / versionCode `39`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -34,6 +34,42 @@ The confirmed direction is online Firebase-backed operation:
 - Can create and update patient records.
 - Can search patients, update visit dates, call patients, export allowed data, and use the in-app updater.
 - Cannot access admin-only user and reference-management controls.
+
+## 2A. Hospital Print Desk
+
+The profile panel exposes the following actions to both admins and staff, above patient workflow actions:
+
+- Print Prescriptions
+- Print OT Papers
+- Print Baby Birth Form
+
+Printing requirements:
+
+- Printing uses a unified visual Print Desk with category navigation, document selection, exact preview, print summary, and confirmation.
+- Doctor and OT choices use custom bold selection sheets with supporting credentials or orientation details; the Baby Identification form uses the same selected-document visual language.
+- Epson Smart Panel is the primary action when installed; Android printers / Save as PDF and print-service management remain secondary actions.
+- Epson Smart Panel receives an untouched copy of the original bundled JPEG through its supported image-print activity. The app does not decode, redraw, recolor, resize, or recompress that image for Epson.
+- Android printers / Save as PDF opens Android's destination chooser for other enabled printers and PDF output.
+- A4 is the default paper size; the operator may change supported media in the Android print dialog.
+- Supplied hospital documents are printed from their original bundled image files.
+- Document artwork, text, logos, borders, spacing, and layout must not be recreated, transcribed, or recompressed.
+- Documents scale proportionally and remain centered inside the selected paper's printable area.
+- Portrait documents default to portrait A4; the BHT / Input & Output Chart defaults to landscape A4.
+
+Prescription selection:
+
+- DR. SUYETA NASRIN - MBBS, DNB, DGO (NEW DELHI)
+- DR. ARNAB SAHA - M.B.B.S., M.S. (Obstetrics & Gynaecology)
+- DR. SUDIPTA BISWAS - MBBS, PGPN, DCH
+- DR. PIARUL SK - MBBS, MS (General Surgeon)
+
+OT Paper selection is a single-choice document sheet. The operator selects and prints one of:
+
+- BHT / Input & Output Chart - Bed Sheet
+- Anaesthetic Note
+- OT Note
+
+Baby Identification Form is a dedicated single-document print action.
 
 ## 3. Location Scope
 
