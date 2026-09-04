@@ -1,7 +1,7 @@
 # Blue Bird Maternal Tracker Specification
 
 Last updated: 2026-09-04
-Current app version: `1.1.32` / versionCode `40`
+Current app version: `1.1.33` / versionCode `41`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -179,7 +179,6 @@ Required Home areas:
 - Today's Work section for patient-specific actions.
 - Compact KPI row for total, due week, urgent scheduled, completion due, calls, visits, today, and completed.
 - Upcoming EDD list for open records.
-- Data Quality Alerts.
 
 Priority order:
 

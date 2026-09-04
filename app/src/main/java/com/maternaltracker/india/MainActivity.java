@@ -982,7 +982,6 @@ public class MainActivity extends Activity {
         box.addView(section("Priority Work", todayWorkView(scopeWhere, scopeArgs)));
         box.addView(verticalGap(4));
         box.addView(section("Upcoming EDD", upcomingEddView(scopeWhere, scopeArgs)));
-        box.addView(section("Data Quality Alerts", needsAttentionView(scopeWhere, scopeArgs)));
     }
 
     private View todaySummaryStrip(int today, int dueWeek, int scheduledWeek, int scheduledPending, int locked) {
@@ -1405,47 +1404,6 @@ public class MainActivity extends Activity {
         }
         item.addView(compactPatientActions(actions.toArray(new View[0])));
         return item;
-    }
-
-    private View needsAttentionView(String scopeWhere, String[] scopeArgs) {
-        LinearLayout list = new LinearLayout(this);
-        list.setOrientation(LinearLayout.VERTICAL);
-        int missingDoctor = db.countPatients(appendWhere(scopeWhere, "doctor_name IS NULL OR doctor_name = ''"), scopeArgs);
-        int invalidMobile = db.countPatients(appendWhere(scopeWhere, "mobile_number IS NULL OR length(trim(mobile_number)) != 10"), scopeArgs);
-        int totalAttention = missingDoctor + invalidMobile;
-        if (totalAttention == 0) {
-            list.addView(emptyState("No data quality alerts", "Doctor names and mobile numbers look complete."));
-            return list;
-        }
-        list.addView(attentionItem("Missing doctor", missingDoctor, "Review", SLATE, "doctor_name IS NULL OR doctor_name = ''", null));
-        list.addView(attentionItem("Mobile needs review", invalidMobile, "Review", SLATE, "mobile_number IS NULL OR length(trim(mobile_number)) != 10", null));
-        return list;
-    }
-
-    private View attentionItem(String title, int count, String severity, int color, String where, String[] args) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(9), dp(7), dp(9), dp(7));
-        row.setBackground(rounded(Color.argb(count > 0 ? 72 : 34, Color.red(color), Color.green(color), Color.blue(color)), dp(CARD_RADIUS), dp(1), Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))));
-        setDebouncedClick(row, v -> showScopedPatientList(where, args));
-        attachPressAnimation(row, 0.985f);
-        TextView badge = chip(severity, count > 0 ? color : PRIMARY_SOFT, count > 0 ? Color.WHITE : MUTED);
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(9), 0, 0, 0);
-        TextView name = label(title, 13, true);
-        name.setTextColor(count > 0 ? color : MUTED);
-        TextView detail = smallText(count + " record(s)");
-        detail.setTextColor(MUTED);
-        copy.addView(name);
-        copy.addView(detail);
-        row.addView(badge);
-        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(6));
-        row.setLayoutParams(lp);
-        return row;
     }
 
     private View upcomingEddView(String where, String[] args) {

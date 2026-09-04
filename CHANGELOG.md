@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.33 - 2026-09-04
+
+- Removed the unnecessary Data Quality Alerts section from the bottom of the Home dashboard.
+- Removed the associated unused dashboard query and rendering helpers while preserving patient-entry validation.
+
 ## v1.1.32 - 2026-09-04
 
 - Replaced the dashboard header's circular `BBH` text badge with a high-resolution Blue Bird hospital logo.
