@@ -1,7 +1,7 @@
 # Blue Bird Maternal Tracker Specification
 
 Last updated: 2026-09-04
-Current app version: `1.1.31` / versionCode `39`
+Current app version: `1.1.32` / versionCode `40`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 

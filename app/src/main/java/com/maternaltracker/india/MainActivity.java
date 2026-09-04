@@ -185,7 +185,7 @@ public class MainActivity extends Activity {
     private TextView profileRoleBadge;
     private TextView profileSyncBadge;
     private TextView backButton;
-    private TextView headerBrandMark;
+    private ImageView headerBrandMark;
     private LinearLayout headerContainer;
     private TextView headerHospitalName;
     private TextView headerGoldLine;
@@ -484,13 +484,14 @@ public class MainActivity extends Activity {
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
 
-        headerBrandMark = label("BBH", 12, true);
-        headerBrandMark.setTextColor(PRIMARY_DARK);
-        headerBrandMark.setGravity(Gravity.CENTER);
-        headerBrandMark.setBackground(rounded(Color.WHITE, dp(20), 0, Color.WHITE));
+        headerBrandMark = new ImageView(this);
+        headerBrandMark.setImageResource(R.drawable.bbh_header_logo);
+        headerBrandMark.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        headerBrandMark.setPadding(0, 0, 0, 0);
+        headerBrandMark.setBackground(rounded(Color.WHITE, dp(25), 0, Color.WHITE));
         headerBrandMark.setContentDescription("Blue Bird Hospital");
-        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(40), dp(40));
-        markLp.setMargins(dp(8), 0, dp(10), 0);
+        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(50), dp(50));
+        markLp.setMargins(dp(6), 0, dp(10), 0);
 
         backButton = label("", 20, true);
         backButton.setTextColor(Color.WHITE);

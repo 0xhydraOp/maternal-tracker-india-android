@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.32 - 2026-09-04
+
+- Replaced the dashboard header's circular `BBH` text badge with a high-resolution Blue Bird hospital logo.
+- Standardized the complete logo mark in deep hospital blue with genuine transparent edges and a clean white circular presentation.
+
 ## v1.1.31 - 2026-09-04
 
 - Rebuilt the printing area as a unified visual Print Desk with category navigation, exact document previews, structured selections, and a compact print summary.

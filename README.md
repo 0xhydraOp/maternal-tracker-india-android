@@ -2,7 +2,7 @@
 
 Native Android maternal follow-up app for `BLUE BIRD A GENERAL HOSPITAL`, backed by Firebase Authentication, Firestore sync, and a local SQLite cache for reports/exports.
 
-Current version: `v1.1.31`
+Current version: `v1.1.32`
 
 ## Current Scope
 
@@ -48,7 +48,7 @@ Build signed release APK:
 Output:
 
 ```text
-release\MaternalTrackerIndia-v1.1.31-release.apk
+release\MaternalTrackerIndia-v1.1.32-release.apk
 ```
 
 Install to an attached phone/emulator:
