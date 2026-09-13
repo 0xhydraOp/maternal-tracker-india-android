@@ -78,6 +78,10 @@ public class MainActivity extends Activity {
     private static final int PRIMARY_DARK = Color.rgb(0, 59, 115);
     private static final int PRIMARY_SOFT = Color.rgb(229, 241, 255);
     private static final int ACCENT = Color.rgb(10, 102, 204);
+    private static final int PRINT_ACCENT = Color.rgb(0, 166, 178);
+    private static final int PRINT_ACCENT_DARK = Color.rgb(0, 105, 115);
+    private static final int PRINT_ACCENT_SOFT = Color.rgb(226, 248, 250);
+    private static final int PRINT_STAGE = Color.rgb(238, 247, 255);
     private static final int GOLD = Color.rgb(212, 160, 23);
     private static final int GOLD_DARK = Color.rgb(138, 101, 0);
     private static final int GOLD_SOFT = Color.rgb(255, 247, 220);
@@ -586,7 +590,7 @@ public class MainActivity extends Activity {
 
         actions.addView(menuGroupTitle("Print Desk"));
         actions.addView(menuItem("Print Prescriptions", "Select a doctor prescription", PRIMARY, navigateTo(this::showPrescriptionPrintCenter)));
-        actions.addView(menuItem("Print OT Papers", "Select one OT hospital paper", GOLD_DARK, navigateTo(this::showOtPrintCenter)));
+        actions.addView(menuItem("Print OT Papers", "Select one OT hospital paper", PRINT_ACCENT_DARK, navigateTo(this::showOtPrintCenter)));
         actions.addView(menuItem("Print Baby Birth Form", "Baby identification form", ACCENT, navigateTo(this::showBabyPrintCenter)));
         actions.addView(menuItem("Print Blood Requisition", "Blood/component request form", REPORT_BROWN, navigateTo(this::showBloodPrintCenter)));
         actions.addView(menuItem("Print Baby Refer Form", "Two-page newborn referral form", PRIMARY_DARK, navigateTo(this::showBabyReferPrintCenter)));
@@ -3574,6 +3578,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout page = printPage(scroll);
         page.addView(printDeskHeader());
+        page.addView(printStatusBanner());
         page.addView(printCategoryTabs(activeCategory));
         if (activeCategory == PRINT_PRESCRIPTION) {
             page.addView(prescriptionPrintWorkspace());
@@ -3638,12 +3643,57 @@ public class MainActivity extends Activity {
         String[] labels = {"Prescriptions", "OT Papers", "Baby Form", "Blood Form", "Baby Refer"};
         for (int i = 0; i < labels.length; i++) {
             final int category = i;
-            Button tab = shortcutButton(labels[i], labels[activeCategory], v -> showPrintDesk(category));
+            Button tab = printCategoryTab(labels[i], i == activeCategory, v -> showPrintDesk(category));
             tab.setMinWidth(dp(118));
             tabs.addView(tab);
         }
         scroll.addView(tabs);
         return scroll;
+    }
+
+    private View printStatusBanner() {
+        LinearLayout banner = new LinearLayout(this);
+        banner.setOrientation(LinearLayout.HORIZONTAL);
+        banner.setGravity(Gravity.CENTER_VERTICAL);
+        banner.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
+        banner.setBackground(rounded(epsonSmartPanelAvailable() ? PRINT_ACCENT_SOFT : PRIMARY_SOFT, dp(CARD_RADIUS), dp(1), epsonSmartPanelAvailable() ? PRINT_ACCENT : BORDER));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(CARD_GAP));
+        banner.setLayoutParams(lp);
+
+        TextView state = chip(epsonSmartPanelAvailable() ? "EPSON READY" : "ANDROID PRINT", epsonSmartPanelAvailable() ? PRINT_ACCENT : PRIMARY, Color.WHITE);
+        banner.addView(state);
+        TextView message = label(
+                epsonSmartPanelAvailable()
+                        ? "Smart Panel is available for direct document printing"
+                        : "Use Android printers or Save as PDF from this device",
+                TYPE_BODY,
+                true
+        );
+        message.setTextColor(PRIMARY_DARK);
+        message.setPadding(dp(SPACE_SM), 0, 0, 0);
+        banner.addView(message, new LinearLayout.LayoutParams(0, -2, 1));
+        animateIn(banner);
+        return banner;
+    }
+
+    private Button printCategoryTab(String text, boolean active, View.OnClickListener listener) {
+        Button tab = new Button(this);
+        tab.setAllCaps(false);
+        tab.setText(text);
+        tab.setTextSize(TYPE_BODY);
+        tab.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        tab.setTextColor(active ? Color.WHITE : PRIMARY_DARK);
+        tab.setGravity(Gravity.CENTER);
+        tab.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
+        tab.setMinHeight(dp(44));
+        tab.setBackground(rounded(active ? PRIMARY : Color.WHITE, dp(BUTTON_RADIUS), dp(active ? 0 : 1), active ? PRIMARY : BORDER));
+        setDebouncedClick(tab, listener);
+        attachPressAnimation(tab, 0.97f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(44));
+        lp.setMargins(0, 0, dp(SPACE_SM), 0);
+        tab.setLayoutParams(lp);
+        return tab;
     }
 
     private View prescriptionPrintWorkspace() {
@@ -3697,7 +3747,7 @@ public class MainActivity extends Activity {
                     selected[0] = which;
                     selection.setText(PRESCRIPTION_DOCTORS[which]);
                     selection.setTextColor(PRIMARY_DARK);
-                    selection.setBackground(rounded(GOLD_SOFT, dp(BUTTON_RADIUS), dp(2), GOLD));
+                    selection.setBackground(rounded(PRINT_ACCENT_SOFT, dp(BUTTON_RADIUS), dp(2), PRINT_ACCENT));
                     credentials.setText(PRESCRIPTION_CREDENTIALS[which]);
                     documentValue.setText(PRESCRIPTION_DOCTORS[which] + " prescription");
                     setPrintPreview(preview, PRESCRIPTION_ASSETS[which], false);
@@ -3774,7 +3824,7 @@ public class MainActivity extends Activity {
                     boolean landscape = which == 0;
                     selection.setText(OT_PAPER_NAMES[which]);
                     selection.setTextColor(PRIMARY_DARK);
-                    selection.setBackground(rounded(GOLD_SOFT, dp(BUTTON_RADIUS), dp(2), GOLD));
+                    selection.setBackground(rounded(PRINT_ACCENT_SOFT, dp(BUTTON_RADIUS), dp(2), PRINT_ACCENT));
                     documentValue.setText(OT_PAPER_NAMES[which]);
                     orientationValue.setText(landscape ? "A4 landscape" : "A4 portrait");
                     setPrintPreview(preview, OT_PAPER_ASSETS[which], landscape);
@@ -3905,7 +3955,7 @@ public class MainActivity extends Activity {
         content.setBackground(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
 
         TextView eyebrow = label("BLUE BIRD PRINT DESK", 11, true);
-        eyebrow.setTextColor(GOLD_DARK);
+        eyebrow.setTextColor(PRINT_ACCENT_DARK);
         TextView heading = label(title, 20, true);
         heading.setTextColor(PRIMARY_DARK);
         heading.setPadding(0, dp(3), 0, 0);
@@ -3953,10 +4003,10 @@ public class MainActivity extends Activity {
         item.setGravity(Gravity.CENTER_VERTICAL);
         item.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
         item.setBackground(rounded(
-                selected ? GOLD_SOFT : Color.WHITE,
+                selected ? PRINT_ACCENT_SOFT : Color.WHITE,
                 dp(CARD_RADIUS),
                 dp(selected ? 2 : 1),
-                selected ? GOLD : BORDER
+                selected ? PRINT_ACCENT : BORDER
         ));
         item.setElevation(selected ? dp(2) : 0);
 
@@ -3976,7 +4026,7 @@ public class MainActivity extends Activity {
         item.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
 
         TextView state = selected
-                ? chip("SELECTED", GOLD, Color.WHITE)
+                ? chip("SELECTED", PRINT_ACCENT, Color.WHITE)
                 : label(">", 18, true);
         state.setTextColor(selected ? Color.WHITE : PRIMARY);
         state.setGravity(Gravity.CENTER);
@@ -4010,7 +4060,7 @@ public class MainActivity extends Activity {
         TextView titleView = label(title, 18, true);
         titleView.setTextColor(PRIMARY_DARK);
         TextView helper = label(selectorLabel.toUpperCase(Locale.US), 11, true);
-        helper.setTextColor(GOLD_DARK);
+        helper.setTextColor(PRINT_ACCENT_DARK);
         helper.setPadding(0, dp(SPACE_MD), 0, dp(SPACE_XS));
         box.addView(titleView);
         box.addView(helper);
@@ -4046,8 +4096,8 @@ public class MainActivity extends Activity {
         ImageView preview = new ImageView(this);
         preview.setAdjustViewBounds(false);
         preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        preview.setPadding(dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM), dp(SPACE_SM));
-        preview.setBackground(rounded(Color.WHITE, dp(CARD_RADIUS), dp(1), BORDER));
+        preview.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
+        preview.setBackground(rounded(PRINT_STAGE, dp(CARD_RADIUS), dp(1), Color.rgb(157, 197, 232)));
         setPrintPreview(preview, assetPath, landscape);
         return preview;
     }
@@ -4086,7 +4136,7 @@ public class MainActivity extends Activity {
         summary.addView(printSummaryLine("Document", documentValue));
         summary.addView(printSummaryLine("Paper", orientationValue));
         summary.addView(printSummaryLine("Pages", printSummaryValue(pages)));
-        summary.addView(printSummaryLine("Quality", printSummaryValue("Original image - no recompression")));
+        summary.addView(printSummaryLine("Quality", printSummaryValue("High quality original document")));
         summary.addView(printSummaryLine("Destination", printSummaryValue(
                 epsonSmartPanelAvailable() ? "Epson Smart Panel" : "Choose on device")));
         return summary;
@@ -4157,23 +4207,42 @@ public class MainActivity extends Activity {
     private void confirmHospitalPrint(String jobName, String[] assetPaths, boolean landscape, boolean epson) {
         LinearLayout confirmation = new LinearLayout(this);
         confirmation.setOrientation(LinearLayout.VERTICAL);
-        confirmation.setPadding(dp(SPACE_LG), dp(SPACE_SM), dp(SPACE_LG), 0);
+        confirmation.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), 0);
+        confirmation.setBackground(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
+
+        TextView eyebrow = label("PRINT CONFIRMATION", 11, true);
+        eyebrow.setTextColor(PRINT_ACCENT_DARK);
+        TextView title = label(jobName, 20, true);
+        title.setTextColor(PRIMARY_DARK);
+        title.setPadding(0, dp(SPACE_XS), 0, dp(SPACE_SM));
+        confirmation.addView(eyebrow);
+        confirmation.addView(title);
+
+        LinearLayout badges = new LinearLayout(this);
+        badges.setOrientation(LinearLayout.HORIZONTAL);
+        badges.setGravity(Gravity.CENTER_VERTICAL);
+        badges.addView(chip(landscape ? "A4 LANDSCAPE" : "A4 PORTRAIT", PRIMARY, Color.WHITE));
+        badges.addView(chip(assetPaths.length + (assetPaths.length == 1 ? " PAGE" : " PAGES"), PRINT_ACCENT, Color.WHITE));
+        LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-1, -2);
+        badgeLp.setMargins(0, 0, 0, dp(SPACE_SM));
+        badges.setLayoutParams(badgeLp);
+        confirmation.addView(badges);
+
         confirmation.addView(printPreview(assetPaths[0], landscape));
         TextView summary = label(
-                (landscape ? "A4 landscape" : "A4 portrait")
-                        + " | " + assetPaths.length + (assetPaths.length == 1 ? " page | " : " pages | ")
-                        + (epson && assetPaths.length == 1 ? "Original image to Epson" : "Print-ready PDF"),
+                epson
+                        ? (assetPaths.length == 1 ? "High quality original document will open in Epson Smart Panel" : "Two-page print-ready PDF will open in Epson Smart Panel")
+                        : "Android Print will open with printer and Save as PDF options",
                 TYPE_BODY,
                 true
         );
         summary.setTextColor(PRIMARY_DARK);
         summary.setGravity(Gravity.CENTER);
+        summary.setPadding(0, 0, 0, dp(SPACE_SM));
         confirmation.addView(summary);
         new AlertDialog.Builder(this)
-                .setTitle("Confirm Print")
-                .setMessage(jobName)
                 .setView(confirmation)
-                .setPositiveButton(epson ? "Continue to Epson" : "Continue", (dialog, which) -> {
+                .setPositiveButton(epson ? "Print Now" : "Continue", (dialog, which) -> {
                     if (epson) {
                         if (epsonSmartPanelAvailable()) {
                             startEpsonSmartPanelPrint(jobName, assetPaths, landscape);
@@ -4194,19 +4263,26 @@ public class MainActivity extends Activity {
         progressContent.setOrientation(LinearLayout.HORIZONTAL);
         progressContent.setGravity(Gravity.CENTER_VERTICAL);
         progressContent.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG));
+        progressContent.setBackground(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
         ProgressBar progress = new ProgressBar(this);
         progress.setIndeterminate(true);
         progressContent.addView(progress, new LinearLayout.LayoutParams(dp(38), dp(38)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(SPACE_MD), 0, 0, 0);
+        TextView progressTitle = label("Preparing Print", TYPE_CARD_TITLE, true);
+        progressTitle.setTextColor(PRIMARY_DARK);
         TextView progressText = label(
-                assetPaths.length == 1 ? "Preparing original full-resolution image" : "Preparing print-ready referral PDF",
+                assetPaths.length == 1 ? "Preparing high quality original document" : "Preparing print-ready referral PDF",
                 TYPE_BODY,
                 true
         );
         progressText.setTextColor(PRIMARY_DARK);
-        progressText.setPadding(dp(SPACE_MD), 0, 0, 0);
-        progressContent.addView(progressText, new LinearLayout.LayoutParams(0, -2, 1));
+        progressText.setPadding(0, dp(SPACE_XS), 0, 0);
+        copy.addView(progressTitle);
+        copy.addView(progressText);
+        progressContent.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
         AlertDialog preparing = new AlertDialog.Builder(this)
-                .setTitle("Preparing Print")
                 .setView(progressContent)
                 .setCancelable(false)
                 .create();

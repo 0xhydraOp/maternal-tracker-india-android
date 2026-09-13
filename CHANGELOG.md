@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.35 - 2026-09-13
+
+- Reworked the Print Desk visual system to remove gold styling from the print workflow.
+- Added royal-blue and cyan print-only accent states for selected documents, tabs, status, and confirmation.
+- Added a printer readiness banner so staff can see Epson Smart Panel or Android Print availability before printing.
+- Replaced generic print confirmation and preparation wording with a cleaner in-app document confirmation flow.
+- Upgraded document previews with a softer A4 paper-stage treatment and clearer high-quality document language.
+
 ## v1.1.34 - 2026-09-13
 
 - Added DR. RAJU MAHAJAN to prescription printing with the supplied original prescription image and printed credentials.

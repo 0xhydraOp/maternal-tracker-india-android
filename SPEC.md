@@ -1,7 +1,7 @@
 # Blue Bird Maternal Tracker Specification
 
 Last updated: 2026-09-13
-Current app version: `1.1.34` / versionCode `42`
+Current app version: `1.1.35` / versionCode `43`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -48,7 +48,10 @@ The profile panel exposes the following actions to both admins and staff, above 
 Printing requirements:
 
 - Printing uses a unified visual Print Desk with category navigation, document selection, exact preview, print summary, and confirmation.
+- Print Desk styling uses a no-gold royal-blue, cyan, white, and cool-graphite visual system.
+- Print Desk shows a printer readiness banner before document selection.
 - Doctor and OT choices use custom bold selection sheets with supporting credentials or orientation details; the Baby Identification form uses the same selected-document visual language.
+- Document previews use a soft A4 paper-stage treatment and high-quality document language.
 - Epson Smart Panel is the primary action when installed; Android printers / Save as PDF and print-service management remain secondary actions.
 - Epson Smart Panel receives an untouched copy of original single-page bundled JPEG documents through its supported image-print activity. Multi-page documents are prepared as a print-ready PDF containing the supplied page images in order.
 - Android printers / Save as PDF opens Android's destination chooser for other enabled printers and PDF output.
