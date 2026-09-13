@@ -143,23 +143,28 @@ public class MainActivity extends Activity {
     private static final int PRINT_PRESCRIPTION = 0;
     private static final int PRINT_OT_PAPER = 1;
     private static final int PRINT_BABY_FORM = 2;
+    private static final int PRINT_BLOOD_FORM = 3;
+    private static final int PRINT_BABY_REFER_FORM = 4;
     private static final String[] PRESCRIPTION_DOCTORS = {
             "DR. SUYETA NASRIN",
             "DR. ARNAB SAHA",
             "DR. SUDIPTA BISWAS",
-            "DR. PIARUL SK"
+            "DR. PIARUL SK",
+            "DR. RAJU MAHAJAN"
     };
     private static final String[] PRESCRIPTION_CREDENTIALS = {
             "MBBS, DNB, DGO (NEW DELHI) | Consultant Obstetrician & Gynaecologist | REG NO.: 79831 (WBMC)",
             "M.B.B.S., M.S. (Obstetrics & Gynaecology) | Consultant Obstetrician & Gynaecologist Surgeon | REG NO-78415 (WBMC)",
             "MBBS, PGPN, DCH | Child Specialist | REG NO.: 68725 (WBMC)",
-            "MBBS, MS (General Surgeon) | Consultant Laparoscopic & General Surgeon | REG NO.: 76636 (WBMC)"
+            "MBBS, MS (General Surgeon) | Consultant Laparoscopic & General Surgeon | REG NO.: 76636 (WBMC)",
+            "M.B.B.S. (WBUHS), M.S. Obstetrics & Gynaecology | Laparoscopic Surgeon | Ex House Physician Burdwan Medical College & Hospital | Ex Medical Officer at Rajnagar Block Hospital | Murshidabad Medical College & Hospital | Regd. 71244 (WBMC)"
     };
     private static final String[] PRESCRIPTION_ASSETS = {
             "print_forms/prescription_suyeta_nasrin.jpg",
             "print_forms/prescription_arnab_saha.jpg",
             "print_forms/prescription_sudipta_biswas.jpg",
-            "print_forms/prescription_piarul_sk.jpg"
+            "print_forms/prescription_piarul_sk.jpg",
+            "print_forms/prescription_raju_mahajan.jpg"
     };
     private static final String[] OT_PAPER_NAMES = {
             "BHT / Input & Output Chart - Bed Sheet",
@@ -170,6 +175,10 @@ public class MainActivity extends Activity {
             "print_forms/ot_bht_bed_sheet.jpg",
             "print_forms/ot_anaesthetic_note.jpg",
             "print_forms/ot_note.jpg"
+    };
+    private static final String[] BABY_REFER_ASSETS = {
+            "print_forms/baby_referral_form_page_1.jpg",
+            "print_forms/baby_referral_form_page_2.jpg"
     };
 
     private MaternalDbHelper db;
@@ -579,6 +588,8 @@ public class MainActivity extends Activity {
         actions.addView(menuItem("Print Prescriptions", "Select a doctor prescription", PRIMARY, navigateTo(this::showPrescriptionPrintCenter)));
         actions.addView(menuItem("Print OT Papers", "Select one OT hospital paper", GOLD_DARK, navigateTo(this::showOtPrintCenter)));
         actions.addView(menuItem("Print Baby Birth Form", "Baby identification form", ACCENT, navigateTo(this::showBabyPrintCenter)));
+        actions.addView(menuItem("Print Blood Requisition", "Blood/component request form", REPORT_BROWN, navigateTo(this::showBloodPrintCenter)));
+        actions.addView(menuItem("Print Baby Refer Form", "Two-page newborn referral form", PRIMARY_DARK, navigateTo(this::showBabyReferPrintCenter)));
         actions.addView(menuGroupTitle("Patient Work"));
         actions.addView(menuItem("New Patient", "Register a new maternal record", ACCENT, navigateTo(() -> showPatientForm(null))));
         actions.addView(menuItem("Search Patients", "Find records and update visits", PRIMARY, navigateTo(() -> showPatientList(false))));
@@ -3550,6 +3561,14 @@ public class MainActivity extends Activity {
         showPrintDesk(PRINT_BABY_FORM);
     }
 
+    private void showBloodPrintCenter() {
+        showPrintDesk(PRINT_BLOOD_FORM);
+    }
+
+    private void showBabyReferPrintCenter() {
+        showPrintDesk(PRINT_BABY_REFER_FORM);
+    }
+
     private void showPrintDesk(int activeCategory) {
         setPage("Print Desk");
         ScrollView scroll = new ScrollView(this);
@@ -3560,8 +3579,12 @@ public class MainActivity extends Activity {
             page.addView(prescriptionPrintWorkspace());
         } else if (activeCategory == PRINT_OT_PAPER) {
             page.addView(otPrintWorkspace());
-        } else {
+        } else if (activeCategory == PRINT_BABY_FORM) {
             page.addView(babyPrintWorkspace());
+        } else if (activeCategory == PRINT_BLOOD_FORM) {
+            page.addView(bloodRequisitionPrintWorkspace());
+        } else {
+            page.addView(babyReferPrintWorkspace());
         }
     }
 
@@ -3612,7 +3635,7 @@ public class MainActivity extends Activity {
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setPadding(0, 0, 0, dp(SPACE_SM));
-        String[] labels = {"Prescriptions", "OT Papers", "Baby Form"};
+        String[] labels = {"Prescriptions", "OT Papers", "Baby Form", "Blood Form", "Baby Refer"};
         for (int i = 0; i < labels.length; i++) {
             final int category = i;
             Button tab = shortcutButton(labels[i], labels[activeCategory], v -> showPrintDesk(category));
@@ -3795,6 +3818,75 @@ public class MainActivity extends Activity {
                 printSupportingText("Review the full document below before continuing."),
                 printPreview(assetPath, false),
                 printSummary(documentValue, orientationValue),
+                actions
+        );
+    }
+
+    private View bloodRequisitionPrintWorkspace() {
+        String assetPath = "print_forms/blood_requisition_form.jpg";
+        TextView documentValue = printSummaryValue("Blood / Component Requisition Form");
+        TextView orientationValue = printSummaryValue("A4 portrait");
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
+                "Blood Component Requisition Form", assetPath, false, true));
+        setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+        actions.addView(epson);
+        actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
+                "Blood Component Requisition Form", assetPath, false, false)));
+        actions.addView(printSettingsButton());
+        return printWorkspaceCard(
+                "Blood Requisition",
+                "Selected document",
+                printSelectedDocumentCard(
+                        "BLOOD / COMPONENT REQUISITION FORM",
+                        "Government blood bank request form",
+                        "A4 PORTRAIT"
+                ),
+                printSupportingText("Review the full document below before continuing."),
+                printPreview(assetPath, false),
+                printSummary(documentValue, orientationValue),
+                actions
+        );
+    }
+
+    private View babyReferPrintWorkspace() {
+        TextView documentValue = printSummaryValue("Baby Refer Form");
+        TextView orientationValue = printSummaryValue("A4 portrait");
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
+                "Baby Refer Form", BABY_REFER_ASSETS, false, true));
+        setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+        actions.addView(epson);
+        actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
+                "Baby Refer Form", BABY_REFER_ASSETS, false, false)));
+        actions.addView(printSettingsButton());
+
+        LinearLayout previews = new LinearLayout(this);
+        previews.setOrientation(LinearLayout.VERTICAL);
+        TextView pageOne = label("PAGE 1", 11, true);
+        pageOne.setTextColor(MUTED);
+        pageOne.setPadding(0, 0, 0, dp(SPACE_XS));
+        TextView pageTwo = label("PAGE 2", 11, true);
+        pageTwo.setTextColor(MUTED);
+        pageTwo.setPadding(0, dp(SPACE_MD), 0, dp(SPACE_XS));
+        previews.addView(pageOne);
+        previews.addView(printPreview(BABY_REFER_ASSETS[0], false));
+        previews.addView(pageTwo);
+        previews.addView(printPreview(BABY_REFER_ASSETS[1], false));
+
+        return printWorkspaceCard(
+                "Baby Refer Form",
+                "Selected document",
+                printSelectedDocumentCard(
+                        "NEWBORN / BABY REFERRAL FORM",
+                        "Two original pages printed together",
+                        "2 PAGES"
+                ),
+                printSupportingText("This print job includes both referral pages in order."),
+                previews,
+                printSummary(documentValue, orientationValue, "2"),
                 actions
         );
     }
@@ -3983,13 +4075,17 @@ public class MainActivity extends Activity {
     }
 
     private View printSummary(TextView documentValue, TextView orientationValue) {
+        return printSummary(documentValue, orientationValue, "1");
+    }
+
+    private View printSummary(TextView documentValue, TextView orientationValue, String pages) {
         LinearLayout summary = card(SURFACE_ALT, 1, BORDER);
         TextView title = label("Print summary", TYPE_CARD_TITLE, true);
         title.setTextColor(PRIMARY_DARK);
         summary.addView(title);
         summary.addView(printSummaryLine("Document", documentValue));
         summary.addView(printSummaryLine("Paper", orientationValue));
-        summary.addView(printSummaryLine("Pages", printSummaryValue("1")));
+        summary.addView(printSummaryLine("Pages", printSummaryValue(pages)));
         summary.addView(printSummaryLine("Quality", printSummaryValue("Original image - no recompression")));
         summary.addView(printSummaryLine("Destination", printSummaryValue(
                 epsonSmartPanelAvailable() ? "Epson Smart Panel" : "Choose on device")));
@@ -4055,14 +4151,18 @@ public class MainActivity extends Activity {
     }
 
     private void confirmHospitalPrint(String jobName, String assetPath, boolean landscape, boolean epson) {
+        confirmHospitalPrint(jobName, new String[]{assetPath}, landscape, epson);
+    }
+
+    private void confirmHospitalPrint(String jobName, String[] assetPaths, boolean landscape, boolean epson) {
         LinearLayout confirmation = new LinearLayout(this);
         confirmation.setOrientation(LinearLayout.VERTICAL);
         confirmation.setPadding(dp(SPACE_LG), dp(SPACE_SM), dp(SPACE_LG), 0);
-        confirmation.addView(printPreview(assetPath, landscape));
+        confirmation.addView(printPreview(assetPaths[0], landscape));
         TextView summary = label(
                 (landscape ? "A4 landscape" : "A4 portrait")
-                        + " | 1 page | "
-                        + (epson ? "Original image to Epson" : "Android print service"),
+                        + " | " + assetPaths.length + (assetPaths.length == 1 ? " page | " : " pages | ")
+                        + (epson && assetPaths.length == 1 ? "Original image to Epson" : "Print-ready PDF"),
                 TYPE_BODY,
                 true
         );
@@ -4076,19 +4176,19 @@ public class MainActivity extends Activity {
                 .setPositiveButton(epson ? "Continue to Epson" : "Continue", (dialog, which) -> {
                     if (epson) {
                         if (epsonSmartPanelAvailable()) {
-                            startEpsonSmartPanelPrint(jobName, assetPath, landscape);
+                            startEpsonSmartPanelPrint(jobName, assetPaths, landscape);
                         } else {
                             toast("Epson Smart Panel is unavailable");
                         }
                     } else {
-                        startAndroidPrint(jobName, assetPath, landscape);
+                        startAndroidPrint(jobName, assetPaths, landscape);
                     }
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
-    private void startEpsonSmartPanelPrint(String jobName, String assetPath, boolean landscape) {
+    private void startEpsonSmartPanelPrint(String jobName, String[] assetPaths, boolean landscape) {
         pauseScreenActivity();
         LinearLayout progressContent = new LinearLayout(this);
         progressContent.setOrientation(LinearLayout.HORIZONTAL);
@@ -4097,7 +4197,11 @@ public class MainActivity extends Activity {
         ProgressBar progress = new ProgressBar(this);
         progress.setIndeterminate(true);
         progressContent.addView(progress, new LinearLayout.LayoutParams(dp(38), dp(38)));
-        TextView progressText = label("Preparing original full-resolution image", TYPE_BODY, true);
+        TextView progressText = label(
+                assetPaths.length == 1 ? "Preparing original full-resolution image" : "Preparing print-ready referral PDF",
+                TYPE_BODY,
+                true
+        );
         progressText.setTextColor(PRIMARY_DARK);
         progressText.setPadding(dp(SPACE_MD), 0, 0, 0);
         progressContent.addView(progressText, new LinearLayout.LayoutParams(0, -2, 1));
@@ -4109,12 +4213,14 @@ public class MainActivity extends Activity {
         preparing.show();
         new Thread(() -> {
             try {
-                File image = HospitalPrintManager.copyOriginalImage(this, jobName, assetPath);
+                File document = assetPaths.length == 1
+                        ? HospitalPrintManager.copyOriginalImage(this, jobName, assetPaths[0])
+                        : HospitalPrintManager.createImagePdf(this, jobName, assetPaths, landscape);
                 runOnUiThread(() -> {
                     progressText.setText("Opening Epson Smart Panel");
                     new android.os.Handler(getMainLooper()).postDelayed(() -> {
                         preparing.dismiss();
-                        launchEpsonSmartPanel(image);
+                        launchEpsonSmartPanel(document, assetPaths.length == 1 ? "image/jpeg" : "application/pdf");
                     }, MOTION_STANDARD_MS);
                 });
             } catch (Exception error) {
@@ -4128,14 +4234,14 @@ public class MainActivity extends Activity {
         }, "epson-original-image-export").start();
     }
 
-    private void launchEpsonSmartPanel(File image) {
+    private void launchEpsonSmartPanel(File document, String mimeType) {
         try {
-            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", image);
+            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", document);
             Intent intent = new Intent(Intent.ACTION_SEND);
-            intent.setType("image/jpeg");
+            intent.setType(mimeType);
             intent.setPackage(EPSON_SMART_PANEL_PACKAGE);
             intent.putExtra(Intent.EXTRA_STREAM, uri);
-            intent.putExtra(Intent.EXTRA_TITLE, image.getName());
+            intent.putExtra(Intent.EXTRA_TITLE, document.getName());
             intent.setClipData(ClipData.newRawUri("Original hospital document", uri));
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(intent);
@@ -4145,8 +4251,12 @@ public class MainActivity extends Activity {
     }
 
     private void startAndroidPrint(String jobName, String assetPath, boolean landscape) {
+        startAndroidPrint(jobName, new String[]{assetPath}, landscape);
+    }
+
+    private void startAndroidPrint(String jobName, String[] assetPaths, boolean landscape) {
         pauseScreenActivity();
-        if (!HospitalPrintManager.print(this, jobName, assetPath, landscape)) {
+        if (!HospitalPrintManager.print(this, jobName, assetPaths, landscape)) {
             toast("Android print service is unavailable");
         }
     }

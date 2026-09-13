@@ -30,6 +30,10 @@ final class HospitalPrintManager {
     }
 
     static boolean print(Activity activity, String jobName, String assetPath, boolean landscape) {
+        return print(activity, jobName, new String[]{assetPath}, landscape);
+    }
+
+    static boolean print(Activity activity, String jobName, String[] assetPaths, boolean landscape) {
         PrintManager manager = (PrintManager) activity.getSystemService(Context.PRINT_SERVICE);
         if (manager == null) {
             return false;
@@ -42,7 +46,7 @@ final class HospitalPrintManager {
                 .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
                 .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                 .build();
-        manager.print(jobName, new AssetImagePrintAdapter(activity, jobName, assetPath), attributes);
+        manager.print(jobName, new AssetImagePrintAdapter(activity, jobName, assetPaths), attributes);
         return true;
     }
 
@@ -60,6 +64,47 @@ final class HospitalPrintManager {
                 stream.write(buffer, 0, read);
             }
             stream.flush();
+        }
+        return output;
+    }
+
+    static File createImagePdf(Context context, String jobName, String[] assetPaths, boolean landscape) throws IOException {
+        File directory = new File(context.getCacheDir(), "print_documents");
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw new IOException("Unable to create the print cache");
+        }
+        File output = new File(directory, safeFileName(jobName) + ".pdf");
+        PrintAttributes.MediaSize mediaSize = landscape
+                ? PrintAttributes.MediaSize.ISO_A4.asLandscape()
+                : PrintAttributes.MediaSize.ISO_A4.asPortrait();
+        PrintAttributes attributes = new PrintAttributes.Builder()
+                .setMediaSize(mediaSize)
+                .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                .build();
+        PrintedPdfDocument document = new PrintedPdfDocument(context, attributes);
+        try {
+            for (int i = 0; i < assetPaths.length; i++) {
+                Bitmap bitmap = null;
+                try (InputStream input = context.getAssets().open(assetPaths[i])) {
+                    bitmap = BitmapFactory.decodeStream(input);
+                    if (bitmap == null) {
+                        throw new IOException("The selected hospital form could not be opened");
+                    }
+                    PdfDocument.Page page = document.startPage(i);
+                    drawImage(page.getCanvas(), page.getInfo().getContentRect(), bitmap);
+                    document.finishPage(page);
+                } finally {
+                    if (bitmap != null) {
+                        bitmap.recycle();
+                    }
+                }
+            }
+            try (FileOutputStream stream = new FileOutputStream(output, false)) {
+                document.writeTo(stream);
+            }
+        } finally {
+            document.close();
         }
         return output;
     }
@@ -87,13 +132,13 @@ final class HospitalPrintManager {
     private static final class AssetImagePrintAdapter extends PrintDocumentAdapter {
         private final Context context;
         private final String jobName;
-        private final String assetPath;
+        private final String[] assetPaths;
         private PrintAttributes attributes;
 
-        AssetImagePrintAdapter(Context context, String jobName, String assetPath) {
+        AssetImagePrintAdapter(Context context, String jobName, String[] assetPaths) {
             this.context = context.getApplicationContext();
             this.jobName = jobName;
-            this.assetPath = assetPath;
+            this.assetPaths = assetPaths;
         }
 
         @Override
@@ -111,7 +156,7 @@ final class HospitalPrintManager {
             attributes = newAttributes;
             PrintDocumentInfo info = new PrintDocumentInfo.Builder(jobName)
                     .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-                    .setPageCount(1)
+                    .setPageCount(assetPaths.length)
                     .build();
             callback.onLayoutFinished(info, !newAttributes.equals(oldAttributes));
         }
@@ -127,36 +172,46 @@ final class HospitalPrintManager {
                 callback.onWriteCancelled();
                 return;
             }
-            if (!containsPage(pages, 0)) {
-                callback.onWriteFinished(new PageRange[0]);
-                return;
-            }
             if (attributes == null) {
                 callback.onWriteFailed("Print layout is unavailable");
                 return;
             }
 
             PrintedPdfDocument document = new PrintedPdfDocument(context, attributes);
-            Bitmap bitmap = null;
-            try (InputStream input = context.getAssets().open(assetPath)) {
-                bitmap = BitmapFactory.decodeStream(input);
-                if (bitmap == null) {
-                    callback.onWriteFailed("The selected hospital form could not be opened");
+            boolean wroteAnyPage = false;
+            try {
+                for (int i = 0; i < assetPaths.length; i++) {
+                    if (!containsPage(pages, i)) {
+                        continue;
+                    }
+                    Bitmap bitmap = null;
+                    try (InputStream input = context.getAssets().open(assetPaths[i])) {
+                        bitmap = BitmapFactory.decodeStream(input);
+                        if (bitmap == null) {
+                            callback.onWriteFailed("The selected hospital form could not be opened");
+                            return;
+                        }
+                        PdfDocument.Page page = document.startPage(i);
+                        drawImage(page.getCanvas(), page.getInfo().getContentRect(), bitmap);
+                        document.finishPage(page);
+                        wroteAnyPage = true;
+                    } finally {
+                        if (bitmap != null) {
+                            bitmap.recycle();
+                        }
+                    }
+                }
+                if (!wroteAnyPage) {
+                    callback.onWriteFinished(new PageRange[0]);
                     return;
                 }
-                PdfDocument.Page page = document.startPage(0);
-                drawImage(page.getCanvas(), page.getInfo().getContentRect(), bitmap);
-                document.finishPage(page);
                 try (FileOutputStream output = new FileOutputStream(destination.getFileDescriptor())) {
                     document.writeTo(output);
                 }
-                callback.onWriteFinished(new PageRange[]{new PageRange(0, 0)});
+                callback.onWriteFinished(new PageRange[]{new PageRange(0, assetPaths.length - 1)});
             } catch (IOException | RuntimeException error) {
                 callback.onWriteFailed(error.getMessage() == null ? "Unable to prepare the print" : error.getMessage());
             } finally {
-                if (bitmap != null) {
-                    bitmap.recycle();
-                }
                 document.close();
             }
         }

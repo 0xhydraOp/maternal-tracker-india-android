@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.34 - 2026-09-13
+
+- Added DR. RAJU MAHAJAN to prescription printing with the supplied original prescription image and printed credentials.
+- Added Blood / Component Requisition Form to the Print Desk and profile print actions as an A4 portrait document.
+- Added Baby Refer Form as a two-page A4 portrait print job using both supplied newborn referral pages in order.
+- Extended the print pipeline so Android Print can produce multi-page image documents while existing one-page Epson printing remains unchanged.
+
 ## v1.1.33 - 2026-09-04
 
 - Removed the unnecessary Data Quality Alerts section from the bottom of the Home dashboard.

@@ -1,7 +1,7 @@
 # Blue Bird Maternal Tracker Specification
 
-Last updated: 2026-09-04
-Current app version: `1.1.33` / versionCode `41`
+Last updated: 2026-09-13
+Current app version: `1.1.34` / versionCode `42`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -42,13 +42,15 @@ The profile panel exposes the following actions to both admins and staff, above 
 - Print Prescriptions
 - Print OT Papers
 - Print Baby Birth Form
+- Print Blood Requisition
+- Print Baby Refer Form
 
 Printing requirements:
 
 - Printing uses a unified visual Print Desk with category navigation, document selection, exact preview, print summary, and confirmation.
 - Doctor and OT choices use custom bold selection sheets with supporting credentials or orientation details; the Baby Identification form uses the same selected-document visual language.
 - Epson Smart Panel is the primary action when installed; Android printers / Save as PDF and print-service management remain secondary actions.
-- Epson Smart Panel receives an untouched copy of the original bundled JPEG through its supported image-print activity. The app does not decode, redraw, recolor, resize, or recompress that image for Epson.
+- Epson Smart Panel receives an untouched copy of original single-page bundled JPEG documents through its supported image-print activity. Multi-page documents are prepared as a print-ready PDF containing the supplied page images in order.
 - Android printers / Save as PDF opens Android's destination chooser for other enabled printers and PDF output.
 - A4 is the default paper size; the operator may change supported media in the Android print dialog.
 - Supplied hospital documents are printed from their original bundled image files.
@@ -62,6 +64,7 @@ Prescription selection:
 - DR. ARNAB SAHA - M.B.B.S., M.S. (Obstetrics & Gynaecology)
 - DR. SUDIPTA BISWAS - MBBS, PGPN, DCH
 - DR. PIARUL SK - MBBS, MS (General Surgeon)
+- DR. RAJU MAHAJAN - M.B.B.S. (WBUHS), M.S. Obstetrics & Gynaecology
 
 OT Paper selection is a single-choice document sheet. The operator selects and prints one of:
 
@@ -70,6 +73,10 @@ OT Paper selection is a single-choice document sheet. The operator selects and p
 - OT Note
 
 Baby Identification Form is a dedicated single-document print action.
+
+Blood / Component Requisition Form is a dedicated single-document A4 portrait print action.
+
+Baby Refer Form is a dedicated two-page A4 portrait print action. When the operator prints this form, both supplied referral pages print together in order.
 
 ## 3. Location Scope
 
