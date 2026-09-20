@@ -1,7 +1,7 @@
 # Blue Bird Maternal Tracker Specification
 
-Last updated: 2026-09-13
-Current app version: `1.1.35` / versionCode `43`
+Last updated: 2026-09-20
+Current app version: `1.1.36` / versionCode `44`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -68,6 +68,7 @@ Prescription selection:
 - DR. SUDIPTA BISWAS - MBBS, PGPN, DCH
 - DR. PIARUL SK - MBBS, MS (General Surgeon)
 - DR. RAJU MAHAJAN - M.B.B.S. (WBUHS), M.S. Obstetrics & Gynaecology
+- DR. RAJIBUL BISWAS - M.B.B.S. MD. (Pediatrics)
 
 OT Paper selection is a single-choice document sheet. The operator selects and prints one of:
 
@@ -77,7 +78,7 @@ OT Paper selection is a single-choice document sheet. The operator selects and p
 
 Baby Identification Form is a dedicated single-document print action.
 
-Blood / Component Requisition Form is a dedicated single-document A4 portrait print action.
+Blood / Component Requisition Form is a dedicated two-page A4 portrait print action. When the operator prints this form, both supplied blood requisition pages print together in order.
 
 Baby Refer Form is a dedicated two-page A4 portrait print action. When the operator prints this form, both supplied referral pages print together in order.
 

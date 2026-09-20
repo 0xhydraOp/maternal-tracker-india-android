@@ -154,21 +154,24 @@ public class MainActivity extends Activity {
             "DR. ARNAB SAHA",
             "DR. SUDIPTA BISWAS",
             "DR. PIARUL SK",
-            "DR. RAJU MAHAJAN"
+            "DR. RAJU MAHAJAN",
+            "DR. RAJIBUL BISWAS"
     };
     private static final String[] PRESCRIPTION_CREDENTIALS = {
             "MBBS, DNB, DGO (NEW DELHI) | Consultant Obstetrician & Gynaecologist | REG NO.: 79831 (WBMC)",
             "M.B.B.S., M.S. (Obstetrics & Gynaecology) | Consultant Obstetrician & Gynaecologist Surgeon | REG NO-78415 (WBMC)",
             "MBBS, PGPN, DCH | Child Specialist | REG NO.: 68725 (WBMC)",
             "MBBS, MS (General Surgeon) | Consultant Laparoscopic & General Surgeon | REG NO.: 76636 (WBMC)",
-            "M.B.B.S. (WBUHS), M.S. Obstetrics & Gynaecology | Laparoscopic Surgeon | Ex House Physician Burdwan Medical College & Hospital | Ex Medical Officer at Rajnagar Block Hospital | Murshidabad Medical College & Hospital | Regd. 71244 (WBMC)"
+            "M.B.B.S. (WBUHS), M.S. Obstetrics & Gynaecology | Laparoscopic Surgeon | Ex House Physician Burdwan Medical College & Hospital | Ex Medical Officer at Rajnagar Block Hospital | Murshidabad Medical College & Hospital | Regd. 71244 (WBMC)",
+            "M.B.B.S. MD. (Pediatrics) | Consultant Paediatrician & Neonatologist | Attached to Bankura Sammilani Medical College, Healthworld Hospital, Asansol | Previously attached to Medical College, Kolkata & ESIC Joka"
     };
     private static final String[] PRESCRIPTION_ASSETS = {
             "print_forms/prescription_suyeta_nasrin.jpg",
             "print_forms/prescription_arnab_saha.jpg",
             "print_forms/prescription_sudipta_biswas.jpg",
             "print_forms/prescription_piarul_sk.jpg",
-            "print_forms/prescription_raju_mahajan.jpg"
+            "print_forms/prescription_raju_mahajan.jpg",
+            "print_forms/prescription_rajibul_biswas.jpg"
     };
     private static final String[] OT_PAPER_NAMES = {
             "BHT / Input & Output Chart - Bed Sheet",
@@ -183,6 +186,10 @@ public class MainActivity extends Activity {
     private static final String[] BABY_REFER_ASSETS = {
             "print_forms/baby_referral_form_page_1.jpg",
             "print_forms/baby_referral_form_page_2.jpg"
+    };
+    private static final String[] BLOOD_REQUISITION_ASSETS = {
+            "print_forms/blood_requisition_form_page_1.jpg",
+            "print_forms/blood_requisition_form_page_2.jpg"
     };
 
     private MaternalDbHelper db;
@@ -3873,29 +3880,42 @@ public class MainActivity extends Activity {
     }
 
     private View bloodRequisitionPrintWorkspace() {
-        String assetPath = "print_forms/blood_requisition_form.jpg";
         TextView documentValue = printSummaryValue("Blood / Component Requisition Form");
         TextView orientationValue = printSummaryValue("A4 portrait");
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.VERTICAL);
         Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
-                "Blood Component Requisition Form", assetPath, false, true));
+                "Blood Component Requisition Form", BLOOD_REQUISITION_ASSETS, false, true));
         setPrintActionEnabled(epson, epsonSmartPanelAvailable());
         actions.addView(epson);
         actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
-                "Blood Component Requisition Form", assetPath, false, false)));
+                "Blood Component Requisition Form", BLOOD_REQUISITION_ASSETS, false, false)));
         actions.addView(printSettingsButton());
+
+        LinearLayout previews = new LinearLayout(this);
+        previews.setOrientation(LinearLayout.VERTICAL);
+        TextView pageOne = label("PAGE 1", 11, true);
+        pageOne.setTextColor(MUTED);
+        pageOne.setPadding(0, 0, 0, dp(SPACE_XS));
+        TextView pageTwo = label("PAGE 2", 11, true);
+        pageTwo.setTextColor(MUTED);
+        pageTwo.setPadding(0, dp(SPACE_MD), 0, dp(SPACE_XS));
+        previews.addView(pageOne);
+        previews.addView(printPreview(BLOOD_REQUISITION_ASSETS[0], false));
+        previews.addView(pageTwo);
+        previews.addView(printPreview(BLOOD_REQUISITION_ASSETS[1], false));
+
         return printWorkspaceCard(
                 "Blood Requisition",
                 "Selected document",
                 printSelectedDocumentCard(
                         "BLOOD / COMPONENT REQUISITION FORM",
-                        "Government blood bank request form",
-                        "A4 PORTRAIT"
+                        "Two original pages printed together",
+                        "2 PAGES"
                 ),
-                printSupportingText("Review the full document below before continuing."),
-                printPreview(assetPath, false),
-                printSummary(documentValue, orientationValue),
+                printSupportingText("This print job includes both blood requisition pages in order."),
+                previews,
+                printSummary(documentValue, orientationValue, "2"),
                 actions
         );
     }

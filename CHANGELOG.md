@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.36 - 2026-09-20
+
+- Added DR. RAJIBUL BISWAS to prescription printing with the supplied original prescription image and printed credentials from the pad.
+- Updated Blood / Component Requisition Form to use the supplied two-page document set.
+- Changed Blood Requisition printing to preview and print both A4 portrait pages together in order.
+
 ## v1.1.35 - 2026-09-13
 
 - Reworked the Print Desk visual system to remove gold styling from the print workflow.
