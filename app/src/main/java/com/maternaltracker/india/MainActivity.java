@@ -571,7 +571,7 @@ public class MainActivity extends Activity {
         bottomNav.addView(bottomNavItem("Dashboard", R.drawable.ic_nav_home, "Home", navigateTo(this::showDashboard)), new LinearLayout.LayoutParams(0, -1, 1));
         bottomNav.addView(bottomNavItem("Patient Entry", R.drawable.ic_nav_entry, "Entry", navigateTo(() -> showPatientForm(null))), new LinearLayout.LayoutParams(0, -1, 1));
         bottomNav.addView(bottomNavItem("Patient Search", R.drawable.ic_nav_search, "Search", navigateTo(() -> showPatientList(false))), new LinearLayout.LayoutParams(0, -1, 1));
-        bottomNav.addView(bottomNavItem("Reports", R.drawable.ic_nav_reports, "Reports", navigateTo(this::showReports)), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Print Desk", R.drawable.ic_action_print, "Print", navigateTo(this::showPrescriptionPrintCenter)), new LinearLayout.LayoutParams(0, -1, 1));
         if (isAdmin()) {
             bottomNav.addView(bottomNavItem("Administration", R.drawable.ic_nav_admin, "Admin", navigateTo(this::showAdmin)), new LinearLayout.LayoutParams(0, -1, 1));
         }
@@ -605,7 +605,9 @@ public class MainActivity extends Activity {
         actions.addView(menuItem("New Patient", "Register a new maternal record", ACCENT, navigateTo(() -> showPatientForm(null))));
         actions.addView(menuItem("Search Patients", "Find records and update visits", PRIMARY, navigateTo(() -> showPatientList(false))));
         actions.addView(menuGroupTitle("Reports & Export"));
-        actions.addView(menuItem("Reports", "Review scheduled, EDD, and village data", SLATE, navigateTo(this::showReports)));
+        if (isAdmin()) {
+            actions.addView(menuItem("Reports", "Available from Administration controls", SLATE, navigateTo(this::showAdmin)));
+        }
         actions.addView(menuItem("Export Center", "Create Excel and PDF outputs", PRIMARY_DARK, navigateTo(this::showExportCenter)));
         actions.addView(menuGroupTitle("System"));
         actions.addView(menuItem("Update Center", "Download and install updates inside the app", WARNING, navigateTo(this::showUpdateCenter)));
@@ -3648,11 +3650,10 @@ public class MainActivity extends Activity {
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setPadding(0, 0, 0, dp(SPACE_SM));
         String[] labels = {"Prescriptions", "OT Papers", "Baby Form", "Blood Form", "Baby Refer"};
+        String[] details = {"Doctor pads", "OT set", "Birth ID", "2 pages", "2 pages"};
         for (int i = 0; i < labels.length; i++) {
             final int category = i;
-            Button tab = printCategoryTab(labels[i], i == activeCategory, v -> showPrintDesk(category));
-            tab.setMinWidth(dp(118));
-            tabs.addView(tab);
+            tabs.addView(printCategoryCard(labels[i], details[i], i == activeCategory, v -> showPrintDesk(category)));
         }
         scroll.addView(tabs);
         return scroll;
@@ -3684,23 +3685,27 @@ public class MainActivity extends Activity {
         return banner;
     }
 
-    private Button printCategoryTab(String text, boolean active, View.OnClickListener listener) {
-        Button tab = new Button(this);
-        tab.setAllCaps(false);
-        tab.setText(text);
-        tab.setTextSize(TYPE_BODY);
-        tab.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        tab.setTextColor(active ? Color.WHITE : PRIMARY_DARK);
-        tab.setGravity(Gravity.CENTER);
-        tab.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
-        tab.setMinHeight(dp(44));
-        tab.setBackground(rounded(active ? PRIMARY : Color.WHITE, dp(BUTTON_RADIUS), dp(active ? 0 : 1), active ? PRIMARY : BORDER));
-        setDebouncedClick(tab, listener);
-        attachPressAnimation(tab, 0.97f);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(44));
+    private View printCategoryCard(String title, String detail, boolean active, View.OnClickListener listener) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(SPACE_MD), dp(SPACE_SM), dp(SPACE_MD), dp(SPACE_SM));
+        card.setMinimumWidth(dp(132));
+        card.setBackground(rounded(active ? PRIMARY : Color.WHITE, dp(CARD_RADIUS), dp(active ? 0 : 1), active ? PRIMARY : BORDER));
+        card.setContentDescription(title + (active ? ", selected" : ""));
+        TextView name = label(title, TYPE_BODY, true);
+        name.setTextColor(active ? Color.WHITE : PRIMARY_DARK);
+        TextView meta = label(detail, 10, true);
+        meta.setTextColor(active ? Color.argb(230, 255, 255, 255) : SLATE);
+        meta.setPadding(0, dp(3), 0, 0);
+        card.addView(name);
+        card.addView(meta);
+        setDebouncedClick(card, listener);
+        attachPressAnimation(card, 0.97f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(70));
         lp.setMargins(0, 0, dp(SPACE_SM), 0);
-        tab.setLayoutParams(lp);
-        return tab;
+        card.setLayoutParams(lp);
+        return card;
     }
 
     private View prescriptionPrintWorkspace() {
@@ -3712,6 +3717,14 @@ public class MainActivity extends Activity {
         TextView orientationValue = printSummaryValue("A4 portrait");
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.VERTICAL);
+        Button previewFull = printSecondaryButton("Preview Full Page", v -> {
+            if (selected[0] < 0) {
+                toast("Select a doctor prescription");
+                selection.performClick();
+                return;
+            }
+            showPrintPreviewDialog(PRESCRIPTION_DOCTORS[selected[0]], new String[]{PRESCRIPTION_ASSETS[selected[0]]}, false);
+        });
         Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> {
             if (selected[0] < 0) {
                 toast("Select a doctor prescription");
@@ -3738,8 +3751,10 @@ public class MainActivity extends Activity {
                     false
             );
         });
+        setPrintActionEnabled(previewFull, false);
         setPrintActionEnabled(epson, false);
         setPrintActionEnabled(other, false);
+        actions.addView(previewFull);
         actions.addView(epson);
         actions.addView(other);
         actions.addView(printSettingsButton());
@@ -3758,6 +3773,7 @@ public class MainActivity extends Activity {
                     credentials.setText(PRESCRIPTION_CREDENTIALS[which]);
                     documentValue.setText(PRESCRIPTION_DOCTORS[which] + " prescription");
                     setPrintPreview(preview, PRESCRIPTION_ASSETS[which], false);
+                    setPrintActionEnabled(previewFull, true);
                     setPrintActionEnabled(epson, epsonSmartPanelAvailable());
                     setPrintActionEnabled(other, true);
                 }
@@ -3783,6 +3799,14 @@ public class MainActivity extends Activity {
         TextView orientationValue = printSummaryValue("Select a document");
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.VERTICAL);
+        Button previewFull = printSecondaryButton("Preview Full Page", v -> {
+            if (selected[0] < 0) {
+                toast("Select an OT paper");
+                selection.performClick();
+                return;
+            }
+            showPrintPreviewDialog(OT_PAPER_NAMES[selected[0]], new String[]{OT_PAPER_ASSETS[selected[0]]}, selected[0] == 0);
+        });
         Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> {
             if (selected[0] < 0) {
                 toast("Select an OT paper");
@@ -3809,8 +3833,10 @@ public class MainActivity extends Activity {
                     false
             );
         });
+        setPrintActionEnabled(previewFull, false);
         setPrintActionEnabled(epson, false);
         setPrintActionEnabled(other, false);
+        actions.addView(previewFull);
         actions.addView(epson);
         actions.addView(other);
         actions.addView(printSettingsButton());
@@ -3835,6 +3861,7 @@ public class MainActivity extends Activity {
                     documentValue.setText(OT_PAPER_NAMES[which]);
                     orientationValue.setText(landscape ? "A4 landscape" : "A4 portrait");
                     setPrintPreview(preview, OT_PAPER_ASSETS[which], landscape);
+                    setPrintActionEnabled(previewFull, true);
                     setPrintActionEnabled(epson, epsonSmartPanelAvailable());
                     setPrintActionEnabled(other, true);
                 }
@@ -3860,6 +3887,8 @@ public class MainActivity extends Activity {
         Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
                 "Baby Identification Form", assetPath, false, true));
         setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+        actions.addView(printSecondaryButton("Preview Full Page", v ->
+                showPrintPreviewDialog("Baby Identification Form", new String[]{assetPath}, false)));
         actions.addView(epson);
         actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
                 "Baby Identification Form", assetPath, false, false)));
@@ -3887,6 +3916,8 @@ public class MainActivity extends Activity {
         Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
                 "Blood Component Requisition Form", BLOOD_REQUISITION_ASSETS, false, true));
         setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+        actions.addView(printSecondaryButton("Preview Full Page", v ->
+                showPrintPreviewDialog("Blood Component Requisition Form", BLOOD_REQUISITION_ASSETS, false)));
         actions.addView(epson);
         actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
                 "Blood Component Requisition Form", BLOOD_REQUISITION_ASSETS, false, false)));
@@ -3928,6 +3959,8 @@ public class MainActivity extends Activity {
         Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
                 "Baby Refer Form", BABY_REFER_ASSETS, false, true));
         setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+        actions.addView(printSecondaryButton("Preview Full Page", v ->
+                showPrintPreviewDialog("Baby Refer Form", BABY_REFER_ASSETS, false)));
         actions.addView(epson);
         actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
                 "Baby Refer Form", BABY_REFER_ASSETS, false, false)));
@@ -4197,6 +4230,51 @@ public class MainActivity extends Activity {
         Button settings = navButton("Manage Print Services", v -> openPrintServiceSettings());
         settings.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(48)));
         return settings;
+    }
+
+    private void showPrintPreviewDialog(String title, String[] assetPaths, boolean landscape) {
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), 0);
+        shell.setBackground(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
+
+        TextView eyebrow = label("FULL PAGE PREVIEW", 11, true);
+        eyebrow.setTextColor(PRINT_ACCENT_DARK);
+        TextView heading = label(title, 20, true);
+        heading.setTextColor(PRIMARY_DARK);
+        heading.setPadding(0, dp(SPACE_XS), 0, dp(SPACE_SM));
+        shell.addView(eyebrow);
+        shell.addView(heading);
+
+        ScrollView previewScroll = new ScrollView(this);
+        LinearLayout pages = new LinearLayout(this);
+        pages.setOrientation(LinearLayout.VERTICAL);
+        for (int i = 0; i < assetPaths.length; i++) {
+            TextView page = label("PAGE " + (i + 1), 11, true);
+            page.setTextColor(MUTED);
+            page.setPadding(0, i == 0 ? 0 : dp(SPACE_MD), 0, dp(SPACE_XS));
+            ImageView preview = printPreview(assetPaths[i], landscape);
+            LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(-1, dp(landscape ? 320 : 520));
+            previewLp.setMargins(0, 0, 0, dp(SPACE_SM));
+            preview.setLayoutParams(previewLp);
+            pages.addView(page);
+            pages.addView(preview);
+        }
+        previewScroll.addView(pages);
+        shell.addView(previewScroll, new LinearLayout.LayoutParams(-1, dp(620)));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(shell)
+                .setPositiveButton("Close", null)
+                .create();
+        dialog.setOnShowListener(ignored -> {
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawable(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
+                int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.94f);
+                dialog.getWindow().setLayout(width, android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+            }
+        });
+        dialog.show();
     }
 
     private void setPrintActionEnabled(Button button, boolean enabled) {

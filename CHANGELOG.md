@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.37 - 2026-09-20
+
+- Replaced the bottom navigation Reports item with Print Desk so printing is a primary staff workflow.
+- Moved report access into Administration controls while keeping exports available from the profile panel.
+- Upgraded Print Desk category navigation into richer document cards with document-type metadata.
+- Added full-page preview actions for prescriptions, OT papers, baby forms, blood requisition, and baby refer forms.
+
 ## v1.1.36 - 2026-09-20
 
 - Added DR. RAJIBUL BISWAS to prescription printing with the supplied original prescription image and printed credentials from the pad.
