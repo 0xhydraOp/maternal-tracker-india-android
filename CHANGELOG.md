@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.38 - 2026-09-21
+
+- Replaced DR. RAJIBUL BISWAS prescription printing with the updated supplied original prescription image.
+- Updated the Dr. Rajibul Biswas selection details with `Regd. No.: WBMC-84100`.
+- Fixed the Print Desk choice dialog so all doctors remain reachable on compact and landscape screens.
+
 ## v1.1.37 - 2026-09-20
 
 - Replaced the bottom navigation Reports item with Print Desk so printing is a primary staff workflow.

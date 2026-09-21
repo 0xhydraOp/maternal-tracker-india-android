@@ -1,7 +1,7 @@
 # Blue Bird Maternal Tracker Specification
 
-Last updated: 2026-09-20
-Current app version: `1.1.37` / versionCode `45`
+Last updated: 2026-09-21
+Current app version: `1.1.38` / versionCode `46`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -72,7 +72,7 @@ Prescription selection:
 - DR. SUDIPTA BISWAS - MBBS, PGPN, DCH
 - DR. PIARUL SK - MBBS, MS (General Surgeon)
 - DR. RAJU MAHAJAN - M.B.B.S. (WBUHS), M.S. Obstetrics & Gynaecology
-- DR. RAJIBUL BISWAS - M.B.B.S. MD. (Pediatrics)
+- DR. RAJIBUL BISWAS - M.B.B.S. MD. (Pediatrics), Regd. No.: WBMC-84100
 
 OT Paper selection is a single-choice document sheet. The operator selects and prints one of:
 

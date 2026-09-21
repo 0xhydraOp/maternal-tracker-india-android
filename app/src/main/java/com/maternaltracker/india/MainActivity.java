@@ -163,7 +163,7 @@ public class MainActivity extends Activity {
             "MBBS, PGPN, DCH | Child Specialist | REG NO.: 68725 (WBMC)",
             "MBBS, MS (General Surgeon) | Consultant Laparoscopic & General Surgeon | REG NO.: 76636 (WBMC)",
             "M.B.B.S. (WBUHS), M.S. Obstetrics & Gynaecology | Laparoscopic Surgeon | Ex House Physician Burdwan Medical College & Hospital | Ex Medical Officer at Rajnagar Block Hospital | Murshidabad Medical College & Hospital | Regd. 71244 (WBMC)",
-            "M.B.B.S. MD. (Pediatrics) | Consultant Paediatrician & Neonatologist | Attached to Bankura Sammilani Medical College, Healthworld Hospital, Asansol | Previously attached to Medical College, Kolkata & ESIC Joka"
+            "M.B.B.S. MD. (Pediatrics) | Consultant Paediatrician & Neonatologist | Attached to Bankura Sammilani Medical College, Healthworld Hospital, Asansol | Previously attached to Medical College, Kolkata & ESIC Joka | Regd. No.: WBMC-84100"
     };
     private static final String[] PRESCRIPTION_ASSETS = {
             "print_forms/prescription_suyeta_nasrin.jpg",
@@ -4021,6 +4021,13 @@ public class MainActivity extends Activity {
 
         LinearLayout choices = new LinearLayout(this);
         choices.setOrientation(LinearLayout.VERTICAL);
+        ScrollView choiceScroller = new ScrollView(this);
+        choiceScroller.setFillViewport(false);
+        choiceScroller.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        int maxChoiceHeight = Math.min(
+                dp(520),
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.52f)
+        );
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(content)
                 .setNegativeButton("Cancel", null)
@@ -4039,7 +4046,8 @@ public class MainActivity extends Activity {
             });
             choices.addView(choice);
         }
-        content.addView(choices);
+        choiceScroller.addView(choices, new ScrollView.LayoutParams(-1, -2));
+        content.addView(choiceScroller, new LinearLayout.LayoutParams(-1, maxChoiceHeight));
         dialog.setOnShowListener(ignored -> {
             if (dialog.getWindow() != null) {
                 dialog.getWindow().setBackgroundDrawable(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
