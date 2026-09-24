@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.39 - 2026-09-24
+
+- Replaced DR. SUYETA NASRIN's prescription with the updated supplied original image, preserving its text, artwork, and colours.
+
 ## v1.1.38 - 2026-09-21
 
 - Replaced DR. RAJIBUL BISWAS prescription printing with the updated supplied original prescription image.
