@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.40 - 2026-09-25
+
+- Added Print Desk document search, favourites and recent print jobs with thumbnails, page counts and orientation.
+- Preserved search context and report filters, expanded sections and scroll position when navigating back.
+- Improved patient detail readability, mobile calling access and large-font layouts.
+- Unified section typography, white surfaces, blue primary buttons and touch feedback.
+- Prevented duplicate patient-save and Epson document-preparation requests; retained existing save/download progress feedback.
+- Fixed empty library search handling with regression coverage. Original print artwork and patient rules are unchanged.
+
 ## v1.1.39 - 2026-09-24
 
 - Replaced DR. SUYETA NASRIN's prescription with the updated supplied original image, preserving its text, artwork, and colours.

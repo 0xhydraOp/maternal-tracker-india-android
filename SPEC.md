@@ -1,11 +1,20 @@
 # Blue Bird Maternal Tracker Specification
 
-Last updated: 2026-09-24
-Current app version: `1.1.39` / versionCode `47`
+Last updated: 2026-09-25
+Current app version: `1.1.40` / versionCode `48`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
 ## 1. Product Scope
+
+### Usability Update v1.1.40
+
+- Shared white surfaces, blue primary actions, clearer section typography, and native pressed feedback.
+- Search tab and Back navigation restore the query, shortcut and list position during the session; fresh registration still opens an unfiltered list.
+- Report filters, expanded sections and results position survive navigation during the session. Session UI state clears at logout.
+- Patient details emphasise name, tappable mobile number and delivery target, with larger values and a single-column layout at large font sizes or narrow widths.
+- Print Desk includes a searchable document library, per-login on-device favourites and six recent print handoffs, thumbnails, page counts and A4 orientation. Recent indicates a handed-off job, not confirmed physical printing.
+- Original document assets and all patient clinical rules remain unchanged.
 
 This Android app is a dedicated maternal care registry for Blue Bird A General Hospital. It is not a generic maternal tracker and should keep hospital-specific branding, location defaults, workflows, reports, and admin controls.
 

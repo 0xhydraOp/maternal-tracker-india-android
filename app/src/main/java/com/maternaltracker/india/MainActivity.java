@@ -78,7 +78,7 @@ public class MainActivity extends Activity {
     private static final int PRIMARY_DARK = Color.rgb(0, 59, 115);
     private static final int PRIMARY_SOFT = Color.rgb(229, 241, 255);
     private static final int ACCENT = Color.rgb(10, 102, 204);
-    private static final int PRINT_ACCENT = Color.rgb(0, 166, 178);
+    private static final int PRINT_ACCENT = Color.rgb(0, 105, 115);
     private static final int PRINT_ACCENT_DARK = Color.rgb(0, 105, 115);
     private static final int PRINT_ACCENT_SOFT = Color.rgb(226, 248, 250);
     private static final int PRINT_STAGE = Color.rgb(238, 247, 255);
@@ -100,7 +100,7 @@ public class MainActivity extends Activity {
     private static final int SPACE_LG = 16;
     private static final int SPACE_XL = 24;
     private static final int CARD_RADIUS = 8;
-    private static final int CARD_GAP = 10;
+    private static final int CARD_GAP = 12;
     private static final int BUTTON_RADIUS = 8;
     private static final int BUTTON_HEIGHT = 48;
     private static final int CHIP_RADIUS = 14;
@@ -112,10 +112,10 @@ public class MainActivity extends Activity {
     private static final int MOTION_STANDARD_MS = 180;
     private static final long ACTION_DEBOUNCE_MS = 500L;
     private static final int TYPE_SCREEN_TITLE = 19;
-    private static final int TYPE_SECTION_TITLE = 14;
-    private static final int TYPE_CARD_TITLE = 15;
-    private static final int TYPE_BODY = 13;
-    private static final int TYPE_LABEL = 12;
+    private static final int TYPE_SECTION_TITLE = 17;
+    private static final int TYPE_CARD_TITLE = 16;
+    private static final int TYPE_BODY = 14;
+    private static final int TYPE_LABEL = 13;
     private static final int TYPE_CHIP = 12;
     private static final int DASHBOARD_PRIORITY_LIMIT = 2;
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("hh:mm a");
@@ -262,6 +262,19 @@ public class MainActivity extends Activity {
     private String[] lastPatientListArgs;
     private String lastPatientListShortcut;
     private String lastPatientSearchQuery = "";
+    private ScrollView patientListScroll;
+    private int patientListScrollY;
+    private ScrollView reportResultsScroll;
+    private int reportScrollY;
+    private String reportFrom = "";
+    private String reportTo = "";
+    private String reportMonth = "All Months";
+    private final java.util.Map<String, Boolean> reportSections = new java.util.HashMap<>();
+    private int selectedPrescription = -1;
+    private int selectedOtPaper = -1;
+    private boolean printPreparing;
+    private boolean revealSelectedPrint;
+    private String patientListOriginPage = "Dashboard";
     private String patientFormOriginPage = "Dashboard";
     private String patientDetailOriginPage = "Dashboard";
     private final java.util.Set<Long> patientOperationsInFlight = new java.util.HashSet<>();
@@ -317,6 +330,26 @@ public class MainActivity extends Activity {
     }
 
     private void showLogin() {
+        lastPatientSearchQuery = "";
+        lastPatientListWhere = null;
+        lastPatientListArgs = null;
+        lastPatientListShortcut = null;
+        lastPatientListAdminMode = false;
+        lastPatientListAlreadyScoped = false;
+        restorePatientListState = false;
+        patientListScroll = null;
+        patientListScrollY = 0;
+        reportResultsScroll = null;
+        reportScrollY = 0;
+        reportFrom = "";
+        reportTo = "";
+        reportMonth = "All Months";
+        reportSections.clear();
+        patientListOriginPage = "Dashboard";
+        patientDetailOriginPage = "Dashboard";
+        patientFormOriginPage = "Dashboard";
+        selectedPrescription = -1;
+        selectedOtPaper = -1;
         content = null;
         headerTitle = null;
         status = null;
@@ -556,7 +589,7 @@ public class MainActivity extends Activity {
         top.addView(profile, new LinearLayout.LayoutParams(dp(40), dp(40)));
         headerContainer.addView(top);
         headerGoldLine = new TextView(this);
-        headerGoldLine.setBackground(rounded(GOLD, dp(1), 0, GOLD));
+        headerGoldLine.setBackground(rounded(Color.rgb(151, 202, 255), dp(1), 0, PRIMARY));
         LinearLayout.LayoutParams goldLineLp = new LinearLayout.LayoutParams(-1, dp(2));
         goldLineLp.setMargins(dp(48), dp(7), dp(48), 0);
         headerContainer.addView(headerGoldLine, goldLineLp);
@@ -570,7 +603,7 @@ public class MainActivity extends Activity {
         bottomNav.removeAllViews();
         bottomNav.addView(bottomNavItem("Dashboard", R.drawable.ic_nav_home, "Home", navigateTo(this::showDashboard)), new LinearLayout.LayoutParams(0, -1, 1));
         bottomNav.addView(bottomNavItem("Patient Entry", R.drawable.ic_nav_entry, "Entry", navigateTo(() -> showPatientForm(null))), new LinearLayout.LayoutParams(0, -1, 1));
-        bottomNav.addView(bottomNavItem("Patient Search", R.drawable.ic_nav_search, "Search", navigateTo(() -> showPatientList(false))), new LinearLayout.LayoutParams(0, -1, 1));
+        bottomNav.addView(bottomNavItem("Patient Search", R.drawable.ic_nav_search, "Search", navigateTo(this::openSavedPatientSearch)), new LinearLayout.LayoutParams(0, -1, 1));
         bottomNav.addView(bottomNavItem("Print Desk", R.drawable.ic_action_print, "Print", navigateTo(this::showPrescriptionPrintCenter)), new LinearLayout.LayoutParams(0, -1, 1));
         if (isAdmin()) {
             bottomNav.addView(bottomNavItem("Administration", R.drawable.ic_nav_admin, "Admin", navigateTo(this::showAdmin)), new LinearLayout.LayoutParams(0, -1, 1));
@@ -603,7 +636,7 @@ public class MainActivity extends Activity {
         actions.addView(menuItem("Print Baby Refer Form", "Two-page newborn referral form", PRIMARY_DARK, navigateTo(this::showBabyReferPrintCenter)));
         actions.addView(menuGroupTitle("Patient Work"));
         actions.addView(menuItem("New Patient", "Register a new maternal record", ACCENT, navigateTo(() -> showPatientForm(null))));
-        actions.addView(menuItem("Search Patients", "Find records and update visits", PRIMARY, navigateTo(() -> showPatientList(false))));
+        actions.addView(menuItem("Search Patients", "Find records and update visits", PRIMARY, navigateTo(this::openSavedPatientSearch)));
         actions.addView(menuGroupTitle("Reports & Export"));
         if (isAdmin()) {
             actions.addView(menuItem("Reports", "Available from Administration controls", SLATE, navigateTo(this::showAdmin)));
@@ -779,6 +812,12 @@ public class MainActivity extends Activity {
     }
 
     private void setPage(String title) {
+        if (("Patient Search".equals(currentPage) || "Patient Management".equals(currentPage)) && patientListScroll != null) {
+            patientListScrollY = patientListScroll.getScrollY();
+        }
+        if ("Reports".equals(currentPage) && reportResultsScroll != null) {
+            reportScrollY = reportResultsScroll.getScrollY();
+        }
         stopScreenActivity();
         if (!"Reports".equals(title)) {
             reportsRefresh = null;
@@ -892,6 +931,8 @@ public class MainActivity extends Activity {
                 || "Backup Manager".equals(page)) {
             showAdmin();
         } else if ("Export Center".equals(page)) {
+            showReports();
+        } else if ("Patient Search".equals(page) && "Reports".equals(patientListOriginPage)) {
             showReports();
         } else {
             showDashboard();
@@ -2294,6 +2335,7 @@ public class MainActivity extends Activity {
     }
 
     private void persistPatient(Patient p, Patient old) {
+        if (patientSaveInProgress) return;
         try {
             boolean creating = editingPatient == null;
             setPatientSaveBusy(true);
@@ -2507,6 +2549,14 @@ public class MainActivity extends Activity {
         db.logChange(p.patientId, "final_visit", old.finalVisit, p.finalVisit, currentUser);
     }
 
+    private void openSavedPatientSearch() {
+        if (!lastPatientListAdminMode) {
+            restoreLastPatientList();
+        } else {
+            showPatientList(false);
+        }
+    }
+
     private void showPatientList(boolean adminMode) {
         showPatientList(adminMode, null, null);
     }
@@ -2520,6 +2570,10 @@ public class MainActivity extends Activity {
     }
 
     private void showPatientList(boolean adminMode, String extraWhere, String[] extraArgs, boolean alreadyScoped, String activeShortcut) {
+        boolean restoring = restorePatientListState;
+        if (!restoring && !"Patient Search".equals(currentPage) && !"Patient Management".equals(currentPage)) {
+            patientListOriginPage = currentPage;
+        }
         String restoredQuery = restorePatientListState ? lastPatientSearchQuery : "";
         restorePatientListState = false;
         lastPatientListAdminMode = adminMode;
@@ -2529,6 +2583,7 @@ public class MainActivity extends Activity {
         lastPatientListShortcut = activeShortcut;
         lastPatientSearchQuery = restoredQuery;
         setPage(adminMode ? "Patient Management" : "Patient Search");
+        int restoreScrollY = restoring ? patientListScrollY : 0;
         boolean fullAccess = adminMode && isAdmin();
         String visibleWhere = fullAccess || alreadyScoped ? extraWhere : scopedWhere(extraWhere);
         String[] visibleArgs = fullAccess || alreadyScoped ? extraArgs : scopedArgs(extraArgs);
@@ -2545,6 +2600,8 @@ public class MainActivity extends Activity {
             page.addView(recentDeleteUndoBanner());
         }
         page.addView(scrollingShortcutActions(
+                shortcutButton("All Patients", activeShortcut == null && extraWhere == null ? "All Patients" : activeShortcut,
+                        v -> showPatientList(adminMode, null, null, fullAccess, null)),
                 shortcutButton("Completion Due", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, DELIVERY_COMPLETION_DUE_WHERE), appendArgs(shortcutBaseArgs, LocalDate.now().toString(), LocalDate.now().toString()), true, "Completion Due")),
                 shortcutButton("Scheduled", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, SCHEDULED_WHERE), shortcutBaseArgs, true, "Scheduled")),
                 shortcutButton("Call Pending", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, SCHEDULED_CALL_PENDING_WHERE), appendArgs(shortcutBaseArgs, LocalDate.now().toString()), true, "Call Pending")),
@@ -2559,6 +2616,7 @@ public class MainActivity extends Activity {
                 button("New Patient", v -> showPatientForm(null))
         ));
         ScrollView scroll = new ScrollView(this);
+        patientListScroll = scroll;
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list);
@@ -2567,8 +2625,10 @@ public class MainActivity extends Activity {
         search.addTextChangedListener(simpleWatcher(s -> {
             lastPatientSearchQuery = s;
             reload.run();
+            scroll.scrollTo(0, 0);
         }));
         reload.run();
+        scroll.post(() -> scroll.scrollTo(0, restoreScrollY));
     }
 
     private void renderPatientRows(LinearLayout list, List<Patient> patients, boolean adminMode, String visibleWhere, String activeShortcut) {
@@ -2830,7 +2890,7 @@ public class MainActivity extends Activity {
             toast("Patient not found");
             return;
         }
-        if (!"Edit Patient".equals(currentPage)) {
+        if (!"Edit Patient".equals(currentPage) && !"Patient Detail".equals(currentPage)) {
             patientDetailOriginPage = currentPage;
         }
         lastPatientDetailAdminMode = adminMode;
@@ -2852,15 +2912,28 @@ public class MainActivity extends Activity {
 
         LinearLayout title = new LinearLayout(this);
         title.setOrientation(LinearLayout.VERTICAL);
-        TextView name = label(value(p.patientName), 19, true);
+        TextView name = label(value(p.patientName), 22, true);
         name.setTextColor(PRIMARY_DARK);
-        TextView meta = label(value(p.patientId) + " | " + value(p.villageName) + " | " + value(p.mobileNumber), 12, true);
+        TextView meta = label(value(p.patientId) + " | " + value(p.villageName), TYPE_LABEL, true);
         meta.setTextColor(SLATE);
         title.addView(name);
         title.addView(meta);
         top.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         top.addView(chip(patientStatusLabel(p), patientStatusColor(p), Color.WHITE));
         panel.addView(top);
+
+        TextView contact = label(value(p.mobileNumber), 19, true);
+        contact.setTextColor(PRIMARY);
+        contact.setPadding(0, dp(SPACE_SM), 0, dp(SPACE_SM));
+        contact.setMinHeight(dp(48));
+        contact.setGravity(Gravity.CENTER_VERTICAL);
+        contact.setContentDescription("Call patient " + value(p.mobileNumber));
+        setDebouncedClick(contact, v -> callPatient(db.getPatient(p.id)));
+        panel.addView(contact);
+        TextView delivery = label("Delivery target  " + deliveryDisplayDate(p), 17, true);
+        delivery.setTextColor(deliveryStatusColor(p));
+        delivery.setPadding(0, 0, 0, dp(SPACE_SM));
+        panel.addView(delivery);
 
         if (deliveryCompletionEligible(p)) {
             TextView alert = chip("Completion action: " + deliveryCompletionReason(p), URGENT, Color.WHITE);
@@ -2970,16 +3043,15 @@ public class MainActivity extends Activity {
         headingRow.setOrientation(LinearLayout.HORIZONTAL);
         headingRow.setGravity(Gravity.CENTER_VERTICAL);
         headingRow.setPadding(dp(8), dp(6), dp(8), dp(6));
-        headingRow.setBackground(rounded(Color.argb(86, Color.red(PRIMARY), Color.green(PRIMARY), Color.blue(PRIMARY)), dp(10), dp(1), Color.argb(130, Color.red(PRIMARY), Color.green(PRIMARY), Color.blue(PRIMARY))));
+        headingRow.setBackground(rounded(PRIMARY_SOFT, dp(CARD_RADIUS), 0, PRIMARY_SOFT));
         TextView accent = new TextView(this);
-        accent.setBackground(rounded(GOLD, dp(3), 0, GOLD));
+        accent.setBackground(rounded(PRIMARY, dp(3), 0, PRIMARY));
         LinearLayout.LayoutParams accentLp = new LinearLayout.LayoutParams(dp(5), dp(24));
         accentLp.setMargins(0, 0, dp(8), 0);
         headingRow.addView(accent, accentLp);
-        TextView heading = label(title.toUpperCase(java.util.Locale.US), 14, true);
+        TextView heading = label(title, TYPE_SECTION_TITLE, true);
         heading.setTextColor(PRIMARY_DARK);
-        heading.setSingleLine(true);
-        heading.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        androidx.core.view.ViewCompat.setAccessibilityHeading(heading, true);
         headingRow.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
         LinearLayout.LayoutParams headingLp = new LinearLayout.LayoutParams(-1, -2);
         headingLp.setMargins(0, dp(2), 0, dp(7));
@@ -2993,6 +3065,12 @@ public class MainActivity extends Activity {
     private View detailGrid(View... cells) {
         LinearLayout grid = new LinearLayout(this);
         grid.setOrientation(LinearLayout.VERTICAL);
+        if (getResources().getConfiguration().fontScale >= 1.3f || getResources().getConfiguration().screenWidthDp < 360) {
+            for (View cell : cells) {
+                grid.addView(cell, new LinearLayout.LayoutParams(-1, -2));
+            }
+            return grid;
+        }
         for (int i = 0; i < cells.length; i += 2) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -3015,10 +3093,10 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
         lp.setMargins(dp(2), dp(2), dp(2), dp(2));
         cell.setLayoutParams(lp);
-        cell.setBackground(rounded(Color.argb(62, 255, 255, 255), dp(8), dp(1), Color.argb(120, Color.red(color), Color.green(color), Color.blue(color))));
-        TextView label = label(title, 10, true);
-        label.setTextColor(color);
-        TextView body = label(displayValue(value), 13, true);
+        cell.setBackground(rounded(Color.WHITE, dp(CARD_RADIUS), 0, Color.WHITE));
+        TextView label = label(title, TYPE_LABEL, true);
+        label.setTextColor(SLATE);
+        TextView body = label(displayValue(value), 16, true);
         body.setTextColor(TEXT);
         cell.addView(label);
         cell.addView(body);
@@ -3029,9 +3107,9 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(dp(7), dp(4), dp(7), dp(4));
-        TextView label = label(title, 10, true);
-        label.setTextColor(color);
-        TextView body = label(displayValue(value), 13, true);
+        TextView label = label(title, TYPE_LABEL, true);
+        label.setTextColor(SLATE);
+        TextView body = label(displayValue(value), 16, true);
         body.setTextColor(TEXT);
         row.addView(label);
         row.addView(body);
@@ -3452,9 +3530,12 @@ public class MainActivity extends Activity {
 
         LinearLayout filters = new LinearLayout(this);
         filters.setOrientation(LinearLayout.VERTICAL);
-        EditText from = input("");
-        EditText to = input("");
-        TextView monthFilter = selectorField("All Months");
+        EditText from = input(reportFrom);
+        EditText to = input(reportTo);
+        TextView monthFilter = selectorField(reportMonth);
+        from.addTextChangedListener(simpleWatcher(s -> reportFrom = value(s)));
+        to.addTextChangedListener(simpleWatcher(s -> reportTo = value(s)));
+        monthFilter.addTextChangedListener(simpleWatcher(s -> reportMonth = value(s)));
         TextView monthLive = smallText("");
         monthLive.setTextColor(PRIMARY_DARK);
         Runnable[] render = new Runnable[1];
@@ -3470,6 +3551,7 @@ public class MainActivity extends Activity {
         reportBody.setOrientation(LinearLayout.VERTICAL);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(reportBody);
+        reportResultsScroll = scroll;
         setDebouncedClick(monthFilter, v -> showReportMonthPicker(monthFilter, from, to, () -> {
             render[0].run();
             revealReportResults(controlsSection[0], scroll);
@@ -3481,6 +3563,9 @@ public class MainActivity extends Activity {
         syncLoadingSlot.setOrientation(LinearLayout.VERTICAL);
         render[0] = () -> {
             if (validateReportFilters(text(from), text(to), text(monthFilter), from, to, monthFilter)) {
+                reportFrom = text(from);
+                reportTo = text(to);
+                reportMonth = text(monthFilter);
                 renderSyncLoading(syncLoadingSlot);
                 renderNewPatientThisMonth(monthlyNewSlot);
                 renderReports(reportBody, text(from), text(to), "", "All", REPORT_DATE_ENTRY, text(monthFilter));
@@ -3521,6 +3606,8 @@ public class MainActivity extends Activity {
         page.addView(controlsSection[0]);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         render[0].run();
+        int restoreReportY = reportScrollY;
+        scroll.post(() -> scroll.scrollTo(0, restoreReportY));
     }
 
     private void revealReportResults(LinearLayout controlsSection, ScrollView results) {
@@ -3587,6 +3674,10 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         LinearLayout page = printPage(scroll);
         page.addView(printDeskHeader());
+        page.addView(button("Find document", v -> showPrintLibrary(0)));
+        page.addView(dashboardActions(
+                button("Favourites", v -> showPrintLibrary(1)),
+                button("Recent", v -> showPrintLibrary(2))));
         page.addView(printStatusBanner());
         page.addView(printCategoryTabs(activeCategory));
         if (activeCategory == PRINT_PRESCRIPTION) {
@@ -3600,6 +3691,11 @@ public class MainActivity extends Activity {
         } else {
             page.addView(babyReferPrintWorkspace());
         }
+        if (revealSelectedPrint) {
+            revealSelectedPrint = false;
+            View workspace = page.getChildAt(page.getChildCount() - 1);
+            scroll.post(() -> scroll.smoothScrollTo(0, workspace.getTop()));
+        }
     }
 
     private LinearLayout printPage(ScrollView scroll) {
@@ -3609,6 +3705,149 @@ public class MainActivity extends Activity {
         scroll.addView(page);
         content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
         return page;
+    }
+
+    private List<PrintLibrary.Document> printDocuments() {
+        List<PrintLibrary.Document> documents = new java.util.ArrayList<>();
+        for (int i = 0; i < PRESCRIPTION_DOCTORS.length; i++) {
+            documents.add(new PrintLibrary.Document(PRESCRIPTION_DOCTORS[i], PRESCRIPTION_CREDENTIALS[i],
+                    new String[]{PRESCRIPTION_ASSETS[i]}, PRINT_PRESCRIPTION, i, false));
+        }
+        for (int i = 0; i < OT_PAPER_NAMES.length; i++) {
+            documents.add(new PrintLibrary.Document(OT_PAPER_NAMES[i], "OT Papers",
+                    new String[]{OT_PAPER_ASSETS[i]}, PRINT_OT_PAPER, i, i == 0));
+        }
+        documents.add(new PrintLibrary.Document("Baby Identification Form", "Birth ID",
+                new String[]{"print_forms/baby_identification_form.jpg"}, PRINT_BABY_FORM, 0, false));
+        documents.add(new PrintLibrary.Document("Blood Component Requisition Form", "Blood bank",
+                BLOOD_REQUISITION_ASSETS, PRINT_BLOOD_FORM, 0, false));
+        documents.add(new PrintLibrary.Document("Baby Refer Form", "Newborn referral",
+                BABY_REFER_ASSETS, PRINT_BABY_REFER_FORM, 0, false));
+        return documents;
+    }
+
+    private android.content.SharedPreferences printPreferences() {
+        return getSharedPreferences("print_library_" + value(currentUser), MODE_PRIVATE);
+    }
+
+    private List<String> recentPrintDocuments() {
+        return java.util.Arrays.asList(printPreferences().getString("recent", "").split("\\|"));
+    }
+
+    private void rememberPrint(String[] assets) {
+        printPreferences().edit().putString("recent", String.join("|",
+                PrintLibrary.recordRecent(recentPrintDocuments(), assets[0]))).apply();
+    }
+
+    private void showPrintLibrary(int initialMode) {
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(16), dp(16), dp(16), dp(8));
+        shell.setBackgroundColor(Color.WHITE);
+        TextView title = label("Document Library", 20, true);
+        androidx.core.view.ViewCompat.setAccessibilityHeading(title, true);
+        shell.addView(title);
+        EditText search = input("");
+        search.setHint("Search doctor or document");
+        search.setContentDescription("Search doctor or document");
+        shell.addView(search, new LinearLayout.LayoutParams(-1, -2));
+        int[] mode = {initialMode};
+        LinearLayout modes = new LinearLayout(this);
+        modes.setOrientation(LinearLayout.HORIZONTAL);
+        shell.addView(modes);
+        TextView count = label("", TYPE_LABEL, true);
+        count.setPadding(0, dp(8), 0, dp(8));
+        shell.addView(count);
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout rows = new LinearLayout(this);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(rows);
+        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(shell).setNegativeButton("Close", null).create();
+        List<PrintLibrary.Document> documents = printDocuments();
+        java.util.Set<String> favourites = new java.util.HashSet<>(printPreferences().getStringSet("favourites", java.util.Collections.emptySet()));
+        Runnable[] render = new Runnable[1];
+        render[0] = () -> {
+            modes.removeAllViews();
+            String[] labels = {"All", "Favourites", "Recent"};
+            for (int i = 0; i < labels.length; i++) {
+                final int selectedMode = i;
+                Button tab = button(labels[i], v -> { mode[0] = selectedMode; render[0].run(); });
+                tab.setSelected(i == mode[0]);
+                tab.setTextColor(i == mode[0] ? Color.WHITE : PRIMARY_DARK);
+                tab.setBackground(rounded(i == mode[0] ? PRIMARY : PRIMARY_SOFT, dp(8), 0, PRIMARY));
+                tab.setPadding(dp(4), 0, dp(4), 0);
+                modes.addView(tab, new LinearLayout.LayoutParams(0, -2, 1));
+            }
+            rows.removeAllViews();
+            List<PrintLibrary.Document> matches = PrintLibrary.filter(documents, text(search), mode[0], favourites, recentPrintDocuments());
+            count.setText(matches.size() + (matches.size() == 1 ? " document" : " documents"));
+            if (matches.isEmpty()) rows.addView(label(!empty(text(search)) ? "No matching documents"
+                    : mode[0] == 1 ? "No favourites yet" : mode[0] == 2 ? "No recent print jobs" : "No matching documents", TYPE_BODY, false));
+            for (PrintLibrary.Document document : matches) {
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(0, dp(12), 0, dp(12));
+                ImageView thumb = new ImageView(this);
+                thumb.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                try (InputStream input = getAssets().open(document.id())) {
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inSampleSize = 8;
+                    thumb.setImageBitmap(BitmapFactory.decodeStream(input, null, options));
+                } catch (Exception e) { thumb.setImageResource(R.drawable.ic_action_print); }
+                thumb.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                row.addView(thumb, new LinearLayout.LayoutParams(dp(48), dp(68)));
+                LinearLayout copy = new LinearLayout(this);
+                copy.setOrientation(LinearLayout.VERTICAL);
+                copy.setPadding(dp(12), 0, dp(8), 0);
+                copy.addView(label(document.title, TYPE_CARD_TITLE, true));
+                TextView metadata = label(document.assets.length + (document.assets.length == 1 ? " page" : " pages")
+                        + " | A4 " + (document.landscape ? "landscape" : "portrait"), TYPE_LABEL, false);
+                metadata.setTextColor(SLATE);
+                copy.addView(metadata);
+                copy.setMinimumHeight(dp(48));
+                copy.setGravity(Gravity.CENTER_VERTICAL);
+                copy.setContentDescription("Open " + document.title + ", " + metadata.getText());
+                setDebouncedClick(copy, v -> {
+                    dialog.dismiss();
+                    hideKeyboard();
+                    if (document.category == PRINT_PRESCRIPTION) selectedPrescription = document.index;
+                    if (document.category == PRINT_OT_PAPER) selectedOtPaper = document.index;
+                    revealSelectedPrint = true;
+                    showPrintDesk(document.category);
+                });
+                row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+                android.widget.ImageButton star = new android.widget.ImageButton(this);
+                boolean favourite = favourites.contains(document.id());
+                star.setImageResource(favourite ? android.R.drawable.btn_star_big_on : R.drawable.ic_favourite_outline);
+                star.setPadding(dp(12), dp(12), dp(12), dp(12));
+                star.setImageTintList(ColorStateList.valueOf(PRIMARY));
+                star.setBackground(rounded(PRIMARY_SOFT, dp(8), 0, PRIMARY_SOFT));
+                star.setContentDescription((favourite ? "Remove favourite " : "Favourite ") + document.title);
+                star.setTooltipText(favourite ? "Remove favourite" : "Add favourite");
+                setDebouncedClick(star, v -> {
+                    if (!favourites.remove(document.id())) favourites.add(document.id());
+                    printPreferences().edit().putStringSet("favourites", new java.util.HashSet<>(favourites)).apply();
+                    render[0].run();
+                });
+                row.addView(star, new LinearLayout.LayoutParams(dp(48), dp(48)));
+                rows.addView(row);
+                View divider = new View(this);
+                divider.setBackgroundColor(BORDER);
+                rows.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
+            }
+        };
+        search.addTextChangedListener(simpleWatcher(s -> render[0].run()));
+        render[0].run();
+        dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setLayout(-1, (int) (getResources().getDisplayMetrics().heightPixels * 0.85f));
+            dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                    | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+        }
+        title.setFocusableInTouchMode(true);
+        title.requestFocus();
     }
 
     private View printDeskHeader() {
@@ -3634,7 +3873,7 @@ public class MainActivity extends Activity {
         copy.setPadding(dp(SPACE_MD), 0, 0, 0);
         TextView title = label("Hospital Print Desk", 18, true);
         title.setTextColor(Color.WHITE);
-        TextView detail = label("Select, verify and print the original hospital document", TYPE_BODY, false);
+        TextView detail = label(printDocuments().size() + " original documents", TYPE_BODY, false);
         detail.setTextColor(Color.argb(225, 255, 255, 255));
         detail.setPadding(0, dp(3), 0, 0);
         copy.addView(title);
@@ -3759,13 +3998,8 @@ public class MainActivity extends Activity {
         actions.addView(other);
         actions.addView(printSettingsButton());
 
-        selection.setOnClickListener(v -> showPrintChoiceDialog(
-                "Choose Prescription",
-                "Select the doctor whose original prescription will be printed.",
-                PRESCRIPTION_DOCTORS,
-                PRESCRIPTION_CREDENTIALS,
-                selected[0],
-                which -> {
+        java.util.function.IntConsumer chooseDoctor = which -> {
+                    selectedPrescription = which;
                     selected[0] = which;
                     selection.setText(PRESCRIPTION_DOCTORS[which]);
                     selection.setTextColor(PRIMARY_DARK);
@@ -3776,8 +4010,10 @@ public class MainActivity extends Activity {
                     setPrintActionEnabled(previewFull, true);
                     setPrintActionEnabled(epson, epsonSmartPanelAvailable());
                     setPrintActionEnabled(other, true);
-                }
-        ));
+                };
+        selection.setOnClickListener(v -> showPrintChoiceDialog("Choose Prescription",
+                "Select doctor", PRESCRIPTION_DOCTORS, PRESCRIPTION_CREDENTIALS, selected[0], chooseDoctor));
+        if (selectedPrescription >= 0 && selectedPrescription < PRESCRIPTION_DOCTORS.length) chooseDoctor.accept(selectedPrescription);
 
         return printWorkspaceCard(
                 "Prescription",
@@ -3846,13 +4082,8 @@ public class MainActivity extends Activity {
                 "A4 portrait | Anaesthetic record",
                 "A4 portrait | Operation theatre note"
         };
-        selection.setOnClickListener(v -> showPrintChoiceDialog(
-                "Choose OT Paper",
-                "Select one original hospital document for this print job.",
-                OT_PAPER_NAMES,
-                paperDetails,
-                selected[0],
-                which -> {
+        java.util.function.IntConsumer choosePaper = which -> {
+                    selectedOtPaper = which;
                     selected[0] = which;
                     boolean landscape = which == 0;
                     selection.setText(OT_PAPER_NAMES[which]);
@@ -3864,8 +4095,10 @@ public class MainActivity extends Activity {
                     setPrintActionEnabled(previewFull, true);
                     setPrintActionEnabled(epson, epsonSmartPanelAvailable());
                     setPrintActionEnabled(other, true);
-                }
-        ));
+                };
+        selection.setOnClickListener(v -> showPrintChoiceDialog("Choose OT Paper",
+                "Select document", OT_PAPER_NAMES, paperDetails, selected[0], choosePaper));
+        if (selectedOtPaper >= 0 && selectedOtPaper < OT_PAPER_NAMES.length) choosePaper.accept(selectedOtPaper);
 
         return printWorkspaceCard(
                 "OT Papers",
@@ -4364,6 +4597,8 @@ public class MainActivity extends Activity {
     }
 
     private void startEpsonSmartPanelPrint(String jobName, String[] assetPaths, boolean landscape) {
+        if (printPreparing) return;
+        printPreparing = true;
         pauseScreenActivity();
         LinearLayout progressContent = new LinearLayout(this);
         progressContent.setOrientation(LinearLayout.HORIZONTAL);
@@ -4379,7 +4614,7 @@ public class MainActivity extends Activity {
         TextView progressTitle = label("Preparing Print", TYPE_CARD_TITLE, true);
         progressTitle.setTextColor(PRIMARY_DARK);
         TextView progressText = label(
-                assetPaths.length == 1 ? "Preparing high quality original document" : "Preparing print-ready referral PDF",
+                assetPaths.length == 1 ? "Preparing original document" : "Preparing " + assetPaths.length + "-page document",
                 TYPE_BODY,
                 true
         );
@@ -4402,12 +4637,15 @@ public class MainActivity extends Activity {
                     progressText.setText("Opening Epson Smart Panel");
                     new android.os.Handler(getMainLooper()).postDelayed(() -> {
                         preparing.dismiss();
-                        launchEpsonSmartPanel(document, assetPaths.length == 1 ? "image/jpeg" : "application/pdf");
+                        printPreparing = false;
+                        if (isFinishing() || isDestroyed()) return;
+                        if (launchEpsonSmartPanel(document, assetPaths.length == 1 ? "image/jpeg" : "application/pdf")) rememberPrint(assetPaths);
                     }, MOTION_STANDARD_MS);
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     preparing.dismiss();
+                    printPreparing = false;
                     toast(error.getMessage() == null
                             ? "Unable to prepare the Epson document"
                             : error.getMessage());
@@ -4416,7 +4654,7 @@ public class MainActivity extends Activity {
         }, "epson-original-image-export").start();
     }
 
-    private void launchEpsonSmartPanel(File document, String mimeType) {
+    private boolean launchEpsonSmartPanel(File document, String mimeType) {
         try {
             Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", document);
             Intent intent = new Intent(Intent.ACTION_SEND);
@@ -4427,8 +4665,10 @@ public class MainActivity extends Activity {
             intent.setClipData(ClipData.newRawUri("Original hospital document", uri));
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(intent);
+            return true;
         } catch (RuntimeException error) {
             toast("Epson Smart Panel could not open this document");
+            return false;
         }
     }
 
@@ -4440,6 +4680,8 @@ public class MainActivity extends Activity {
         pauseScreenActivity();
         if (!HospitalPrintManager.print(this, jobName, assetPaths, landscape)) {
             toast("Android print service is unavailable");
+        } else {
+            rememberPrint(assetPaths);
         }
     }
 
@@ -6313,6 +6555,10 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout collapsibleSection(String title, boolean expanded, View... rows) {
+        boolean rememberReport = "Reports".equals(currentPage);
+        if (rememberReport && reportSections.containsKey(title)) {
+            expanded = reportSections.get(title);
+        }
         LinearLayout box = sectionSurface();
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
@@ -6338,6 +6584,8 @@ public class MainActivity extends Activity {
         setDebouncedClick(head, v -> {
             boolean open = body.getVisibility() != View.VISIBLE;
             setExpandableState(body, indicator, open);
+            head.setContentDescription(title + (open ? ", expanded" : ", collapsed"));
+            if (rememberReport) reportSections.put(title, open);
         });
         attachPressAnimation(head, 0.99f);
         box.addView(head);
@@ -6666,7 +6914,7 @@ public class MainActivity extends Activity {
         selection.setPadding(dp(6), dp(3), dp(6), dp(3));
         selection.setBackground(rounded(active ? PRIMARY_SOFT : Color.TRANSPARENT, dp(18), 0, Color.TRANSPARENT));
         TextView activeRail = new TextView(this);
-        activeRail.setBackground(rounded(active ? GOLD : Color.TRANSPARENT, dp(2), 0, Color.TRANSPARENT));
+        activeRail.setBackground(rounded(active ? PRIMARY : Color.TRANSPARENT, dp(2), 0, Color.TRANSPARENT));
         LinearLayout.LayoutParams activeRailLp = new LinearLayout.LayoutParams(dp(18), dp(3));
         activeRailLp.setMargins(0, 0, 0, dp(2));
         selection.addView(activeRail, activeRailLp);
@@ -6847,7 +7095,7 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
-        box.setBackground(rounded(Color.argb(238, 255, 255, 255), dp(4), 0, Color.TRANSPARENT));
+        box.setBackground(rounded(Color.WHITE, dp(CARD_RADIUS), 0, Color.TRANSPARENT));
         box.setElevation(0f);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, 0, 0, dp(CARD_GAP));
@@ -6960,7 +7208,7 @@ public class MainActivity extends Activity {
         edit.setTextSize(16);
         edit.setTypeface(edit.getTypeface(), Typeface.BOLD);
         edit.setTextColor(TEXT);
-        edit.setHintTextColor(Color.rgb(135, 151, 166));
+        edit.setHintTextColor(SLATE);
         edit.setBackground(glassInput(false));
         edit.setPadding(dp(SPACE_MD), 0, dp(SPACE_MD), 0);
         edit.setMinHeight(dp(BUTTON_HEIGHT));
@@ -7095,8 +7343,8 @@ public class MainActivity extends Activity {
             b.setElevation(0);
         } else if (isPrimaryAction(text)) {
             b.setTextColor(Color.WHITE);
-            b.setBackground(gradient(buttonStartColor(text), buttonEndColor(text), dp(BUTTON_RADIUS)));
-            b.setElevation(dp(2));
+            b.setBackground(rounded(PRIMARY, dp(BUTTON_RADIUS), 0, PRIMARY));
+            b.setElevation(0);
         } else {
             b.setTextColor(PRIMARY_DARK);
             b.setBackground(rounded(Color.WHITE, dp(BUTTON_RADIUS), dp(1), Color.rgb(174, 204, 219)));
@@ -7255,6 +7503,12 @@ public class MainActivity extends Activity {
             return;
         }
         final long[] lastClickAt = {0L};
+        view.setFocusable(true);
+        if (view.getBackground() != null && !(view.getBackground() instanceof android.graphics.drawable.RippleDrawable)) {
+            view.setBackground(new android.graphics.drawable.RippleDrawable(
+                    ColorStateList.valueOf(Color.argb(40, 0, 87, 184)), view.getBackground(),
+                    rounded(Color.WHITE, dp(BUTTON_RADIUS), 0, Color.WHITE)));
+        }
         view.setOnClickListener(v -> {
             long now = SystemClock.elapsedRealtime();
             if (!view.isEnabled() || now - lastClickAt[0] < ACTION_DEBOUNCE_MS) {
@@ -7285,16 +7539,7 @@ public class MainActivity extends Activity {
     }
 
     private GradientDrawable glassPanel(int radius) {
-        GradientDrawable drawable = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{
-                        Color.argb(222, 255, 255, 255),
-                        Color.argb(150, 219, 242, 252)
-                }
-        );
-        drawable.setCornerRadius(radius);
-        drawable.setStroke(dp(1), Color.argb(238, 255, 255, 255));
-        return drawable;
+        return rounded(Color.WHITE, radius, dp(1), BORDER);
     }
 
     private GradientDrawable profilePanelBackground() {
