@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.41 - 2026-09-28
+
+- Replaced Dr. Arnab Saha's prescription with the newly supplied original, preserving all text, colours and source resolution without recompression.
+- Retained A4 portrait printing and the existing UI and patient workflows. The cancelled UI refresh is not included.
+- Version code 50 supports upgrading the local rollback installation without clearing app data.
+
 ## v1.1.40 - 2026-09-25
 
 - Added Print Desk document search, favourites and recent print jobs with thumbnails, page counts and orientation.

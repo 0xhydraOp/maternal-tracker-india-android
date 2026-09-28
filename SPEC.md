@@ -1,11 +1,16 @@
 # Blue Bird Maternal Tracker Specification
 
-Last updated: 2026-09-25
-Current app version: `1.1.40` / versionCode `48`
+Last updated: 2026-09-28
+Current app version: `1.1.41` / versionCode `50`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
 ## 1. Product Scope
+
+### Prescription Update v1.1.41
+
+- Replaced Dr. Arnab Saha's prescription with the supplied 906 x 1280 original JPEG, without recompression or artwork changes. A4 portrait printing remains unchanged.
+- The cancelled UI refresh is not included. Version code 49 was used locally for the cancelled refresh and rollback; this release uses 50 to update those installations safely.
 
 ### Usability Update v1.1.40
 
