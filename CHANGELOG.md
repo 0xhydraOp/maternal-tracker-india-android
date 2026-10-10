@@ -13,7 +13,8 @@
 - Fresh server authorization retries transient failures after 1, 2 and 4 seconds without bypassing role checks. A device DNS failure explained an empty picker-created PDF file; PDF serialization was not the cause, and Staff exports passed after retry.
 - Verification: 118 tests, zero failures; lint zero errors and five warnings. Admin and Staff device checks covered registration, future visit edits, completion, deletion, scope and update checks; Admin checks also covered monthly report counts, Excel/PDF export, call-notification persistence, recovery and backup creation. Staff session restart and export checks passed (XLSX 2,252 bytes; PDF 54,147 bytes).
 - Android Save as PDF outputs validated with pypdf: prescription one portrait page, BHT one landscape page, blood requisition two portrait pages, baby referral two portrait pages, and Staff baby identification one portrait page.
-- Physical printing, runtime database backup restore and all real-call paths remain untested. Verification is targeted, not exhaustive, and does not establish a speed benchmark. Publication is not asserted by these notes.
+- Physical printing, runtime database backup restore and all real-call paths remain untested. Verification is targeted, not exhaustive, and does not establish a speed benchmark.
+- Published signed APK as GitHub release v1.1.42; uploaded asset SHA-256 matches the verified local file.
 
 ## v1.1.41 - 2026-09-28
 

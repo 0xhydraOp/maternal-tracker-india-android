@@ -1,8 +1,9 @@
 # Blue Bird Maternal Tracker Specification
 
 Last updated: 2026-10-11
-Current release target: `1.1.42` / versionCode `51`
-Latest published version: `1.1.41` / versionCode `50`
+Current version: `1.1.42` / versionCode `51`
+Latest published version: `1.1.42` / versionCode `51`
+Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.42
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -21,7 +22,7 @@ Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 - Follow-up selects the earliest upcoming second, third or final visit within seven days, retaining overdue tracking when appropriate. Overdue EDD takes completion precedence over a later upcoming scheduled delivery; completion preserves actual final visits and validates chronology against planned visits.
 - Doctor/motivator references come from a shared cloud catalog with validated transactional changes and synchronized dropdowns.
 - Fresh server role checks retry transient failures after 1, 2 and 4 seconds with identity/lifecycle guards; failed authorization never falls back to an unchecked cached role.
-- Home retains compact summary links, seven-day eligibility, overdue reminders, the 30-day EDD range and Admin/Staff scopes. See section 15 for final targeted verification and remaining limits; publication is not asserted here.
+- Home retains compact summary links, seven-day eligibility, overdue reminders, the 30-day EDD range and Admin/Staff scopes. See section 15 for targeted verification and remaining limits.
 
 ### Search Layout Update (Included in v1.1.42)
 
@@ -516,7 +517,7 @@ Important patient fields:
 
 ## 15. Latest Release State
 
-Release target: `1.1.42` / versionCode `51`. Latest published version recorded here remains `1.1.41` / versionCode `50`; final publication is a separate release action, not implied by device acceptance.
+Published release: `1.1.42` / versionCode `51`. Signed APK uploaded and GitHub asset SHA-256 verified against the local release file: `607891cac3e2a3d7751449e67c5653e83e0d3297e9ae4f0554c43ab2da572030`.
 
 Final targeted verification (2026-10-11):
 
