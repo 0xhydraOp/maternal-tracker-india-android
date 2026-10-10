@@ -12,6 +12,8 @@ import android.graphics.RectF;
 import android.graphics.pdf.PdfDocument;
 import android.os.Bundle;
 import android.os.CancellationSignal;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.print.PageRange;
 import android.print.PrintAttributes;
@@ -24,6 +26,15 @@ import java.io.FileOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 final class HospitalPrintManager {
     private HospitalPrintManager() {
@@ -133,12 +144,18 @@ final class HospitalPrintManager {
         private final Context context;
         private final String jobName;
         private final String[] assetPaths;
+        private final Handler mainHandler = new Handler(Looper.getMainLooper());
+        private final ThreadPoolExecutor worker = new ThreadPoolExecutor(1, 1,
+                0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
+        // Adapter entry points and terminal delivery run on the main thread.
+        private final Set<WriteRequest> writes = new HashSet<>();
+        private volatile boolean finished;
         private PrintAttributes attributes;
 
         AssetImagePrintAdapter(Context context, String jobName, String[] assetPaths) {
             this.context = context.getApplicationContext();
             this.jobName = jobName;
-            this.assetPaths = assetPaths;
+            this.assetPaths = assetPaths.clone();
         }
 
         @Override
@@ -149,10 +166,11 @@ final class HospitalPrintManager {
                 LayoutResultCallback callback,
                 Bundle extras
         ) {
-            if (cancellationSignal.isCanceled()) {
+            if (finished || cancellationSignal.isCanceled()) {
                 callback.onLayoutCancelled();
                 return;
             }
+            cancelWrites();
             attributes = newAttributes;
             PrintDocumentInfo info = new PrintDocumentInfo.Builder(jobName)
                     .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
@@ -168,7 +186,8 @@ final class HospitalPrintManager {
                 CancellationSignal cancellationSignal,
                 WriteResultCallback callback
         ) {
-            if (cancellationSignal.isCanceled()) {
+            cancelWrites();
+            if (finished || cancellationSignal.isCanceled()) {
                 callback.onWriteCancelled();
                 return;
             }
@@ -177,42 +196,174 @@ final class HospitalPrintManager {
                 return;
             }
 
-            PrintedPdfDocument document = new PrintedPdfDocument(context, attributes);
-            boolean wroteAnyPage = false;
+            final ParcelFileDescriptor ownedDestination;
             try {
-                for (int i = 0; i < assetPaths.length; i++) {
-                    if (!containsPage(pages, i)) {
-                        continue;
-                    }
-                    Bitmap bitmap = null;
-                    try (InputStream input = context.getAssets().open(assetPaths[i])) {
-                        bitmap = BitmapFactory.decodeStream(input);
-                        if (bitmap == null) {
-                            callback.onWriteFailed("The selected hospital form could not be opened");
-                            return;
-                        }
-                        PdfDocument.Page page = document.startPage(i);
-                        drawImage(page.getCanvas(), page.getInfo().getContentRect(), bitmap);
-                        document.finishPage(page);
-                        wroteAnyPage = true;
-                    } finally {
-                        if (bitmap != null) {
-                            bitmap.recycle();
-                        }
-                    }
-                }
-                if (!wroteAnyPage) {
-                    callback.onWriteFinished(new PageRange[0]);
-                    return;
-                }
-                try (FileOutputStream output = new FileOutputStream(destination.getFileDescriptor())) {
-                    document.writeTo(output);
-                }
-                callback.onWriteFinished(new PageRange[]{new PageRange(0, assetPaths.length - 1)});
+                ownedDestination = ParcelFileDescriptor.dup(destination.getFileDescriptor());
             } catch (IOException | RuntimeException error) {
-                callback.onWriteFailed(error.getMessage() == null ? "Unable to prepare the print" : error.getMessage());
-            } finally {
-                document.close();
+                callback.onWriteFailed("Unable to open print destination");
+                return;
+            }
+            WriteRequest request = new WriteRequest(pages, ownedDestination,
+                    cancellationSignal, callback, attributes);
+            writes.add(request);
+            cancellationSignal.setOnCancelListener(request::cancel);
+            try {
+                worker.execute(request);
+            } catch (RejectedExecutionException error) {
+                request.cancel();
+                request.complete("Print worker is unavailable", new PageRange[0]);
+            }
+        }
+
+        @Override
+        public void onFinish() {
+            finished = true;
+            cancelWrites();
+            worker.shutdown();
+            attributes = null;
+        }
+
+        private void cancelWrites() {
+            for (WriteRequest request : new ArrayList<>(writes)) {
+                request.cancel();
+            }
+        }
+
+        private final class WriteRequest implements Runnable {
+            private final PageRange[] pages;
+            private final ParcelFileDescriptor destination;
+            private final CancellationSignal signal;
+            private final WriteResultCallback callback;
+            private final PrintAttributes layout;
+            private volatile boolean cancelled;
+            private boolean delivered;
+
+            WriteRequest(PageRange[] pages, ParcelFileDescriptor destination,
+                    CancellationSignal signal, WriteResultCallback callback,
+                    PrintAttributes layout) {
+                this.pages = pages == null ? new PageRange[0] : pages.clone();
+                this.destination = destination;
+                this.signal = signal;
+                this.callback = callback;
+                this.layout = layout;
+            }
+
+            void cancel() {
+                cancelled = true;
+                // Release our handle without closing the framework-owned descriptor.
+                closeDestination();
+                if (worker.remove(this)) {
+                    complete(null, new PageRange[0]);
+                }
+            }
+
+            private void closeDestination() {
+                try {
+                    destination.close();
+                } catch (IOException ignored) {
+                    // The worker's stream may already have closed this descriptor.
+                }
+            }
+
+            private void checkCancelled() throws InterruptedIOException {
+                if (cancelled || finished || signal.isCanceled()) {
+                    throw new InterruptedIOException("Print cancelled");
+                }
+            }
+
+            @Override
+            public void run() {
+                PrintedPdfDocument document = null;
+                String failure = null;
+                List<PageRange> written = new ArrayList<>();
+                try {
+                    checkCancelled();
+                    document = new PrintedPdfDocument(context, layout);
+                    for (int i = 0; i < assetPaths.length; i++) {
+                        checkCancelled();
+                        if (!containsPage(pages, i)) continue;
+                        Bitmap bitmap = null;
+                        try (InputStream input = context.getAssets().open(assetPaths[i])) {
+                            bitmap = BitmapFactory.decodeStream(input);
+                            checkCancelled();
+                            if (bitmap == null) {
+                                throw new IOException("The selected hospital form could not be opened");
+                            }
+                            PdfDocument.Page page = document.startPage(i);
+                            try {
+                                drawImage(page.getCanvas(), page.getInfo().getContentRect(), bitmap);
+                            } finally {
+                                document.finishPage(page);
+                            }
+                            appendWrittenPage(written, i);
+                        } finally {
+                            if (bitmap != null) bitmap.recycle();
+                        }
+                    }
+                    checkCancelled();
+                    if (!written.isEmpty()) {
+                        try (ParcelFileDescriptor.AutoCloseOutputStream raw =
+                                     new ParcelFileDescriptor.AutoCloseOutputStream(destination)) {
+                            java.io.OutputStream output = new java.io.FilterOutputStream(raw) {
+                                @Override public void write(int value) throws IOException {
+                                    checkCancelled();
+                                    out.write(value);
+                                }
+                                @Override public void write(byte[] bytes, int offset, int length)
+                                        throws IOException {
+                                    // Bound each write so cancellation is checked during serialization.
+                                    while (length > 0) {
+                                        checkCancelled();
+                                        int count = Math.min(length, 32 * 1024);
+                                        out.write(bytes, offset, count);
+                                        offset += count;
+                                        length -= count;
+                                    }
+                                }
+                            };
+                            document.writeTo(output);
+                            output.flush();
+                            checkCancelled();
+                        }
+                    }
+                } catch (IOException | RuntimeException | OutOfMemoryError error) {
+                    failure = error.getMessage() == null ? "Unable to prepare the print" : error.getMessage();
+                } finally {
+                    try {
+                        if (document != null) document.close();
+                    } catch (RuntimeException error) {
+                        if (failure == null) failure = "Unable to close print document";
+                    } finally {
+                        closeDestination();
+                        complete(failure, written.toArray(new PageRange[0]));
+                    }
+                }
+            }
+
+            void complete(String failure, PageRange[] written) {
+                mainHandler.post(() -> {
+                    if (delivered) return;
+                    delivered = true;
+                    writes.remove(this);
+                    // Never unregister inside the cancellation listener itself.
+                    signal.setOnCancelListener(null);
+                    if (cancelled || finished || signal.isCanceled()) {
+                        callback.onWriteCancelled();
+                    } else if (failure != null) {
+                        callback.onWriteFailed(failure);
+                    } else {
+                        callback.onWriteFinished(written);
+                    }
+                });
+            }
+        }
+
+        private static void appendWrittenPage(List<PageRange> ranges, int page) {
+            int last = ranges.size() - 1;
+            if (last >= 0 && ranges.get(last).getEnd() + 1 == page) {
+                ranges.set(last, new PageRange(ranges.get(last).getStart(), page));
+            } else {
+                ranges.add(new PageRange(page, page));
             }
         }
 

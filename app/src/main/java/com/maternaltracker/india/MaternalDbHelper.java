@@ -6,16 +6,25 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 final class MaternalDbHelper extends SQLiteOpenHelper {
     static final String DB_NAME = "maternal_tracker_india.db";
-    static final int DB_VERSION = 7;
+    static final int DB_VERSION = 8;
+    private volatile boolean referenceCatalogEnabled = false;
+    private final Object referenceCatalogLock = new Object();
     private static final String ACTIVE_PATIENT_WHERE = "(deleted_at IS NULL OR deleted_at = '')";
     private static final String DELETED_PATIENT_WHERE = "(deleted_at IS NOT NULL AND deleted_at != '')";
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("MM");
@@ -29,6 +38,39 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     MaternalDbHelper(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
+    }
+
+    /** Copy committed non-WAL data under an exclusive transaction into a staging file. */
+    synchronized void snapshotDatabase(File target) throws IOException {
+        SQLiteDatabase database = getWritableDatabase();
+        if (database.isWriteAheadLoggingEnabled()) {
+            throw new IOException("Database snapshots require WAL to be disabled");
+        }
+        if (database.inTransaction()) {
+            throw new IOException("Cannot snapshot inside an existing database transaction");
+        }
+        File source = new File(database.getPath()).getCanonicalFile();
+        File destination = target.getCanonicalFile();
+        if (source.equals(destination) || (destination.exists()
+                && Files.isSameFile(source.toPath(), destination.toPath()))) {
+            throw new IOException("Snapshot target must differ from the live database");
+        }
+        database.beginTransaction();
+        try {
+            try (FileInputStream in = new FileInputStream(source);
+                 FileOutputStream out = new FileOutputStream(destination)) {
+                byte[] buffer = new byte[8192];
+                int length;
+                while ((length = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, length);
+                }
+                out.flush();
+                out.getFD().sync();
+            }
+            database.setTransactionSuccessful();
+        } finally {
+            database.endTransaction();
+        }
     }
 
     @Override
@@ -82,6 +124,7 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE wards (code TEXT PRIMARY KEY, local_body_code TEXT, name TEXT NOT NULL)");
         db.execSQL("CREATE TABLE villages (code TEXT PRIMARY KEY, state_code TEXT, district_code TEXT, subdistrict_code TEXT, local_body_code TEXT, name TEXT NOT NULL)");
         seedStates(db);
+        createPatientIndexes(db);
     }
 
     @Override
@@ -109,6 +152,23 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         if (oldVersion < 7) {
             ensureColumn(db, "patients", "deleted_at", "TEXT");
             ensureColumn(db, "patients", "deleted_by", "TEXT");
+        }
+        if (oldVersion < 8) {
+            createPatientIndexes(db);
+        }
+    }
+
+    private void createPatientIndexes(SQLiteDatabase db) {
+        // Match the existing active predicate exactly so partial indexes remain eligible.
+        db.execSQL("CREATE INDEX IF NOT EXISTS patients_active_entry_order ON patients " +
+                "(entry_date DESC, serial_number DESC) WHERE " + ACTIVE_PATIENT_WHERE);
+        db.execSQL("CREATE INDEX IF NOT EXISTS patients_active_creator_entry_order ON patients " +
+                "(created_by, entry_date DESC, serial_number DESC) WHERE " + ACTIVE_PATIENT_WHERE);
+        for (String column : new String[]{"edd_date", "scheduled_delivery_date", "final_visit"}) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS patients_active_" + column + " ON patients (" +
+                    column + ") WHERE " + ACTIVE_PATIENT_WHERE);
+            db.execSQL("CREATE INDEX IF NOT EXISTS patients_active_creator_" + column +
+                    " ON patients (created_by, " + column + ") WHERE " + ACTIVE_PATIENT_WHERE);
         }
     }
 
@@ -150,6 +210,14 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
     }
 
     String nextPatientId() {
+        return nextPatientId(1);
+    }
+
+    /** Local suggestion for create-only cloud retries; does not reserve or mutate an ID. */
+    String nextPatientId(int minimumSequence) {
+        if (minimumSequence < 1) {
+            throw new IllegalArgumentException("Minimum patient sequence must be positive");
+        }
         LocalDate today = LocalDate.now();
         String month = today.format(MONTH_FMT);
         String year = today.format(YEAR_FMT);
@@ -157,17 +225,27 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         try (Cursor c = db.rawQuery(
                 "SELECT COUNT(*) FROM patients WHERE substr(entry_date, 6, 2)=? AND substr(entry_date, 1, 4)=?",
                 new String[]{month, year})) {
-            int next = 1;
-            if (c.moveToFirst()) {
-                next = c.getInt(0) + 1;
+            long baseline = c.moveToFirst() ? c.getLong(0) + 1 : 1;
+            long startingSequence = Math.max(baseline, (long) minimumSequence);
+            if (startingSequence > Integer.MAX_VALUE) {
+                throw new IllegalStateException("Patient sequence exhausted for this month");
             }
+            int next = (int) startingSequence;
             String candidate = PatientRules.patientId(next, month, year);
             while (patientIdExists(db, candidate)) {
+                if (next == Integer.MAX_VALUE) {
+                    throw new IllegalStateException("Patient sequence exhausted for this month");
+                }
                 next++;
                 candidate = PatientRules.patientId(next, month, year);
             }
             return candidate;
         }
+    }
+
+    /** Clear only patient rows; retain lookup, audit, user and location data. */
+    boolean clearPatientCache() {
+        return replacePatientsFromCloud(java.util.Collections.emptyList());
     }
 
     long savePatient(Patient patient) {
@@ -183,27 +261,141 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         patient.id = id;
         patient.serialNumber = values.getAsInteger("serial_number");
         patient.recordLocked = values.getAsInteger("record_locked") == 1;
-        insertLookup(db, "custom_motivators", patient.motivatorName);
-        insertLookup(db, "custom_doctors", patient.doctorName);
+        if (!referenceCatalogEnabled) {
+            db.beginTransaction();
+            try {
+                synchronized (referenceCatalogLock) {
+                    if (!referenceCatalogEnabled) {
+                        insertLookup(db, "custom_motivators", patient.motivatorName);
+                        insertLookup(db, "custom_doctors", patient.doctorName);
+                    }
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        }
         return id;
     }
 
-    void replacePatientsFromCloud(List<Patient> patients) {
+    /** Reconcile an authoritative snapshot; return whether patient or lookup data changed. */
+    boolean replacePatientsFromCloud(List<Patient> patients) {
+        return replacePatientsFromCloud(patients, () -> true);
+    }
+
+    /** A stale snapshot returns false without committing or publishing incoming local IDs. */
+    boolean replacePatientsFromCloud(List<Patient> patients, BooleanSupplier isCurrent) {
+        if (!isCurrent.getAsBoolean()) {
+            return false;
+        }
+        Map<String, ContentValues> incoming = new LinkedHashMap<>();
+        for (Patient patient : patients) {
+            if (patient.patientId == null) {
+                throw new IllegalArgumentException("Cloud patient_id must not be null");
+            }
+            // As with the former CONFLICT_REPLACE loop, the last duplicate ID wins.
+            incoming.put(patient.patientId, patientValues(patient, patient.serialNumber));
+        }
         SQLiteDatabase db = getWritableDatabase();
+        Map<String, Long> localIds = new LinkedHashMap<>();
+        Map<Long, ContentValues> updates = new LinkedHashMap<>();
+        List<Long> removals = new ArrayList<>();
+        boolean changed = false;
+        if (!isCurrent.getAsBoolean()) {
+            return false;
+        }
         db.beginTransaction();
         try {
-            db.delete("patients", null, null);
-            for (Patient patient : patients) {
-                ContentValues values = patientValues(patient, patient.serialNumber);
-                long id = db.insertWithOnConflict("patients", null, values, SQLiteDatabase.CONFLICT_REPLACE);
-                patient.id = id;
-                insertLookup(db, "custom_motivators", patient.motivatorName);
-                insertLookup(db, "custom_doctors", patient.doctorName);
+            try (Cursor c = db.rawQuery("SELECT " + PATIENT_COLUMNS + " FROM patients", null)) {
+                while (c.moveToNext()) {
+                    long id = c.getLong(0);
+                    String patientId = c.getString(2);
+                    ContentValues values = incoming.remove(patientId);
+                    if (values == null) {
+                        removals.add(id);
+                        continue;
+                    }
+                    localIds.put(patientId, id);
+                    Map<String, Object> current = new LinkedHashMap<>();
+                    Map<String, Object> desired = new LinkedHashMap<>();
+                    for (Map.Entry<String, Object> entry : values.valueSet()) {
+                        String column = entry.getKey();
+                        int index = c.getColumnIndexOrThrow(column);
+                        Object stored = null;
+                        if (!c.isNull(index)) {
+                            if (entry.getValue() instanceof Integer) {
+                                stored = c.getInt(index);
+                            } else {
+                                stored = c.getString(index);
+                            }
+                        }
+                        current.put(column, stored);
+                        desired.put(column, entry.getValue());
+                    }
+                    List<String> columns = DbReconciliation.changedColumns(current, desired);
+                    if (!columns.isEmpty()) {
+                        ContentValues delta = new ContentValues(values);
+                        for (String column : desired.keySet()) {
+                            if (!columns.contains(column)) {
+                                delta.remove(column);
+                            }
+                        }
+                        updates.put(id, delta);
+                    }
+                }
+            }
+            // Close the scan before writes: never mutate rows under an advancing cursor.
+            for (long id : removals) {
+                changed |= db.delete("patients", "id = ?", new String[]{String.valueOf(id)}) > 0;
+            }
+            for (Map.Entry<Long, ContentValues> update : updates.entrySet()) {
+                changed |= db.update("patients", update.getValue(), "id = ?",
+                        new String[]{String.valueOf(update.getKey())}) > 0;
+            }
+            for (Map.Entry<String, ContentValues> entry : incoming.entrySet()) {
+                localIds.put(entry.getKey(), db.insertOrThrow("patients", null, entry.getValue()));
+                changed = true;
+            }
+            if (!referenceCatalogEnabled) {
+                synchronized (referenceCatalogLock) {
+                    if (!referenceCatalogEnabled) {
+                        for (Patient patient : patients) {
+                            changed |= ensureCloudLookup(db, "custom_motivators", patient.motivatorName);
+                            changed |= ensureCloudLookup(db, "custom_doctors", patient.doctorName);
+                        }
+                    }
+                }
+            }
+            if (!isCurrent.getAsBoolean()) {
+                return false;
             }
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
         }
+        // Publish IDs only after the entire snapshot commits successfully.
+        for (Patient patient : patients) {
+            patient.id = localIds.get(patient.patientId);
+        }
+        return changed;
+    }
+
+    private boolean ensureCloudLookup(SQLiteDatabase db, String table, String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return false;
+        }
+        String normalized = name.trim().toUpperCase(java.util.Locale.US);
+        try (Cursor c = db.rawQuery("SELECT name FROM " + table + " WHERE UPPER(name) = ?",
+                new String[]{normalized})) {
+            if (c.moveToFirst() && normalized.equals(c.getString(0)) && !c.moveToNext()) {
+                return false;
+            }
+        }
+        db.delete(table, "UPPER(name) = ?", new String[]{normalized});
+        ContentValues values = new ContentValues();
+        values.put("name", normalized);
+        db.insertOrThrow(table, null, values);
+        return true;
     }
 
     private ContentValues patientValues(Patient patient, int serialNumber) {
@@ -281,6 +473,36 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
 
     void addName(String table, String name) {
         insertLookup(getWritableDatabase(), table, name);
+    }
+
+    /** Authoritative cloud directory; the first committed table disables derivation for both. */
+    void replaceReferenceNames(String table, List<String> names) {
+        if (!customLookupTable(table)) {
+            throw new IllegalArgumentException("Unsupported reference table: " + table);
+        }
+        List<String> normalized = DbReferenceNames.normalize(names);
+        SQLiteDatabase db = getWritableDatabase();
+        if (db.inTransaction()) {
+            throw new IllegalStateException("Reference replacement requires its own transaction");
+        }
+        // All derivation paths acquire the SQLite writer before this short catalog lock.
+        db.beginTransaction();
+        synchronized (referenceCatalogLock) {
+            try {
+                db.delete(table, null, null);
+                ContentValues values = new ContentValues();
+                for (String name : normalized) {
+                    values.clear();
+                    values.put("name", name);
+                    db.insertOrThrow(table, null, values);
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+            // Publish after commit, before a waiting legacy derivation can resume.
+            referenceCatalogEnabled = true;
+        }
     }
 
     void deleteName(String table, String name) {
@@ -447,6 +669,77 @@ final class MaternalDbHelper extends SQLiteOpenHelper {
         try (Cursor c = getReadableDatabase().rawQuery(sql, args)) {
             return c.moveToFirst() ? c.getInt(0) : 0;
         }
+    }
+
+    /** One active, scoped scan; condition binds precede scope binds in SQL order. */
+    int[] countCases(String where, String[] args, String[] conditions, String[][] conditionArgs) {
+        if (conditions == null || (conditionArgs != null && conditionArgs.length != conditions.length)) {
+            throw new IllegalArgumentException("Conditions and argument groups must have matching lengths");
+        }
+        int[] counts = new int[conditions.length];
+        if (conditions.length == 0) {
+            return counts;
+        }
+        StringBuilder sql = new StringBuilder("SELECT ");
+        List<String> bindings = new ArrayList<>();
+        for (int i = 0; i < conditions.length; i++) {
+            if (conditions[i] == null || conditions[i].trim().isEmpty()) {
+                throw new IllegalArgumentException("Count condition must not be empty");
+            }
+            if (i > 0) {
+                sql.append(", ");
+            }
+            sql.append("COALESCE(SUM(CASE WHEN (").append(conditions[i])
+                    .append(") THEN 1 ELSE 0 END), 0)");
+            if (conditionArgs != null && conditionArgs[i] != null) {
+                for (String arg : conditionArgs[i]) {
+                    bindings.add(arg);
+                }
+            }
+        }
+        sql.append(" FROM patients WHERE ").append(appendWhere(where, ACTIVE_PATIENT_WHERE));
+        if (args != null) {
+            for (String arg : args) {
+                bindings.add(arg);
+            }
+        }
+        try (Cursor c = getReadableDatabase().rawQuery(sql.toString(), bindings.toArray(new String[0]))) {
+            if (c.moveToFirst()) {
+                for (int i = 0; i < counts.length; i++) {
+                    counts[i] = c.getInt(i);
+                }
+            }
+        }
+        return counts;
+    }
+
+    /** Ascending yyyy-MM buckets, including zero months; bounds are inclusive ISO dates. */
+    Map<String, Integer> monthlyCounts(String where, String[] args, String dateColumn,
+                                       String from, String to) {
+        if (!"entry_date".equals(dateColumn) && !"edd_date".equals(dateColumn)
+                && !"scheduled_delivery_date".equals(dateColumn) && !"final_visit".equals(dateColumn)) {
+            throw new IllegalArgumentException("Unsupported report date column: " + dateColumn);
+        }
+        LocalDate start = LocalDate.parse(from);
+        LocalDate end = LocalDate.parse(to);
+        Map<String, Integer> out = new LinkedHashMap<>();
+        if (start.isAfter(end)) {
+            return out;
+        }
+        for (YearMonth month = YearMonth.from(start), last = YearMonth.from(end);
+             !month.isAfter(last); month = month.plusMonths(1)) {
+            out.put(month.toString(), 0);
+        }
+        String finalWhere = appendWhere(appendWhere(where, ACTIVE_PATIENT_WHERE),
+                dateColumn + " BETWEEN ? AND ?");
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT substr(" + dateColumn + ", 1, 7) AS month, COUNT(*) FROM patients WHERE " +
+                        finalWhere + " GROUP BY month ORDER BY month", appendArgs(args, from, to))) {
+            while (c.moveToNext()) {
+                out.put(c.getString(0), c.getInt(1));
+            }
+        }
+        return out;
     }
 
     Map<String, Integer> countBy(String column) {

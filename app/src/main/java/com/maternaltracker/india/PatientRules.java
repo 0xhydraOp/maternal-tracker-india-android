@@ -90,6 +90,42 @@ final class PatientRules {
         return normalizedLeft.length() == 10 && normalizedLeft.equals(normalizedMobile(right));
     }
 
+    /** Upcoming dates take precedence; otherwise retain the latest populated overdue visit. */
+    static String[] nextFollowupVisit(Patient p, LocalDate today) {
+        if (!activeRecord(p)) {
+            return new String[]{"Follow-up", ""};
+        }
+        LocalDate checkedToday = safeToday(today);
+        LocalDate week = checkedToday.plusDays(7);
+        String[] labels = {"2nd Visit", "3rd Visit", "Final Visit"};
+        String[] dates = {p.visit2, p.visit3, p.finalVisit};
+        int next = -1;
+        LocalDate earliest = null;
+        for (int i = 0; i < dates.length; i++) {
+            if (empty(dates[i]) || !validDate(dates[i])) {
+                continue;
+            }
+            LocalDate date = LocalDate.parse(dates[i]);
+            if (!date.isBefore(checkedToday) && !date.isAfter(week)
+                    && (earliest == null || date.isBefore(earliest))) {
+                next = i;
+                earliest = date;
+            }
+        }
+        if (next >= 0) {
+            return new String[]{labels[next], dates[next]};
+        }
+        for (int i = dates.length - 1; i >= 0; i--) {
+            if (!empty(dates[i])) {
+                if (validDate(dates[i]) && LocalDate.parse(dates[i]).isBefore(checkedToday)) {
+                    return new String[]{labels[i], dates[i]};
+                }
+                break;
+            }
+        }
+        return new String[]{"Follow-up", ""};
+    }
+
     static boolean scheduledDeliveryNeedsCompletion(Patient p, LocalDate today) {
         return activeRecord(p) && dateBefore(p.scheduledDeliveryDate, safeToday(today));
     }
@@ -116,6 +152,12 @@ final class PatientRules {
             return "";
         }
         LocalDate checkedToday = safeToday(today);
+        if (dateBefore(p.scheduledDeliveryDate, checkedToday)) {
+            return "scheduled";
+        }
+        if (dateBefore(p.eddDate, checkedToday)) {
+            return "edd";
+        }
         if (completionWindowActive(p.scheduledDeliveryDate, checkedToday)) {
             return "scheduled";
         }
@@ -144,6 +186,42 @@ final class PatientRules {
         }
         LocalDate target = LocalDate.parse(reference);
         return target.isAfter(checkedToday) ? checkedToday : target;
+    }
+
+    /** Preserve an actual final visit; otherwise record the operator's completion day. */
+    static LocalDate deliveryCompletionFinalVisitDate(Patient p, LocalDate today) {
+        LocalDate checkedToday = safeToday(today);
+        if (p != null && !empty(p.finalVisit) && validDate(p.finalVisit)) {
+            LocalDate existing = LocalDate.parse(p.finalVisit);
+            if (!existing.isAfter(checkedToday)) {
+                return existing;
+            }
+        }
+        return checkedToday;
+    }
+
+    /** Null means safe to complete; never changes patient data or discards planned visits. */
+    static String validateDeliveryCompletion(Patient p, LocalDate today) {
+        LocalDate checkedToday = safeToday(today);
+        if (!deliveryCompletionEligible(p, checkedToday)) {
+            return "Delivery completion is available only within the 7 day delivery window";
+        }
+        LocalDate finalDate = deliveryCompletionFinalVisitDate(p, checkedToday);
+        String[] dates = {p.visit1, p.visit2, p.visit3};
+        String[] labels = {"1st visit", "2nd visit", "3rd visit"};
+        for (int i = 0; i < dates.length; i++) {
+            if (empty(dates[i])) {
+                continue;
+            }
+            if (!validDate(dates[i])) {
+                return "Review " + labels[i] + " date before completing. Use date format YYYY-MM-DD";
+            }
+            if (LocalDate.parse(dates[i]).isAfter(finalDate)) {
+                return "Completion final visit would be before " + labels[i]
+                        + ". Review visit dates before completing";
+            }
+        }
+        return null;
     }
 
     static String deliveryCompletionReason(Patient p, LocalDate today) {

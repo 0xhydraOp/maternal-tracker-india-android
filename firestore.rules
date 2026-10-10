@@ -24,6 +24,10 @@ service cloud.firestore {
       return isActive() && roleDoc().data.role == 'ADMIN';
     }
 
+    function isStaff() {
+      return isActive() && roleDoc().data.role == 'STAFF';
+    }
+
     function validRoleDocument(userEmail) {
       return request.resource.data.keys().hasOnly(['email', 'role', 'active', 'updatedAt', 'updatedBy'])
         && request.resource.data.email == userEmail
@@ -45,31 +49,79 @@ service cloud.firestore {
         && request.resource.data.updatedBy == email();
     }
 
+    function staffPatientUpdate() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let changes = after.diff(before).affectedKeys();
+      return isActive() && roleDoc().data.role == 'STAFF'
+        && before.createdBy is string && before.createdBy.lower() == email()
+        && after.createdBy == before.createdBy
+        && before.get('deletedAt', '') in ['', null]
+        && (
+          (before.recordLocked != true
+            && after.get('deletedAt', '') in ['', null]
+            && (after.get('deletedBy', '') == before.get('deletedBy', '')
+              || (after.get('deletedBy', '') in ['', null]
+                && before.get('deletedBy', '') in ['', null])))
+          || (changes.hasOnly(['deletedAt', 'deletedBy', 'updatedAt', 'updatedBy'])
+            && after.deletedAt is string && after.deletedAt.size() > 0
+            && after.deletedBy == email())
+        );
+    }
+
     match /user_roles/{userEmail} {
       allow read: if signedIn() && (email() == userEmail || isAdmin());
-      allow create: if signedIn()
-        && validRoleDocument(userEmail)
-        && (
-          isAdmin()
-          || (
-            email() == 'iamrobiul94@gmail.com'
-            && userEmail == 'iamrobiul94@gmail.com'
-            && request.resource.data.role == 'ADMIN'
-            && request.resource.data.active == true
-          )
-        );
+      allow create: if isAdmin() && validRoleDocument(userEmail);
       allow update: if isAdmin() && userEmail != email() && validRoleDocument(userEmail);
       allow delete: if isAdmin() && userEmail != email();
     }
 
-    match /patients/{patientId} {
+    match /hospital_references/{table} {
+      function supportedReference() {
+        return table in ['custom_doctors', 'custom_motivators'];
+      }
+
+      allow read: if supportedReference() && (isAdmin() || isStaff());
+      // Rules cannot validate every list element; Gateway validates each name on read/write.
+      allow create, update: if supportedReference() && isAdmin()
+        && request.resource.data.keys().hasOnly(['names'])
+        && request.resource.data.names is list
+        && request.resource.data.names.size() <= 2000;
+      allow delete: if false;
+    }
+
+    match /patient_sequences/{sequenceKey} {
+      function validCounter() {
+        return (sequenceKey == 'all' || sequenceKey.matches('^[0-9]{4}-(0[1-9]|1[0-2])$'))
+          && request.resource.data.keys().hasOnly(['lastSequence'])
+          && request.resource.data.lastSequence is int
+          && request.resource.data.lastSequence >= 1
+          && request.resource.data.lastSequence <= 2147483647;
+      }
+
       allow read: if isActive();
-      allow create: if isActive() && validPatientDocument(patientId);
+      allow create: if validCounter() && (isAdmin()
+        || (isStaff() && request.resource.data.lastSequence == 1));
+      allow update: if validCounter() && (isAdmin() || isStaff())
+        && resource.data.lastSequence is int
+        && resource.data.lastSequence >= 1
+        && request.resource.data.lastSequence == resource.data.lastSequence + 1;
+      allow delete: if false;
+    }
+
+    match /patients/{patientId} {
+      // Missing-document gets support create-only transactions, not other-owner reads.
+      allow get: if (isActive()
+          && !exists(/databases/$(database)/documents/patients/$(patientId)))
+        || isAdmin() || (isStaff() && resource.data.createdBy == email());
+      allow list: if isAdmin() || (isStaff() && resource.data.createdBy == email());
+      allow create: if isActive() && validPatientDocument(patientId)
+        && (isAdmin() || (isStaff() && request.resource.data.createdBy == email()
+          && request.resource.data.get('deletedAt', '') in ['', null]));
       allow update: if validPatientDocument(patientId)
         && (
           isAdmin()
-          || (isActive() && resource.data.recordLocked != true && request.resource.data.recordLocked == true)
-          || (isActive() && resource.data.recordLocked != true && request.resource.data.recordLocked != true)
+          || staffPatientUpdate()
         );
       allow delete: if false;
     }

@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.1.42 - 2026-10-11
+
+- Compact sky-blue patient detail bodies with navy section titles and patient names, bold values, and Delivery Status, Patient and Pregnancy visible by default. Full Details expands secondary groups in place.
+- Staff can complete eligible owned records and soft-delete owned records, including locked records. Admin retains hospital-wide access, unlock, recovery and restore controls.
+- Lazy search rows, background queries, typing debounce and restored search position; incremental cloud reconciliation preserves local row IDs and rejects obsolete snapshots.
+- Atomic cloud allocation of patient IDs and serial numbers uses the entered registration month, avoiding device-local sequence collisions.
+- Visit follow-up uses the earliest upcoming date in the seven-day window; overdue EDD remains completion priority even when a later scheduled delivery exists. Completion preserves actual final visits and rejects conflicting planned visit dates.
+- Stale forms and conflicting mutations are rejected rather than overwriting newer records. Doctor/motivator references use a shared cloud catalog with validated, transactional edits.
+- Background exports retain account/scope guards. XLSX streams all 28 columns with correct AA/AB references; clinical PDF fields wrap and paginate with safe page/document cleanup. Removed legacy form fields remain excluded.
+- Cached asynchronous previews and cancellable background print writes preserve original image quality, A4 orientation, page order and Epson handoff behavior.
+- Fresh server authorization retries transient failures after 1, 2 and 4 seconds without bypassing role checks. A device DNS failure explained an empty picker-created PDF file; PDF serialization was not the cause, and Staff exports passed after retry.
+- Verification: 118 tests, zero failures; lint zero errors and five warnings. Admin and Staff device checks covered registration, future visit edits, completion, deletion, scope and update checks; Admin checks also covered monthly report counts, Excel/PDF export, call-notification persistence, recovery and backup creation. Staff session restart and export checks passed (XLSX 2,252 bytes; PDF 54,147 bytes).
+- Android Save as PDF outputs validated with pypdf: prescription one portrait page, BHT one landscape page, blood requisition two portrait pages, baby referral two portrait pages, and Staff baby identification one portrait page.
+- Physical printing, runtime database backup restore and all real-call paths remain untested. Verification is targeted, not exhaustive, and does not establish a speed benchmark. Publication is not asserted by these notes.
+
 ## v1.1.41 - 2026-09-28
 
 - Replaced Dr. Arnab Saha's prescription with the newly supplied original, preserving all text, colours and source resolution without recompression.

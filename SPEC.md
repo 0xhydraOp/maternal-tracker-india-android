@@ -1,11 +1,34 @@
 # Blue Bird Maternal Tracker Specification
 
-Last updated: 2026-09-28
-Current app version: `1.1.41` / versionCode `50`
+Last updated: 2026-10-11
+Current release target: `1.1.42` / versionCode `51`
+Latest published version: `1.1.41` / versionCode `50`
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
 ## 1. Product Scope
+
+### Release v1.1.42
+
+- Search uses a native lazy ListView, background queries, a 180ms typing delay, and screen/session/request guards. Returning restores the first visible row and offset; new queries reset to the top.
+- Authoritative cloud snapshots reconcile by stable patient ID in a transaction, preserve local row IDs, and update only changed data on a serial worker. SQLite version 8 adds active-patient indexes. Unchanged sync snapshots avoid rebuilding Home.
+- Excel/PDF/CSV exports run in the background. Picker export scope and owner survive Activity recreation; output closes before saved/share feedback; account changes and destruction cancel work.
+- Reports combine overview counts and group monthly counts in single queries. Monthly and village sections construct their hidden content when expanded.
+- Preview images load asynchronously with an 8 MiB maximum cache and stale-request guards. Original print image assets and full-resolution printing are unchanged.
+- Priority and Upcoming EDD use compact sky-blue bodies, navy patient names, applicable dates, countdowns, separate phone taps and village. Expanded lists restore on Back. No watermark. Both roles can complete accessible eligible records; Staff can soft-delete owned records, including locked records. Admin alone can unlock, recover and restore.
+- Patient Detail defaults to Delivery Status, Patient and Pregnancy, with compact sky-blue bodies, navy titles and bold 16sp values. Full Details expands secondary groups without nested cards or changing workflow.
+- Cloud transactions atomically allocate monthly patient IDs and global serial numbers from the entered registration month. Stable-ID reconciliation, stale-form checks and mutation-conflict guards prevent obsolete state from replacing newer records.
+- Follow-up selects the earliest upcoming second, third or final visit within seven days, retaining overdue tracking when appropriate. Overdue EDD takes completion precedence over a later upcoming scheduled delivery; completion preserves actual final visits and validates chronology against planned visits.
+- Doctor/motivator references come from a shared cloud catalog with validated transactional changes and synchronized dropdowns.
+- Fresh server role checks retry transient failures after 1, 2 and 4 seconds with identity/lifecycle guards; failed authorization never falls back to an unchecked cached role.
+- Home retains compact summary links, seven-day eligibility, overdue reminders, the 30-day EDD range and Admin/Staff scopes. See section 15 for final targeted verification and remaining limits; publication is not asserted here.
+
+### Search Layout Update (Included in v1.1.42)
+
+- Compact, accessible search field replaces the large explanatory banner.
+- Existing shortcut filters, exports and New Patient action are grouped in a collapsed-by-default "Filters & actions" section.
+- Result count and selected shortcut remain visible in one compact results heading.
+- Queries, staff/admin scope, export filtering and patient actions are unchanged. This is a Search-only change, not the cancelled app-wide polish.
 
 ### Prescription Update v1.1.41
 
@@ -40,13 +63,14 @@ The confirmed direction is online Firebase-backed operation:
 - Can create app users with email, password, and role.
 - Can revoke app access by removing the role record.
 - Can access Administration, Backup Manager, Reference Lists, exports, reports, and app update support.
-- Can unlock or delete patient records where admin-only controls are exposed.
+- Can complete eligible records, soft-delete hospital records, unlock records and restore deleted records from Recovery.
 
 ### Staff
 
 - Can log in with Firebase credentials.
 - Can create and update patient records.
 - Can search patients, update visit dates, call patients, export allowed data, and use the in-app updater.
+- Can complete eligible owned records and soft-delete owned records, including completed/locked records; cannot unlock or restore records or change ownership.
 - Cannot access admin-only user and reference-management controls.
 
 ## 2A. Hospital Print Desk
@@ -78,6 +102,7 @@ Printing requirements:
 - Document artwork, text, logos, borders, spacing, and layout must not be recreated, transcribed, or recompressed.
 - Documents scale proportionally and remain centered inside the selected paper's printable area.
 - Portrait documents default to portrait A4; the BHT / Input & Output Chart defaults to landscape A4.
+- Android print writes run on a managed worker, check cancellation between pages/output writes, report only written page ranges and clean up on replacement writes or adapter finish. Preview sampling never affects original print output.
 
 Prescription selection:
 
@@ -173,6 +198,7 @@ Visit fields:
 - 2nd Visit, 3rd Visit, and Final Visit are optional planned or actual dates.
 - Future 2nd, 3rd, and Final Visit dates are allowed because staff may enter planned follow-up dates.
 - Planned visit dates due within the next 7 days are tracked in dashboard/report priority flows.
+- Follow-up selects the earliest upcoming second, third or final visit within that window rather than the last populated field; overdue follow-up remains visible when no upcoming date applies.
 - Final Visit can trigger record locking when the date is valid and not in the future.
 
 Completed behavior:
@@ -195,7 +221,8 @@ Scheduled delivery behavior:
 - Confirmation toast: `Patient marked notified`.
 - Changing Scheduled Delivery Date resets the notified/called state.
 - If Scheduled Delivery Date has passed, the patient remains visible as completion-required until the operator marks completed.
-- Marking scheduled delivery completed sets Final Visit when missing, locks the record, syncs online, and moves the record to completed.
+- Completion is available within the scheduled-delivery or EDD seven-day window, including overdue dates. An overdue EDD takes precedence over a later upcoming scheduled delivery.
+- Completion preserves an existing actual Final Visit; otherwise it records the operator's completion date. It rejects chronology conflicts with earlier visit fields rather than discarding planned dates, then locks and syncs the record.
 
 ## 7. Home Dashboard
 
@@ -211,7 +238,7 @@ Required Home areas:
 
 Priority order:
 
-1. Scheduled delivery completion due.
+1. Delivery completion due from scheduled delivery or EDD.
 2. Scheduled delivery within 7 days.
 3. Visit follow-ups due or within 7 days.
 4. EDD within 7 days.
@@ -257,8 +284,9 @@ Actions:
 - View
 - Call
 - Update Visits
-- Mark Completed when scheduled delivery completion is due
-- Unlock/Delete for admin where allowed
+- Mark Completed for accessible records within the delivery/EDD eligibility window
+- Delete for Admin or the owning Staff account, including locked records
+- Unlock and Recovery/Restore for Admin only
 
 ## 9. Reports
 
@@ -370,8 +398,11 @@ Export behavior:
 
 - Exports should work directly on Android via the system document picker/share flow.
 - Patient list exports include all current clinical tracking fields.
+- XLSX streams 28 columns into the ZIP without retaining the entire worksheet; AA/AB references and caller-owned stream lifetime are preserved.
+- PDF includes the 28 export fields plus Created By, Updated By and record status. Text wraps to the A4 printable width and paginates with repeated headers, cancellation guards and page/document cleanup. Deprecated Remarks, municipality/ward/subdistrict and deletion metadata are not reintroduced into clinical exports.
 - Single patient Excel/PDF export is available from Patient Detail.
-- Patient Detail uses a compact grouped panel so identity, address, pregnancy, scheduled delivery, visit dates, and record status are visible without scanning a long plain-text stack.
+- Patient Detail defaults to Delivery Status, Patient, and Pregnancy (including Doctor), using navy titles and patient names over compact sky-blue bodies with bold 16sp values. View Full Details expands Care & Address, Visits & Record, and record/export tools in place; Hide Full Details collapses them again. Everyday actions remain below the compact summary.
+- Admin may delete any active patient record; Staff may delete their own active records, including completed records, into Recovery. Recovery and restore remain Admin-only. Both roles may mark their accessible records completed under the existing delivery-window eligibility rules. Staff cannot change ownership or unlock/restore records. Firestore deletion updates change only deletion/audit fields.
 - Patient Detail labels and values should use larger bold text for field readability on staff phones.
 
 Backup:
@@ -394,10 +425,10 @@ The app should feel like a finished hospital system.
 Current UI standards:
 
 - Sky-blue app background.
-- Glass/translucent card styling.
+- Compact sky-blue content bodies with navy titles and patient names.
 - Compact professional layout.
 - Hospital-branded header.
-- Native icon bottom navigation for Home, Entry, Search, Reports, and Admin.
+- Native icon bottom navigation for Home, Entry, Search, Print, and Admin; Reports remain available through Administration.
 - Profile drawer with grouped actions.
 - Patient cards with status rails, chips, and clear hierarchy.
 - Admin command panels instead of generic settings rows.
@@ -451,6 +482,9 @@ Firebase:
 - A secondary Firebase app is used for admin-created user accounts so admin stays logged in.
 - Patient listener keeps local SQLite cache updated from cloud.
 - Local SQLite is used as device cache and for local export/report queries.
+- Cloud patient creation atomically allocates the entered registration month's sequence and global serial number with the patient document. Device-local counters are not authoritative.
+- Patient IDs reconcile to stable local row IDs. Obsolete snapshots, stale forms and mutation conflicts cannot silently overwrite newer state.
+- Doctor and Motivator names use the shared cloud reference catalog; Admin changes are validated and transactional, while Staff dropdowns receive synchronized names.
 
 Important patient fields:
 
@@ -482,24 +516,26 @@ Important patient fields:
 
 ## 15. Latest Release State
 
-Latest published release:
+Release target: `1.1.42` / versionCode `51`. Latest published version recorded here remains `1.1.41` / versionCode `50`; final publication is a separate release action, not implied by device acceptance.
 
-- Version: `1.1.18`
-- Version code: `26`
-- Git tag: `v1.1.18`
-- Release URL: `https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.18`
-- APK asset: `MaternalTrackerIndia-v1.1.18-release.apk`
+Final targeted verification (2026-10-11):
 
-Latest verification:
-
-- Unit tests passed.
-- Java compile passed.
-- Debug lint passed.
-- Signed release build passed.
-- ADB install passed.
-- ADB smoke test passed for Home, Entry new fields/dropdown, Search, Reports, Admin reference controls, installed version, and logcat fatal check.
+- Automated tests: 118 tests, zero failures. Latest lint: zero errors, five warnings.
+- Admin ADB acceptance passed for registration, future visit editing, September monthly counts and filtered Excel/PDF export, call-notification persistence in the delivery window, completion, soft-delete, Patient Recovery, backup creation and update checking.
+- Staff ADB acceptance passed for registration, future visit editing, completion, deletion of locked owned records, session restart, ownership scope, Print Desk and update checking.
+- Staff export outputs passed after authorization retry: XLSX 2,252 bytes and PDF 54,147 bytes. The earlier empty PDF followed a device DNS failure reaching Firestore during fresh authorization, not PDF serialization. Temporary diagnostic Info logs were removed; export catch error logging remains.
+- Android Save as PDF outputs were inspected with pypdf: prescription one A4 portrait page, BHT one A4 landscape page, blood requisition two A4 portrait pages, baby referral two A4 portrait pages, and Staff baby identification one A4 portrait page. Original bundled images remain unchanged.
+- Physical printer output was not tested because no printer was available. Runtime database backup restore and all real-call paths remain untested; backup creation and call-notification state checks do not imply those paths passed.
+- Acceptance is targeted rather than exhaustive. No speed benchmark or measured performance gain is claimed, and no QA account credentials or patient identifiers are recorded here.
 
 ## 16. Recent Release Summary
+
+### v1.1.42
+
+- Compact patient summaries and explicit Staff-owned completion/deletion with Admin-only recovery.
+- Stable-ID reconciliation, atomic entry-date-based cloud sequences, background search/export/preview work and guarded stale mutations.
+- Earliest upcoming visit selection, EDD-aware completion priority, shared reference catalogs and bounded fresh-authorization retries.
+- Streaming 28-column XLSX, wrapped clinical PDF exports and asynchronous cancellable original-quality printing. Final targeted verification and limits are recorded in section 15.
 
 ### v1.1.18
 

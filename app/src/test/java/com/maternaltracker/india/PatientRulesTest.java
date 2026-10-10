@@ -1,6 +1,7 @@
 package com.maternaltracker.india;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
@@ -224,6 +225,261 @@ public class PatientRulesTest {
 
         assertEquals(false, PatientRules.deliveryCompletionDue(p, LocalDate.parse("2026-06-15")));
         assertEquals(false, PatientRules.deliveryCompletionEligible(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void followupSelectsEarliestUpcomingAcrossMultipleTentativeDates() {
+        Patient p = validPatient();
+        p.visit2 = "2026-06-16";
+        p.visit3 = "2026-07-01";
+        p.finalVisit = "2026-07-10";
+        assertArrayEquals(new String[]{"2nd Visit", "2026-06-16"},
+                PatientRules.nextFollowupVisit(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void followupDoesNotUsePastRecordedVisitInsteadOfUpcomingVisit() {
+        Patient p = validPatient();
+        p.visit2 = "2026-06-10";
+        p.visit3 = "2026-06-18";
+        p.finalVisit = "2026-07-10";
+        assertArrayEquals(new String[]{"3rd Visit", "2026-06-18"},
+                PatientRules.nextFollowupVisit(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void followupWindowIncludesTodayAndSeventhDayButNotEighthDay() {
+        Patient p = validPatient();
+        p.visit2 = "2026-06-15";
+        p.visit3 = "2026-06-22";
+        p.finalVisit = "2026-06-23";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertArrayEquals(new String[]{"2nd Visit", "2026-06-15"}, PatientRules.nextFollowupVisit(p, today));
+        p.visit2 = "2026-06-14";
+        assertArrayEquals(new String[]{"3rd Visit", "2026-06-22"}, PatientRules.nextFollowupVisit(p, today));
+        p.visit3 = "2026-06-14";
+        assertArrayEquals(new String[]{"Follow-up", ""}, PatientRules.nextFollowupVisit(p, today));
+    }
+
+    @Test
+    public void followupSameDayTieUsesEarlierVisitNumber() {
+        Patient p = validPatient();
+        p.visit2 = p.visit3 = p.finalVisit = "2026-06-18";
+        assertArrayEquals(new String[]{"2nd Visit", "2026-06-18"},
+                PatientRules.nextFollowupVisit(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void followupRetainsLatestPopulatedOverdueFallback() {
+        Patient p = validPatient();
+        p.finalVisit = "2026-06-14";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertArrayEquals(new String[]{"Final Visit", "2026-06-14"}, PatientRules.nextFollowupVisit(p, today));
+        p.finalVisit = "";
+        assertArrayEquals(new String[]{"3rd Visit", "2026-06-10"}, PatientRules.nextFollowupVisit(p, today));
+        p.visit3 = null;
+        assertArrayEquals(new String[]{"2nd Visit", "2026-06-05"}, PatientRules.nextFollowupVisit(p, today));
+    }
+
+    @Test
+    public void followupIgnoresMissingInvalidAndLockedRecords() {
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertArrayEquals(new String[]{"Follow-up", ""}, PatientRules.nextFollowupVisit(null, today));
+        Patient p = validPatient();
+        p.visit2 = "not-a-date";
+        p.visit3 = "";
+        p.finalVisit = null;
+        assertArrayEquals(new String[]{"Follow-up", ""}, PatientRules.nextFollowupVisit(p, today));
+        p.visit2 = "2026-06-16";
+        p.recordLocked = true;
+        assertArrayEquals(new String[]{"Follow-up", ""}, PatientRules.nextFollowupVisit(p, today));
+    }
+
+    @Test
+    public void overdueEddWinsOverUpcomingScheduledDelivery() {
+        Patient p = validPatient();
+        p.eddDate = "2026-06-14";
+        p.scheduledDeliveryDate = "2026-06-18";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertEquals("edd", PatientRules.deliveryCompletionSource(p, today));
+        assertEquals("2026-06-14", PatientRules.deliveryCompletionReferenceDate(p, today));
+        assertEquals("EDD date passed", PatientRules.deliveryCompletionReason(p, today));
+        assertEquals(LocalDate.parse("2026-06-14"), PatientRules.deliveryCompletionVisitDate(p, today));
+    }
+
+    @Test
+    public void overdueScheduledDeliveryRetainsPrecedenceWhenBothAreOverdue() {
+        Patient p = validPatient();
+        p.eddDate = "2026-06-13";
+        p.scheduledDeliveryDate = "2026-06-14";
+        assertEquals("scheduled", PatientRules.deliveryCompletionSource(p, LocalDate.parse("2026-06-15")));
+        assertEquals("Scheduled delivery date passed",
+                PatientRules.deliveryCompletionReason(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void completionWindowIncludesSeventhDayNotEighthDay() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "";
+        p.eddDate = "2026-06-22";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertEquals(true, PatientRules.deliveryCompletionEligible(p, today));
+        assertEquals("edd", PatientRules.deliveryCompletionSource(p, today));
+        p.eddDate = "2026-06-23";
+        assertEquals(false, PatientRules.deliveryCompletionEligible(p, today));
+        assertEquals("", PatientRules.deliveryCompletionSource(p, today));
+    }
+
+    @Test
+    public void completionOnTargetDayIsEligibleButNotOverdue() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-15";
+        p.eddDate = "2026-06-22";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertEquals(false, PatientRules.deliveryCompletionDue(p, today));
+        assertEquals("scheduled", PatientRules.deliveryCompletionSource(p, today));
+    }
+
+    @Test
+    public void completionRejectsFuturePreviousVisitWithoutChangingTentativeDates() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-18";
+        p.visit3 = "2026-06-17";
+        p.finalVisit = "2026-06-20";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertNull(PatientRules.validate(p, today));
+        assertEquals("Completion final visit would be before 3rd visit. Review visit dates before completing",
+                PatientRules.validateDeliveryCompletion(p, today));
+        assertEquals("2026-06-17", p.visit3);
+        assertEquals("2026-06-20", p.finalVisit);
+        assertEquals(false, p.recordLocked);
+    }
+
+    @Test
+    public void completionChecksSecondVisitEvenWhenThirdIsMissing() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-18";
+        p.visit2 = "2026-06-16";
+        p.visit3 = "";
+        p.finalVisit = "";
+        assertEquals("Completion final visit would be before 2nd visit. Review visit dates before completing",
+                PatientRules.validateDeliveryCompletion(p, LocalDate.parse("2026-06-15")));
+    }
+
+    @Test
+    public void overdueScheduledReferenceDoesNotBackdateFinalBeforeActualPreviousVisit() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-12";
+        p.visit3 = "2026-06-14";
+        p.finalVisit = "";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertNull(PatientRules.validateDeliveryCompletion(p, today));
+        assertEquals(today, PatientRules.deliveryCompletionFinalVisitDate(p, today));
+        assertEquals(LocalDate.parse("2026-06-12"), PatientRules.deliveryCompletionVisitDate(p, today));
+    }
+
+    @Test
+    public void overdueEddWithFirstVisitTodayCanCompleteToday() {
+        Patient p = validPatient();
+        p.eddDate = "2026-06-14";
+        p.scheduledDeliveryDate = "";
+        p.visit1 = "2026-06-15";
+        p.visit2 = p.visit3 = p.finalVisit = "";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertEquals(true, PatientRules.deliveryCompletionEligible(p, today));
+        assertNull(PatientRules.validateDeliveryCompletion(p, today));
+        assertEquals(today, PatientRules.deliveryCompletionFinalVisitDate(p, today));
+        assertEquals("2026-06-15", p.visit1);
+        assertEquals("", p.finalVisit);
+        assertEquals(false, p.recordLocked);
+    }
+
+    @Test
+    public void overdueEddWithActualThirdVisitTodayCanCompleteToday() {
+        Patient p = validPatient();
+        p.eddDate = "2026-06-14";
+        p.scheduledDeliveryDate = "";
+        p.visit3 = "2026-06-15";
+        p.finalVisit = "2026-06-20";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertEquals(true, PatientRules.deliveryCompletionEligible(p, today));
+        assertNull(PatientRules.validateDeliveryCompletion(p, today));
+        assertEquals(today, PatientRules.deliveryCompletionFinalVisitDate(p, today));
+        assertEquals("2026-06-15", p.visit3);
+        assertEquals("2026-06-20", p.finalVisit);
+        assertEquals(false, p.recordLocked);
+    }
+
+    @Test
+    public void completionPreservesExistingPastActualFinalVisit() {
+        Patient p = validPatient();
+        p.eddDate = "2026-06-14";
+        p.scheduledDeliveryDate = "";
+        p.finalVisit = "2026-06-13";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertNull(PatientRules.validateDeliveryCompletion(p, today));
+        assertEquals(LocalDate.parse("2026-06-13"), PatientRules.deliveryCompletionFinalVisitDate(p, today));
+        assertEquals("2026-06-13", p.finalVisit);
+    }
+
+    @Test
+    public void completionPreservesActualFinalVisitRatherThanBackdatingToTarget() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-09";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertEquals(today, PatientRules.deliveryCompletionFinalVisitDate(p, today));
+        assertNull(PatientRules.validateDeliveryCompletion(p, today));
+        assertEquals("2026-06-15", p.finalVisit);
+        assertEquals(false, p.recordLocked);
+    }
+
+    @Test
+    public void completionRejectsRetainedFinalVisitBeforeAnotherRecordedVisit() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-18";
+        p.visit3 = "2026-06-14";
+        p.finalVisit = "2026-06-13";
+        assertEquals("Completion final visit would be before 3rd visit. Review visit dates before completing",
+                PatientRules.validateDeliveryCompletion(p, LocalDate.parse("2026-06-15")));
+        assertEquals("2026-06-13", p.finalVisit);
+    }
+
+    @Test
+    public void completionSourceIgnoresInvalidScheduledDateAndUsesEligibleEdd() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "bad-date";
+        p.eddDate = "2026-06-20";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertEquals("edd", PatientRules.deliveryCompletionSource(p, today));
+        assertEquals(true, PatientRules.deliveryCompletionEligible(p, today));
+    }
+
+    @Test
+    public void completionAllowsSameDayPreviousVisitAndMissingOptionalVisits() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-18";
+        p.visit1 = "2026-06-15";
+        p.visit2 = p.visit3 = p.finalVisit = "";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertNull(PatientRules.validateDeliveryCompletion(p, today));
+        assertEquals(today, PatientRules.deliveryCompletionFinalVisitDate(p, today));
+        p.visit2 = "2026-06-15";
+        assertNull(PatientRules.validateDeliveryCompletion(p, today));
+    }
+
+    @Test
+    public void completionRejectsInvalidPreviousDateAndIneligibleRecords() {
+        Patient p = validPatient();
+        p.scheduledDeliveryDate = "2026-06-18";
+        p.visit2 = "bad-date";
+        LocalDate today = LocalDate.parse("2026-06-15");
+        assertEquals("Review 2nd visit date before completing. Use date format YYYY-MM-DD",
+                PatientRules.validateDeliveryCompletion(p, today));
+        p.recordLocked = true;
+        assertEquals("Delivery completion is available only within the 7 day delivery window",
+                PatientRules.validateDeliveryCompletion(p, today));
+        assertEquals("Delivery completion is available only within the 7 day delivery window",
+                PatientRules.validateDeliveryCompletion(null, today));
     }
 
     private Patient validPatient() {
