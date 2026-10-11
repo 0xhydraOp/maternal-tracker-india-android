@@ -2,8 +2,8 @@
 
 Last updated: 2026-10-12
 Current version: `1.1.45` / versionCode `54`
-Latest published version: `1.1.44` / versionCode `53`
-Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.44
+Latest published version: `1.1.45` / versionCode `54`
+Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.45
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
