@@ -1,13 +1,19 @@
 # Blue Bird Maternal Tracker Specification
 
 Last updated: 2026-10-12
-Current version: `1.1.45` / versionCode `54`
+Current version: `1.1.46` / versionCode `55`
 Latest published version: `1.1.45` / versionCode `54`
 Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.45
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
 ## 1. Product Scope
+
+### Rajibul Biswas Prescription Update v1.1.46
+
+- Replaced the existing Rajibul prescription asset with the user's exact supplied `r biswas.jpg`, preserving original bytes and artwork.
+- Print Desk credentials now reflect Malda Medical College and Hospital, M.B.B.S., MD (Pediatrics) and WBMC-84100 from the replacement pad.
+- Asset identity, A4 portrait orientation, role access and printing callbacks remain unchanged.
 
 ### Print Desk Visual Refinements v1.1.45
 

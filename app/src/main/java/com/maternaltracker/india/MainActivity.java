@@ -166,7 +166,7 @@ public class MainActivity extends Activity {
             "MBBS, PGPN, DCH | Child Specialist | REG NO.: 68725 (WBMC)",
             "MBBS, MS (General Surgeon) | Consultant Laparoscopic & General Surgeon | REG NO.: 76636 (WBMC)",
             "M.B.B.S. (WBUHS), M.S. Obstetrics & Gynaecology | Laparoscopic Surgeon | Ex House Physician Burdwan Medical College & Hospital | Ex Medical Officer at Rajnagar Block Hospital | Murshidabad Medical College & Hospital | Regd. 71244 (WBMC)",
-            "M.B.B.S. MD. (Pediatrics) | Consultant Paediatrician & Neonatologist | Attached to Bankura Sammilani Medical College, Healthworld Hospital, Asansol | Previously attached to Medical College, Kolkata & ESIC Joka | Regd. No.: WBMC-84100"
+            "M.B.B.S., MD (Pediatrics) | Consultant Paediatrician & Neonatologist | Attached to Malda Medical College and Hospital | Regd. No.: WBMC-84100"
     };
     private static final String[] PRESCRIPTION_ASSETS = {
             "print_forms/prescription_suyeta_nasrin.jpg",

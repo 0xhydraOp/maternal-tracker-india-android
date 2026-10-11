@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.46 - 2026-10-12
+
+- Replaced Dr. Rajibul Biswas's prescription with the latest supplied original image, without recompression or artwork changes.
+- Updated Print Desk qualifications/affiliation to match the pad: M.B.B.S., MD (Pediatrics), Consultant Paediatrician & Neonatologist, attached to Malda Medical College and Hospital; registration WBMC-84100.
+- Existing prescription selection, A4 portrait output and printing workflow remain unchanged.
+- Verification: 118 automated tests passed; clean release build and signature verification passed. Release lint has zero errors and five existing warnings; the bundled replacement matches the supplied image byte-for-byte. No duplicate Rajibul prescription option was added.
+
 ## v1.1.45 - 2026-10-12
 
 - Grouped Print Desk categories into Prescriptions, OT Papers and Other Forms without removing any document choices.
