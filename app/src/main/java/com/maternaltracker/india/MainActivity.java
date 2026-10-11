@@ -4079,10 +4079,8 @@ public class MainActivity extends Activity {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setPadding(dp(16), dp(16), dp(16), dp(8));
-        shell.setBackgroundColor(Color.WHITE);
-        TextView title = label("Document Library", 20, true);
-        androidx.core.view.ViewCompat.setAccessibilityHeading(title, true);
-        shell.addView(title);
+        shell.setBackground(rounded(Color.WHITE, dp(8), 0, Color.WHITE));
+        shell.addView(printSheetHeader("Document Library", "BLUE BIRD PRINT DESK"));
         EditText search = input("");
         search.setHint("Search doctor or document");
         search.setContentDescription("Search doctor or document");
@@ -4092,6 +4090,7 @@ public class MainActivity extends Activity {
         modes.setOrientation(LinearLayout.HORIZONTAL);
         shell.addView(modes);
         TextView count = label("", TYPE_LABEL, true);
+        count.setTextColor(PRIMARY_DARK);
         count.setPadding(0, dp(8), 0, dp(8));
         shell.addView(count);
         ScrollView scroll = new ScrollView(this);
@@ -4121,27 +4120,14 @@ public class MainActivity extends Activity {
             if (matches.isEmpty()) rows.addView(label(!empty(text(search)) ? "No matching documents"
                     : mode[0] == 1 ? "No favourites yet" : mode[0] == 2 ? "No recent print jobs" : "No matching documents", TYPE_BODY, false));
             for (PrintLibrary.Document document : matches) {
-                LinearLayout row = new LinearLayout(this);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(0, dp(12), 0, dp(12));
-                ImageView thumb = new ImageView(this);
-                thumb.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                previewLoader.load(thumb, document.id(), dp(48), dp(68));
-                thumb.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                row.addView(thumb, new LinearLayout.LayoutParams(dp(48), dp(68)));
-                LinearLayout copy = new LinearLayout(this);
-                copy.setOrientation(LinearLayout.VERTICAL);
-                copy.setPadding(dp(12), 0, dp(8), 0);
-                copy.addView(label(document.title, TYPE_CARD_TITLE, true));
-                TextView metadata = label(document.assets.length + (document.assets.length == 1 ? " page" : " pages")
-                        + " | A4 " + (document.landscape ? "landscape" : "portrait"), TYPE_LABEL, false);
-                metadata.setTextColor(SLATE);
-                copy.addView(metadata);
-                copy.setMinimumHeight(dp(48));
-                copy.setGravity(Gravity.CENTER_VERTICAL);
-                copy.setContentDescription("Open " + document.title + ", " + metadata.getText());
-                setDebouncedClick(copy, v -> {
+                boolean selected = document.category == PRINT_PRESCRIPTION && document.index == selectedPrescription
+                        || document.category == PRINT_OT_PAPER && document.index == selectedOtPaper;
+                LinearLayout row = printDialogDocumentRow(document.title, "", document.id(),
+                        document.landscape, document.assets.length, selected);
+                row.setContentDescription("Open " + document.title + ", " + document.assets.length
+                        + (document.assets.length == 1 ? " page" : " pages") + " | A4 "
+                        + (document.landscape ? "landscape" : "portrait"));
+                setDebouncedClick(row, v -> {
                     dialog.dismiss();
                     hideKeyboard();
                     if (document.category == PRINT_PRESCRIPTION) selectedPrescription = document.index;
@@ -4149,7 +4135,6 @@ public class MainActivity extends Activity {
                     revealSelectedPrint = true;
                     showPrintDesk(document.category);
                 });
-                row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
                 android.widget.ImageButton star = new android.widget.ImageButton(this);
                 boolean favourite = favourites.contains(document.id());
                 star.setImageResource(favourite ? android.R.drawable.btn_star_big_on : R.drawable.ic_favourite_outline);
@@ -4165,21 +4150,13 @@ public class MainActivity extends Activity {
                 });
                 row.addView(star, new LinearLayout.LayoutParams(dp(48), dp(48)));
                 rows.addView(row);
-                View divider = new View(this);
-                divider.setBackgroundColor(BORDER);
-                rows.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
             }
         };
         search.addTextChangedListener(simpleWatcher(s -> render[0].run()));
         render[0].run();
-        dialog.show();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setLayout(-1, (int) (getResources().getDisplayMetrics().heightPixels * 0.85f));
-            dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-                    | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
-        }
-        title.setFocusableInTouchMode(true);
-        title.requestFocus();
+        showPrintSheet(dialog);
+        shell.setFocusableInTouchMode(true);
+        shell.requestFocus();
     }
 
     private View printDeskHeader() {
@@ -4570,41 +4547,31 @@ public class MainActivity extends Activity {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_MD));
-        content.setBackground(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
-
-        TextView eyebrow = label("BLUE BIRD PRINT DESK", 11, true);
-        eyebrow.setTextColor(PRINT_ACCENT_DARK);
-        TextView heading = label(title, 20, true);
-        heading.setTextColor(PRIMARY_DARK);
-        heading.setPadding(0, dp(3), 0, 0);
-        TextView explanation = label(helper, TYPE_BODY, false);
-        explanation.setTextColor(SLATE);
-        explanation.setPadding(0, dp(SPACE_XS), 0, dp(SPACE_MD));
-        content.addView(eyebrow);
-        content.addView(heading);
-        content.addView(explanation);
+        content.setBackground(rounded(Color.WHITE, dp(8), 0, Color.WHITE));
+        content.addView(printSheetHeader(title, names.length + " documents | " + helper));
 
         LinearLayout choices = new LinearLayout(this);
         choices.setOrientation(LinearLayout.VERTICAL);
         ScrollView choiceScroller = new ScrollView(this);
         choiceScroller.setFillViewport(false);
         choiceScroller.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-        int maxChoiceHeight = Math.min(
-                dp(520),
-                (int) (getResources().getDisplayMetrics().heightPixels * 0.52f)
-        );
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(content)
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton("Close", null)
                 .create();
+        List<PrintLibrary.Document> documents = printDocuments();
         for (int i = 0; i < names.length; i++) {
             final int index = i;
             boolean active = i == selected;
-            View choice = printChoiceItem(
-                    names[i],
-                    details != null && i < details.length ? details[i] : "",
-                    active
-            );
+            PrintLibrary.Document document = null;
+            for (PrintLibrary.Document candidate : documents) {
+                if (candidate.title.equals(names[i])) { document = candidate; break; }
+            }
+            View choice = printDialogDocumentRow(names[i],
+                    document != null && document.category == PRINT_OT_PAPER ? ""
+                            : details != null && i < details.length ? details[i] : "",
+                    document == null ? null : document.id(), document != null && document.landscape,
+                    document == null ? 1 : document.assets.length, active);
             setDebouncedClick(choice, v -> {
                 dialog.dismiss();
                 onSelect.accept(index);
@@ -4612,15 +4579,163 @@ public class MainActivity extends Activity {
             choices.addView(choice);
         }
         choiceScroller.addView(choices, new ScrollView.LayoutParams(-1, -2));
-        content.addView(choiceScroller, new LinearLayout.LayoutParams(-1, maxChoiceHeight));
-        dialog.setOnShowListener(ignored -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
-                int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.92f);
-                dialog.getWindow().setLayout(width, android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+        boolean compact = names.length <= 3;
+        if (compact) {
+            int width = Math.min(dp(600), getResources().getDisplayMetrics().widthPixels - dp(24))
+                    - content.getPaddingLeft() - content.getPaddingRight();
+            choices.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int cap = Math.min(dp(380), (int) (getResources().getDisplayMetrics().heightPixels * 0.5f));
+            content.addView(choiceScroller, new LinearLayout.LayoutParams(-1, Math.min(cap, choices.getMeasuredHeight())));
+        } else {
+            content.addView(choiceScroller, new LinearLayout.LayoutParams(-1, 0, 1));
+        }
+        showPrintSheet(dialog, !compact);
+    }
+
+    private View printSheetHeader(String title, String metadata) {
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(0, 0, 0, dp(16));
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.drawable.ic_action_print);
+        icon.setImageTintList(ColorStateList.valueOf(PRIMARY));
+        icon.setPadding(dp(10), dp(10), dp(10), dp(10));
+        icon.setBackground(rounded(PRIMARY_SOFT, dp(8), 0, PRIMARY_SOFT));
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        header.addView(icon, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), 0, 0, 0);
+        TextView heading = label(title, 20, true);
+        heading.setTextColor(PRIMARY_DARK);
+        androidx.core.view.ViewCompat.setAccessibilityHeading(heading, true);
+        copy.addView(heading);
+        TextView subtitle = label(metadata, 12, true);
+        subtitle.setTextColor(SLATE);
+        subtitle.setPadding(0, dp(4), 0, 0);
+        copy.addView(subtitle);
+        header.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        return header;
+    }
+
+    private LinearLayout printDialogDocumentRow(String title, String detail, String asset,
+                                                boolean landscape, int pages, boolean selected) {
+        LinearLayout item = new LinearLayout(this);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(dp(10), dp(12), dp(10), dp(12));
+        item.setBackground(rounded(selected ? PRIMARY_SOFT : Color.WHITE, dp(8), dp(selected ? 2 : 1),
+                selected ? PRIMARY : BORDER));
+        item.setSelected(selected);
+        ImageView thumb = new ImageView(this);
+        thumb.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        thumb.setPadding(dp(3), dp(3), dp(3), dp(3));
+        thumb.setBackground(rounded(Color.WHITE, dp(4), dp(1), BORDER));
+        thumb.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        if (asset != null) previewLoader.load(thumb, asset, dp(56), dp(76));
+        item.addView(thumb, new LinearLayout.LayoutParams(dp(56), dp(landscape ? 42 : 76)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(12), 0, dp(8), 0);
+        TextView name = label(title, 16, true);
+        name.setTextColor(PRIMARY_DARK);
+        copy.addView(name);
+        if (!empty(detail)) {
+            TextView credentials = label(detail, 13, false);
+            int registration = detail.toUpperCase(Locale.US).lastIndexOf("REG");
+            if (registration >= 0) {
+                android.text.SpannableString styled = new android.text.SpannableString(detail);
+                styled.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                        registration, detail.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                styled.setSpan(new android.text.style.ForegroundColorSpan(PRIMARY_DARK),
+                        registration, detail.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                credentials.setText(styled);
             }
-        });
+            credentials.setTextColor(SLATE);
+            credentials.setPadding(0, dp(4), 0, 0);
+            copy.addView(credentials);
+        }
+        TextView format = label("A4 " + (landscape ? "Landscape" : "Portrait") + " | "
+                + pages + (pages == 1 ? " page" : " pages"), 12, true);
+        format.setTextColor(PRIMARY);
+        format.setPadding(0, dp(6), 0, 0);
+        copy.addView(format);
+        item.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        if (selected) {
+            ImageView check = new ImageView(this);
+            check.setImageResource(R.drawable.ic_action_check);
+            check.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+            check.setBackground(rounded(PRIMARY, dp(8), 0, PRIMARY));
+            check.setPadding(dp(5), dp(5), dp(5), dp(5));
+            check.setContentDescription("Selected");
+            item.addView(check, new LinearLayout.LayoutParams(dp(28), dp(28)));
+        }
+        item.setContentDescription(title + (selected ? ", selected" : "") + ", " + format.getText());
+        attachPressAnimation(item, 0.99f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(8));
+        item.setLayoutParams(lp);
+        return item;
+    }
+
+    private void showPrintSheet(AlertDialog dialog) {
+        showPrintSheet(dialog, true);
+    }
+
+    private void showPrintSheet(AlertDialog dialog, boolean expanded) {
         dialog.show();
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(rounded(Color.WHITE, dp(8), 0, Color.WHITE));
+            window.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            int width = Math.min(dp(600), getResources().getDisplayMetrics().widthPixels - dp(24));
+            window.setLayout(width, expanded
+                    ? (int) (getResources().getDisplayMetrics().heightPixels * 0.85f)
+                    : android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+            View host = window.findViewById(android.R.id.content);
+            if (expanded && host instanceof android.view.ViewGroup) {
+                android.view.ViewGroup frame = (android.view.ViewGroup) host;
+                if (frame.getChildCount() > 0) {
+                    View panel = frame.getChildAt(0);
+                    android.view.ViewGroup.LayoutParams layout = panel.getLayoutParams();
+                    layout.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+                    panel.setLayoutParams(layout);
+                }
+                final int left = host.getPaddingLeft(), top = host.getPaddingTop();
+                final int right = host.getPaddingRight(), bottom = host.getPaddingBottom();
+                View decor = window.getDecorView();
+                decor.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+                    android.graphics.Rect visible = new android.graphics.Rect();
+                    decor.getWindowVisibleDisplayFrame(visible);
+                    int[] location = new int[2];
+                    decor.getLocationOnScreen(location);
+                    int covered = Math.max(0, location[1] + decor.getHeight() - visible.bottom);
+                    if (covered < dp(120)) covered = 0;
+                    if (host.getPaddingBottom() != bottom + covered) {
+                        host.setPadding(left, top, right, bottom + covered);
+                    }
+                });
+            }
+            window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                    | android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+            if (Settings.Global.getFloat(getContentResolver(), Settings.Global.TRANSITION_ANIMATION_SCALE, 1f) > 0f) {
+                window.setWindowAnimations(R.style.PrintSheetAnimation);
+            } else {
+                window.setWindowAnimations(0);
+            }
+            window.getDecorView().setElevation(dp(8));
+        }
+        for (int which : new int[]{AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_POSITIVE}) {
+            Button action = dialog.getButton(which);
+            if (action == null || action.getVisibility() != View.VISIBLE) continue;
+            action.setAllCaps(false);
+            action.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+            action.setTextSize(14);
+            action.setMinHeight(dp(48));
+            action.setTextColor(which == AlertDialog.BUTTON_POSITIVE ? Color.WHITE : PRIMARY_DARK);
+            action.setBackground(rounded(which == AlertDialog.BUTTON_POSITIVE ? PRIMARY : PRIMARY_SOFT, dp(8), 0, PRIMARY));
+            action.setPadding(dp(20), 0, dp(20), 0);
+        }
     }
 
     private View printChoiceItem(String title, String detail, boolean selected) {
@@ -4803,19 +4918,16 @@ public class MainActivity extends Activity {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), 0);
-        shell.setBackground(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
-
-        TextView eyebrow = label("FULL PAGE PREVIEW", 11, true);
-        eyebrow.setTextColor(PRINT_ACCENT_DARK);
-        TextView heading = label(title, 20, true);
-        heading.setTextColor(PRIMARY_DARK);
-        heading.setPadding(0, dp(SPACE_XS), 0, dp(SPACE_SM));
-        shell.addView(eyebrow);
-        shell.addView(heading);
+        shell.setBackground(rounded(Color.WHITE, dp(8), 0, Color.WHITE));
+        shell.addView(printSheetHeader(title, "FULL PAGE PREVIEW | A4 "
+                + (landscape ? "Landscape" : "Portrait") + " | " + assetPaths.length
+                + (assetPaths.length == 1 ? " page" : " pages")));
 
         ScrollView previewScroll = new ScrollView(this);
+        previewScroll.setFillViewport(true);
         LinearLayout pages = new LinearLayout(this);
         pages.setOrientation(LinearLayout.VERTICAL);
+        pages.setGravity(Gravity.CENTER_VERTICAL);
         for (int i = 0; i < assetPaths.length; i++) {
             TextView page = label("PAGE " + (i + 1), 11, true);
             page.setTextColor(MUTED);
@@ -4828,20 +4940,13 @@ public class MainActivity extends Activity {
             pages.addView(preview);
         }
         previewScroll.addView(pages);
-        shell.addView(previewScroll, new LinearLayout.LayoutParams(-1, dp(620)));
+        shell.addView(previewScroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(shell)
                 .setPositiveButton("Close", null)
                 .create();
-        dialog.setOnShowListener(ignored -> {
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawable(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
-                int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.94f);
-                dialog.getWindow().setLayout(width, android.view.WindowManager.LayoutParams.WRAP_CONTENT);
-            }
-        });
-        dialog.show();
+        showPrintSheet(dialog);
     }
 
     private void setPrintActionEnabled(Button button, boolean enabled) {
@@ -4873,27 +4978,27 @@ public class MainActivity extends Activity {
         LinearLayout confirmation = new LinearLayout(this);
         confirmation.setOrientation(LinearLayout.VERTICAL);
         confirmation.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), 0);
-        confirmation.setBackground(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
+        confirmation.setBackground(rounded(Color.WHITE, dp(8), 0, Color.WHITE));
+        confirmation.addView(printSheetHeader(jobName, "PRINT CONFIRMATION"));
+        ScrollView detailsScroll = new ScrollView(this);
+        detailsScroll.setFillViewport(true);
+        LinearLayout printDetails = new LinearLayout(this);
+        printDetails.setOrientation(LinearLayout.VERTICAL);
+        printDetails.setGravity(Gravity.CENTER_VERTICAL);
+        detailsScroll.addView(printDetails);
+        confirmation.addView(detailsScroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        TextView eyebrow = label("PRINT CONFIRMATION", 11, true);
-        eyebrow.setTextColor(PRINT_ACCENT_DARK);
-        TextView title = label(jobName, 20, true);
-        title.setTextColor(PRIMARY_DARK);
-        title.setPadding(0, dp(SPACE_XS), 0, dp(SPACE_SM));
-        confirmation.addView(eyebrow);
-        confirmation.addView(title);
-
-        LinearLayout badges = new LinearLayout(this);
-        badges.setOrientation(LinearLayout.HORIZONTAL);
-        badges.setGravity(Gravity.CENTER_VERTICAL);
-        badges.addView(chip(landscape ? "A4 LANDSCAPE" : "A4 PORTRAIT", PRIMARY, Color.WHITE));
-        badges.addView(chip(assetPaths.length + (assetPaths.length == 1 ? " PAGE" : " PAGES"), PRINT_ACCENT, Color.WHITE));
+        TextView badges = label("A4 " + (landscape ? "Landscape" : "Portrait") + " | "
+                + assetPaths.length + (assetPaths.length == 1 ? " page" : " pages"), 14, true);
+        badges.setTextColor(PRIMARY);
+        badges.setPadding(dp(12), dp(10), dp(12), dp(10));
+        badges.setBackground(rounded(PRIMARY_SOFT, dp(8), 0, PRIMARY_SOFT));
         LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(-1, -2);
         badgeLp.setMargins(0, 0, 0, dp(SPACE_SM));
         badges.setLayoutParams(badgeLp);
-        confirmation.addView(badges);
+        printDetails.addView(badges);
 
-        confirmation.addView(printPreview(assetPaths[0], landscape));
+        printDetails.addView(printPreview(assetPaths[0], landscape));
         TextView summary = label(
                 epson
                         ? (assetPaths.length == 1 ? "High quality original document will open in Epson Smart Panel" : "Two-page print-ready PDF will open in Epson Smart Panel")
@@ -4904,10 +5009,10 @@ public class MainActivity extends Activity {
         summary.setTextColor(PRIMARY_DARK);
         summary.setGravity(Gravity.CENTER);
         summary.setPadding(0, 0, 0, dp(SPACE_SM));
-        confirmation.addView(summary);
-        new AlertDialog.Builder(this)
+        printDetails.addView(summary);
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(confirmation)
-                .setPositiveButton(epson ? "Print Now" : "Continue", (dialog, which) -> {
+                .setPositiveButton(epson ? "Print Now" : "Continue", (ignored, which) -> {
                     if (epson) {
                         if (epsonSmartPanelAvailable()) {
                             startEpsonSmartPanelPrint(jobName, assetPaths, landscape);
@@ -4919,7 +5024,8 @@ public class MainActivity extends Activity {
                     }
                 })
                 .setNegativeButton("Cancel", null)
-                .show();
+                .create();
+        showPrintSheet(dialog);
     }
 
     private void startEpsonSmartPanelPrint(String jobName, String[] assetPaths, boolean landscape) {
@@ -4930,9 +5036,10 @@ public class MainActivity extends Activity {
         progressContent.setOrientation(LinearLayout.HORIZONTAL);
         progressContent.setGravity(Gravity.CENTER_VERTICAL);
         progressContent.setPadding(dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG), dp(SPACE_LG));
-        progressContent.setBackground(rounded(SURFACE_ALT, dp(CARD_RADIUS), 0, SURFACE_ALT));
+        progressContent.setBackground(rounded(Color.WHITE, dp(8), 0, Color.WHITE));
         ProgressBar progress = new ProgressBar(this);
         progress.setIndeterminate(true);
+        progress.setIndeterminateTintList(ColorStateList.valueOf(PRIMARY));
         progressContent.addView(progress, new LinearLayout.LayoutParams(dp(38), dp(38)));
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
@@ -4953,7 +5060,7 @@ public class MainActivity extends Activity {
                 .setView(progressContent)
                 .setCancelable(false)
                 .create();
-        preparing.show();
+        showPrintSheet(preparing, false);
         new Thread(() -> {
             try {
                 File document = assetPaths.length == 1

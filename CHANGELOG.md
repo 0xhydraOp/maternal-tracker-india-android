@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.44 - 2026-10-12
+
+- Restyled Print Desk selection, library, favourites/recent, preview, confirmation and preparation popups with consistent blue-and-white sheets and subtle motion.
+- Added original-document thumbnails, bold doctor names, emphasized registrations, page/orientation labels and selected checkmarks.
+- Sized short OT lists compactly, kept long documents scrollable and corrected footer placement and keyboard occlusion found during device checks.
+- Preserved printing behavior, original document bytes and role access; system printer/Epson screens remain unchanged.
+- Verification: 118 automated tests passed; release lint has zero errors and five existing warnings. Targeted ADB checks covered selection/checkmarks, library search, favourites/recent, previews, confirmation cancellation, keyboard visibility and 130% fonts (restored afterward). Save as PDF verified one landscape A4 BHT page and two portrait A4 blood-form pages. Physical printing was not performed.
+
 ## v1.1.43 - 2026-10-12
 
 - Simplified Profile to one Print Desk link; removed duplicate Entry/Search shortcuts and the separate Export Center link.
