@@ -1,13 +1,22 @@
 # Blue Bird Maternal Tracker Specification
 
-Last updated: 2026-10-11
-Current version: `1.1.42` / versionCode `51`
+Last updated: 2026-10-12
+Current release target: `1.1.43` / versionCode `52`
 Latest published version: `1.1.42` / versionCode `51`
 Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.42
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
 ## 1. Product Scope
+
+### Navigation Simplification v1.1.43
+
+- Profile contains one Print Desk entry instead of five category shortcuts; Entry and Search remain in bottom navigation. Every original print document remains accessible in Print Desk.
+- Staff retains ownership-scoped Excel/PDF exports from Search and patient details. The separate Export Center destination is removed from the profile.
+- Admin > Advanced Maintenance contains hospital-wide Excel/PDF export, CSV export (all patients or the last search), and local backup/restore. Patient Recovery remains a separate Admin control.
+- CSV is absent from everyday Search for both roles and guarded as Admin-only at its execution boundary.
+- Reports remain Admin-only: one Priority Overview, expandable Delivery & Follow-up, Patients by Village, and Monthly Registrations containing the trend and clickable month rows. Date filtering and export queries are unchanged.
+- No changes to patient validation, completion eligibility, calling, online synchronization, user management, recovery, update handling, or original print artwork.
 
 ### Release v1.1.42
 
@@ -76,7 +85,7 @@ The confirmed direction is online Firebase-backed operation:
 
 ## 2A. Hospital Print Desk
 
-The profile panel exposes the following actions to both admins and staff, above patient workflow actions:
+The profile panel exposes one Print Desk link to both Admin and Staff. The desk retains all document categories:
 
 - Print Prescriptions
 - Print OT Papers
@@ -84,7 +93,7 @@ The profile panel exposes the following actions to both admins and staff, above 
 - Print Blood Requisition
 - Print Baby Refer Form
 
-Print Desk is also a primary bottom navigation destination. Reports are accessed from the Administration controls instead of the bottom navigation.
+Print Desk is also a primary bottom navigation destination. Reports are Admin-only, accessible from Profile and Administration rather than bottom navigation. Staff retains Entry, Search and Print in bottom navigation; Admin also has Administration.
 
 Printing requirements:
 
@@ -295,25 +304,18 @@ Reports should stay organized and operational, not generic.
 
 Required report controls:
 
-- Date range filter
-- Village filter
-- Status filter: All, Open, Locked
-- Scheduled only filter chip
-- Call pending only filter chip
+- Month selector with live month names
+- From/to registration dates
+- View Records, Excel and PDF actions using the selected range
 
 Required report sections:
 
-- Report Actions
-- Quick Report Filters
-- Report Overview
-- Active Filters
-- Scheduled Delivery Report
-- Report Snapshot
-- Scheduled Delivery Access
-- Visit Follow-up Access
-- Visit Date Tracking
+- New Patient This Month (live current-month registrations)
+- Report Controls
+- Priority Overview with selected-range counts and drill-down actions
+- Delivery & Follow-up (expandable delivery counts and visit progress)
 - Patients by Village
-- Monthly Summary
+- Monthly Registrations (expandable trend and clickable monthly totals)
 
 Removed report areas:
 
@@ -336,6 +338,7 @@ Admin panel should be organized into:
 - Admin Overview
 - Operations Control
 - Data and Recovery
+- Advanced Maintenance
 - Access Control
 - Reference Lists
 - App Support
@@ -353,14 +356,17 @@ Operations Control:
 - Patient Records
 - Priority Follow-up
 - Reports
-- Export Center
 
 Data and Recovery:
 
-- Backup Manager
-- Full Export
-- Export PDF
-- Save Backup File
+- Patient Recovery
+
+Advanced Maintenance:
+
+- Hospital Export (all-patient Excel/PDF and access to filtered Search)
+- CSV export: all hospital patients or the last Search results
+- Local database backup creation, export and restore
+- Admin-only access; Staff contextual Excel/PDF exports remain in Search and patient details
 
 Access Control:
 
@@ -517,6 +523,10 @@ Important patient fields:
 
 ## 15. Latest Release State
 
+v1.1.43 candidate verification (2026-10-12): automated tests passed (118); release lint has zero errors and five existing warnings. Focused independent review found no blockers. Admin device checks covered the shortened Profile, combined report expansion, monthly drill-down, filtered Excel and last-search CSV, maintenance/backup/export routes and Back behavior. Staff device checks covered the shortened Profile, absence of Admin utilities and CSV, retained Print Desk, required-field validation, and ownership-scoped empty-result PDF/Excel export. Temporary Staff access and test files were removed; no patient data was changed. Physical printing and destructive database restore were not performed for this navigation-only release.
+
+Previous published release verification:
+
 Published release: `1.1.42` / versionCode `51`. Signed APK uploaded and GitHub asset SHA-256 verified against the local release file: `607891cac3e2a3d7751449e67c5653e83e0d3297e9ae4f0554c43ab2da572030`.
 
 Final targeted verification (2026-10-11):
@@ -530,6 +540,12 @@ Final targeted verification (2026-10-11):
 - Acceptance is targeted rather than exhaustive. No speed benchmark or measured performance gain is claimed, and no QA account credentials or patient identifiers are recorded here.
 
 ## 16. Recent Release Summary
+
+### v1.1.43
+
+- Shortened profile navigation and consolidated Admin-only maintenance tools.
+- Kept contextual Staff/Admin Excel/PDF exports and moved CSV into Admin maintenance with last-search scope retained.
+- Combined report breakdowns without changing their queries or drill-downs.
 
 ### v1.1.42
 

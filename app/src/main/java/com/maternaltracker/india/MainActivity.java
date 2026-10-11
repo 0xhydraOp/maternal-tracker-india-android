@@ -773,26 +773,16 @@ public class MainActivity extends Activity {
         actions.setOrientation(LinearLayout.VERTICAL);
         actionScroll.addView(actions);
 
-        actions.addView(menuGroupTitle("Print Desk"));
-        actions.addView(menuItem("Print Prescriptions", "Select a doctor prescription", PRIMARY, navigateTo(this::showPrescriptionPrintCenter)));
-        actions.addView(menuItem("Print OT Papers", "Select one OT hospital paper", PRINT_ACCENT_DARK, navigateTo(this::showOtPrintCenter)));
-        actions.addView(menuItem("Print Baby Birth Form", "Baby identification form", ACCENT, navigateTo(this::showBabyPrintCenter)));
-        actions.addView(menuItem("Print Blood Requisition", "Blood/component request form", REPORT_BROWN, navigateTo(this::showBloodPrintCenter)));
-        actions.addView(menuItem("Print Baby Refer Form", "Two-page newborn referral form", PRIMARY_DARK, navigateTo(this::showBabyReferPrintCenter)));
-        actions.addView(menuGroupTitle("Patient Work"));
-        actions.addView(menuItem("New Patient", "Register a new maternal record", ACCENT, navigateTo(() -> showPatientForm(null))));
-        actions.addView(menuItem("Search Patients", "Find records and update visits", PRIMARY, navigateTo(this::openSavedPatientSearch)));
-        actions.addView(menuGroupTitle("Reports & Export"));
+        actions.addView(menuGroupTitle("Hospital Work"));
+        actions.addView(menuItem("Print Desk", "Prescriptions and hospital forms", PRIMARY, navigateTo(this::showPrescriptionPrintCenter)));
         if (isAdmin()) {
-            actions.addView(menuItem("Reports", "Available from Administration controls", SLATE, navigateTo(this::showAdmin)));
+            actions.addView(menuItem("Reports", "Registration and delivery summaries", SLATE, navigateTo(this::showReports)));
         }
-        actions.addView(menuItem("Export Center", "Create Excel and PDF outputs", PRIMARY_DARK, navigateTo(this::showExportCenter)));
         actions.addView(menuGroupTitle("System"));
         actions.addView(menuItem("Update Center", "Download and install updates inside the app", WARNING, navigateTo(this::showUpdateCenter)));
         if (isAdmin()) {
             actions.addView(menuItem("Administration", "Manage users and reference data", PRIMARY, navigateTo(this::showAdmin)));
             actions.addView(menuItem("Patient Recovery", "Restore accidentally deleted records", WARNING, navigateTo(this::showPatientRecovery)));
-            actions.addView(menuItem("Backup Manager", "Create or restore database backup", SLATE, navigateTo(this::showBackup)));
         }
         actions.addView(menuGroupTitle("Session"));
         actions.addView(menuItem("Sign Out", "Close this secure session", URGENT, v -> {
@@ -1079,10 +1069,11 @@ public class MainActivity extends Activity {
             }
         } else if ("Patient Management".equals(page)
                 || "Patient Recovery".equals(page)
-                || "Backup Manager".equals(page)) {
+                || "Advanced Maintenance".equals(page)
+                || "Reports".equals(page)) {
             showAdmin();
-        } else if ("Export Center".equals(page)) {
-            showReports();
+        } else if ("Hospital Export".equals(page) || "Backup Manager".equals(page)) {
+            showAdvancedMaintenance();
         } else if ("Patient Search".equals(page) && "Reports".equals(patientListOriginPage)) {
             showReports();
         } else {
@@ -2794,7 +2785,6 @@ public class MainActivity extends Activity {
                 shortcutButton("Locked", activeShortcut, v -> showPatientList(adminMode, appendWhere(shortcutBaseWhere, "record_locked = 1"), shortcutBaseArgs, true, "Locked"))
         );
         View searchActions = scrollingActions(
-                button("Export CSV", v -> exportPatientsCsv(text(search), visibleWhere, visibleArgs)),
                 button("Excel", v -> startListExport(text(search), visibleWhere, visibleArgs, REQ_EXPORT_EXCEL, "patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
                 button("PDF", v -> startListExport(text(search), visibleWhere, visibleArgs, REQ_EXPORT_PDF, "patients.pdf", "application/pdf")),
                 button("New Patient", v -> showPatientForm(null))
@@ -3859,6 +3849,7 @@ public class MainActivity extends Activity {
     }
 
     private void showReports() {
+        if (!isAdmin()) { toast("Only admin can open reports"); showDashboard(); return; }
         setPage("Reports");
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -3953,7 +3944,8 @@ public class MainActivity extends Activity {
     }
 
     private void showExportCenter() {
-        setPage("Export Center");
+        if (!isAdmin()) { toast("Only admin can export all hospital records"); showDashboard(); return; }
+        setPage("Hospital Export");
         ScrollView scroll = new ScrollView(this);
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -3963,26 +3955,34 @@ public class MainActivity extends Activity {
         String exportWhere = scopedWhere(null);
         String[] exportArgs = scopedArgs(null);
         int total = db.countPatients(exportWhere, exportArgs);
-        int locked = db.countPatients(appendWhere(exportWhere, "record_locked = 1"), exportArgs);
         page.addView(section("Export Records",
                 emptyState(total + " records ready", "Save Excel or PDF directly through Android's file picker, then share it from the system sheet."),
                 scrollingActions(
                         button("Excel", v -> startExport("", exportWhere, exportArgs, REQ_EXPORT_EXCEL, "blue_bird_patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
                         button("PDF", v -> startExport("", exportWhere, exportArgs, REQ_EXPORT_PDF, "blue_bird_patients.pdf", "application/pdf")),
-                        button("Search Filtered Export", v -> showPatientList(false))
+                        button("Filtered Records", v -> showPatientList(true))
                 )
         ));
-        if (isAdmin()) page.addView(section("Backup",
-                smallText("Locked records: " + locked + " | Database backup is admin-only restore data."),
-                scrollingActions(
-                        button("Create Backup", v -> createBackupNow()),
-                        button("Save Backup File", v -> startBackupExport())
-                )
-        ));
-        page.addView(section("Export Tips",
-                smallText("Use Reports for date, village, or lock-status filtered Excel/PDF exports."),
-                smallText("Use Patient Detail when one patient's PDF or Excel file is needed.")
-        ));
+    }
+
+    private void showAdvancedMaintenance() {
+        if (!isAdmin()) { toast("Only admin can open maintenance tools"); showDashboard(); return; }
+        setPage("Advanced Maintenance");
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(page);
+        content.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+        page.addView(section("Hospital Export",
+                adminCommandPanel("All Patient Records", "Hospital-wide Excel and PDF files.", "Open Export", PRIMARY, v -> showExportCenter()),
+                button("Export CSV", v -> new AlertDialog.Builder(this)
+                        .setTitle("CSV Records")
+                        .setItems(new String[]{"All Hospital Patients", "Last Search Results"}, (dialog, which) -> {
+                            if (which == 0) exportPatientsCsv("");
+                            else exportPatientsCsv(lastPatientSearchQuery, lastPatientListWhere, lastPatientListArgs);
+                        }).show())));
+        page.addView(section("Local Database Backup",
+                adminCommandPanel("Backup and Restore", "Local recovery copies. Online patient sync remains active.", "Open Backups", SLATE, v -> showBackup())));
     }
 
     private void showPrescriptionPrintCenter() {
@@ -5197,16 +5197,17 @@ public class MainActivity extends Activity {
                         stat("Today", today, v -> showPatientList(false, appendWhere(where, "entry_date = ?"), appendArgs(args, LocalDate.now().toString()), true))
                 )
         ));
-        page.addView(registrationTrendChart(baseWhere, baseArgs));
         if (total == 0) {
             page.addView(collapsibleSection("Report Result", true, emptyActionState("No records match these filters", "Change the filters or create a patient record first.", "New Patient", v -> showPatientForm(null))));
+            page.addView(monthlySummaryView(baseWhere, baseArgs, dateType));
             return;
         }
-        page.addView(collapsibleSection("Scheduled Delivery", false,
-                progressRow("Patient notified", scheduledNotified, scheduled, scheduled == 0 ? 0 : Math.round(scheduledNotified * 100f / scheduled)),
-                progressRow("Call pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled)),
-                progressRow("Completion due", deliveryCompletionDue, total, total == 0 ? 0 : Math.round(deliveryCompletionDue * 100f / total))
-        ));
+        LinearLayout deliveryDetails = new LinearLayout(this);
+        deliveryDetails.setOrientation(LinearLayout.VERTICAL);
+        deliveryDetails.addView(label("Scheduled Delivery", 16, true));
+        deliveryDetails.addView(progressRow("Patient notified", scheduledNotified, scheduled, scheduled == 0 ? 0 : Math.round(scheduledNotified * 100f / scheduled)));
+        deliveryDetails.addView(progressRow("Call pending", scheduledPending, scheduled, scheduled == 0 ? 0 : Math.round(scheduledPending * 100f / scheduled)));
+        deliveryDetails.addView(progressRow("Completion due", deliveryCompletionDue, total, total == 0 ? 0 : Math.round(deliveryCompletionDue * 100f / total)));
         LinearLayout visits = new LinearLayout(this);
         visits.setOrientation(LinearLayout.VERTICAL);
         for (String[] row : db.visitCompletionRows(where, args)) {
@@ -5214,7 +5215,9 @@ public class MainActivity extends Activity {
             int pct = total == 0 ? 0 : Math.round(done * 100f / total);
             visits.addView(progressRow(row[0], done, total, pct));
         }
-        page.addView(collapsibleSection("Visit Progress", false, visits));
+        deliveryDetails.addView(label("Visit Progress", 16, true));
+        deliveryDetails.addView(visits);
+        page.addView(collapsibleSection("Delivery & Follow-up", false, deliveryDetails));
         page.addView(villageSummaryView(where, args));
         page.addView(monthlySummaryView(baseWhere, baseArgs, dateType));
     }
@@ -5311,7 +5314,13 @@ public class MainActivity extends Activity {
     }
 
     private View monthlySummaryView(String baseWhere, String[] baseArgs, String dateType) {
-        return lazySection("Monthly Summary", () -> monthlySummaryBody(baseWhere, baseArgs, dateType));
+        return lazySection("Monthly Registrations", () -> {
+            LinearLayout body = new LinearLayout(this);
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.addView(registrationTrendChart(baseWhere, baseArgs));
+            body.addView(monthlySummaryBody(baseWhere, baseArgs, dateType));
+            return body;
+        });
     }
 
     private View monthlySummaryBody(String baseWhere, String[] baseArgs, String dateType) {
@@ -5363,7 +5372,7 @@ public class MainActivity extends Activity {
             chart.addView(trendBar(row.getKey(), row.getValue(), max));
         }
         scroll.addView(chart);
-        return collapsibleSection("Registration Trend", false, smallText("New patient registrations by month."), scroll);
+        return scroll;
     }
 
     private View trendBar(String monthKey, int count, int max) {
@@ -5710,15 +5719,18 @@ public class MainActivity extends Activity {
     }
 
     private void exportPatientsCsv(String filter, String where, String[] args) {
+        if (!isAdmin()) { toast("Only admin can export CSV"); return; }
         final int session = sessionGeneration;
         firebase.refreshCurrentRole((role, error) -> runOnUiThread(() -> {
             if (session != sessionGeneration || isFinishing() || isDestroyed()) return;
             if (!acceptFreshRole(role, error)) return;
+            if (!isAdmin()) return;
             exportPatientsCsvAuthorized(filter, where, args);
         }));
     }
 
     private void exportPatientsCsvAuthorized(String filter, String where, String[] args) {
+        if (!isAdmin()) return;
         final int session = sessionGeneration;
         final String owner = currentUser;
         if (exportInProgress) { toast("An export is already being prepared"); return; }
@@ -6290,23 +6302,13 @@ public class MainActivity extends Activity {
                         adminCommandPanel("Patient Records", "Search, edit, complete, unlock, and remove hospital records.", "Open Patients", PRIMARY, v -> showPatientList(true)),
                         adminCommandPanel("Priority Follow-up", "Scheduled calls, delivery completion, and planned visit tracking.", "Open Priority", URGENT, v -> showPatientList(true, adminPriorityWhere(), adminPriorityArgs()))
                 ),
-                compactTwoColumn(
-                        adminCommandPanel("Reports", "Open scheduled delivery, EDD, village, and monthly summaries.", "Open Reports", ACCENT, v -> showReports()),
-                        adminCommandPanel("Export Center", "Create Excel and PDF files for staff and hospital records.", "Open Export", SLATE, v -> showExportCenter())
-                )
+                adminCommandPanel("Reports", "Registration, delivery, village and monthly summaries.", "Open Reports", ACCENT, v -> showReports())
         ));
         page.addView(collapsibleSection("Data and Recovery", false,
-                compactTwoColumn(
-                        adminCommandPanel("Patient Recovery", deleted + " recoverable deleted record(s). Restore accidental deletes here.", "Open Recovery", WARNING, v -> showPatientRecovery()),
-                        adminCommandPanel("Backup Manager", "Create or restore a local database backup when required.", "Open Backup", PRIMARY, v -> showBackup())
-                ),
-                adminCommandPanel("Full Export", "Export all Blue Bird records directly as Excel or PDF.", "Export Excel", ACCENT, v -> startExport("", null, null, REQ_EXPORT_EXCEL, "all_patients.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
-                scrollingActions(
-                        button("Export PDF", v -> startExport("", null, null, REQ_EXPORT_PDF, "all_patients.pdf", "application/pdf")),
-                        button("Save Backup File", v -> startBackupExport())
-                ),
-                smallText("Use exports for reporting and backups only for recovery or handover.")
+                adminCommandPanel("Patient Recovery", deleted + " recoverable deleted record(s).", "Open Recovery", WARNING, v -> showPatientRecovery())
         ));
+        page.addView(collapsibleSection("Advanced Maintenance", false,
+                adminCommandPanel("Administrative Utilities", "Hospital exports, CSV and local database backups.", "Open Maintenance", SLATE, v -> showAdvancedMaintenance())));
         page.addView(collapsibleSection("Access Control", false,
                 compactTwoColumn(
                         adminCommandPanel("Create Staff Login", "Only admins can create new app users and assign roles.", "Add User", PRIMARY, v -> addUserDialog()),

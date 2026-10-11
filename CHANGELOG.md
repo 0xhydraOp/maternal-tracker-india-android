@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.43 - 2026-10-12
+
+- Simplified Profile to one Print Desk link; removed duplicate Entry/Search shortcuts and the separate Export Center link.
+- Retained Staff ownership-scoped Excel/PDF exports in Search and patient details.
+- Consolidated hospital-wide exports, Admin-only CSV and local backup/restore under Admin > Advanced Maintenance. CSV can still use the last Search filters.
+- Kept patient recovery separate from advanced database maintenance.
+- Grouped Reports into one overview plus expandable delivery/follow-up, village and monthly registration sections. Monthly trend and clickable rows now share one section.
+- Preserved patient workflows, filtering queries, role boundaries, Firebase synchronization and original print artwork.
+- Verification: 118 automated tests passed; release lint has zero errors and five existing warnings. Focused review and targeted Admin/Staff ADB navigation, filtering, export and permission-visibility checks passed. No patient data was modified; temporary Staff account removed.
+
 ## v1.1.42 - 2026-10-11
 
 - Compact sky-blue patient detail bodies with navy section titles and patient names, bold values, and Delivery Status, Patient and Pregnancy visible by default. Full Details expands secondary groups in place.
