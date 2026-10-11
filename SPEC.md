@@ -1,9 +1,9 @@
 # Blue Bird Maternal Tracker Specification
 
 Last updated: 2026-10-12
-Current release target: `1.1.43` / versionCode `52`
-Latest published version: `1.1.42` / versionCode `51`
-Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.42
+Current version: `1.1.43` / versionCode `52`
+Latest published version: `1.1.43` / versionCode `52`
+Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.43
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -523,7 +523,9 @@ Important patient fields:
 
 ## 15. Latest Release State
 
-v1.1.43 candidate verification (2026-10-12): automated tests passed (118); release lint has zero errors and five existing warnings. Focused independent review found no blockers. Admin device checks covered the shortened Profile, combined report expansion, monthly drill-down, filtered Excel and last-search CSV, maintenance/backup/export routes and Back behavior. Staff device checks covered the shortened Profile, absence of Admin utilities and CSV, retained Print Desk, required-field validation, and ownership-scoped empty-result PDF/Excel export. Temporary Staff access and test files were removed; no patient data was changed. Physical printing and destructive database restore were not performed for this navigation-only release.
+v1.1.43 final verification (2026-10-12): automated tests passed (118); release lint has zero errors and five existing warnings. Focused independent review found no blockers. Admin device checks covered the shortened Profile, combined report expansion, monthly drill-down, filtered Excel and last-search CSV, maintenance/backup/export routes and Back behavior. Staff device checks covered the shortened Profile, absence of Admin utilities and CSV, retained Print Desk, required-field validation, and ownership-scoped empty-result PDF/Excel export. Temporary Staff access and test files were removed; no patient data was changed. Physical printing and destructive database restore were not performed for this navigation-only release.
+
+The signed v1.1.43 APK was installed via ADB with the Admin session retained, then published to GitHub. Uploaded asset SHA-256 matches the verified local file: `1df11c89f69733c7f3c1293d165256687727ce9fad56aef861a67f88dbf9440a`.
 
 Previous published release verification:
 
