@@ -1,9 +1,9 @@
 # Blue Bird Maternal Tracker Specification
 
 Last updated: 2026-10-12
-Current release target: `1.1.44` / versionCode `53`
-Latest published version: `1.1.43` / versionCode `52`
-Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.43
+Current version: `1.1.44` / versionCode `53`
+Latest published version: `1.1.44` / versionCode `53`
+Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.44
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
@@ -531,6 +531,8 @@ Important patient fields:
 - Record Locked
 
 ## 15. Latest Release State
+
+v1.1.44 published verification (2026-10-12): 118 automated tests passed; release lint has zero errors and five existing warnings. Focused review and targeted ADB checks covered Print Desk selectors, selected state, search/empty results, favourites/recent, previews, confirmation cancellation, keyboard-visible controls and 130% fonts (restored). Save as PDF confirmed one landscape A4 BHT page and two portrait A4 blood-form pages. All 15 original assets are byte-identical. Physical printer output and the Epson preparation handoff were not submitted during this test. The signed APK was installed with Admin login retained; GitHub uploaded asset SHA-256 matches `236759dc4050bc10bca990dfeed08493a2496ed942c5b8a8ea35738bbda291b5`.
 
 v1.1.43 final verification (2026-10-12): automated tests passed (118); release lint has zero errors and five existing warnings. Focused independent review found no blockers. Admin device checks covered the shortened Profile, combined report expansion, monthly drill-down, filtered Excel and last-search CSV, maintenance/backup/export routes and Back behavior. Staff device checks covered the shortened Profile, absence of Admin utilities and CSV, retained Print Desk, required-field validation, and ownership-scoped empty-result PDF/Excel export. Temporary Staff access and test files were removed; no patient data was changed. Physical printing and destructive database restore were not performed for this navigation-only release.
 
