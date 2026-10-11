@@ -4201,7 +4201,14 @@ public class MainActivity extends Activity {
         String[] details = {"Doctor pads", "OT set", "Birth ID", "2 pages", "2 pages"};
         for (int i = 0; i < labels.length; i++) {
             final int category = i;
-            tabs.addView(printCategoryCard(labels[i], details[i], i == activeCategory, v -> showPrintDesk(category)));
+            LinearLayout group = new LinearLayout(this);
+            group.setOrientation(LinearLayout.VERTICAL);
+            TextView heading = label(i == 0 ? "PRESCRIPTIONS" : i == 1 ? "OT PAPERS" : i == 2 ? "OTHER FORMS" : "", 11, true);
+            heading.setTextColor(SLATE);
+            heading.setHeight(dp(24));
+            group.addView(heading);
+            group.addView(printCategoryCard(labels[i], details[i], i == activeCategory, v -> showPrintDesk(category)));
+            tabs.addView(group);
         }
         scroll.addView(tabs);
         return scroll;
@@ -4302,8 +4309,8 @@ public class MainActivity extends Activity {
         setPrintActionEnabled(previewFull, false);
         setPrintActionEnabled(epson, false);
         setPrintActionEnabled(other, false);
-        actions.addView(previewFull);
         actions.addView(epson);
+        actions.addView(previewFull);
         actions.addView(other);
         actions.addView(printSettingsButton());
 
@@ -4381,8 +4388,8 @@ public class MainActivity extends Activity {
         setPrintActionEnabled(previewFull, false);
         setPrintActionEnabled(epson, false);
         setPrintActionEnabled(other, false);
-        actions.addView(previewFull);
         actions.addView(epson);
+        actions.addView(previewFull);
         actions.addView(other);
         actions.addView(printSettingsButton());
 
@@ -4429,9 +4436,9 @@ public class MainActivity extends Activity {
         Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
                 "Baby Identification Form", assetPath, false, true));
         setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+        actions.addView(epson);
         actions.addView(printSecondaryButton("Preview Full Page", v ->
                 showPrintPreviewDialog("Baby Identification Form", new String[]{assetPath}, false)));
-        actions.addView(epson);
         actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
                 "Baby Identification Form", assetPath, false, false)));
         actions.addView(printSettingsButton());
@@ -4439,9 +4446,9 @@ public class MainActivity extends Activity {
                 "Baby Identification",
                 "Selected document",
                 printSelectedDocumentCard(
-                        "BABY IDENTIFICATION FORM",
+                        "Baby Identification Form",
                         "Original Blue Bird hospital form",
-                        "A4 PORTRAIT"
+                        assetPath, 1
                 ),
                 printSupportingText("Review the full document below before continuing."),
                 printPreview(assetPath, false),
@@ -4458,9 +4465,9 @@ public class MainActivity extends Activity {
         Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
                 "Blood Component Requisition Form", BLOOD_REQUISITION_ASSETS, false, true));
         setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+        actions.addView(epson);
         actions.addView(printSecondaryButton("Preview Full Page", v ->
                 showPrintPreviewDialog("Blood Component Requisition Form", BLOOD_REQUISITION_ASSETS, false)));
-        actions.addView(epson);
         actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
                 "Blood Component Requisition Form", BLOOD_REQUISITION_ASSETS, false, false)));
         actions.addView(printSettingsButton());
@@ -4482,9 +4489,9 @@ public class MainActivity extends Activity {
                 "Blood Requisition",
                 "Selected document",
                 printSelectedDocumentCard(
-                        "BLOOD / COMPONENT REQUISITION FORM",
+                        "Blood / Component Requisition Form",
                         "Two original pages printed together",
-                        "2 PAGES"
+                        BLOOD_REQUISITION_ASSETS[0], 2
                 ),
                 printSupportingText("This print job includes both blood requisition pages in order."),
                 previews,
@@ -4501,9 +4508,9 @@ public class MainActivity extends Activity {
         Button epson = printPrimaryButton("Print with Epson Smart Panel", v -> confirmHospitalPrint(
                 "Baby Refer Form", BABY_REFER_ASSETS, false, true));
         setPrintActionEnabled(epson, epsonSmartPanelAvailable());
+        actions.addView(epson);
         actions.addView(printSecondaryButton("Preview Full Page", v ->
                 showPrintPreviewDialog("Baby Refer Form", BABY_REFER_ASSETS, false)));
-        actions.addView(epson);
         actions.addView(printSecondaryButton("Other Printers / Save as PDF", v -> confirmHospitalPrint(
                 "Baby Refer Form", BABY_REFER_ASSETS, false, false)));
         actions.addView(printSettingsButton());
@@ -4525,9 +4532,9 @@ public class MainActivity extends Activity {
                 "Baby Refer Form",
                 "Selected document",
                 printSelectedDocumentCard(
-                        "NEWBORN / BABY REFERRAL FORM",
+                        "Newborn / Baby Referral Form",
                         "Two original pages printed together",
-                        "2 PAGES"
+                        BABY_REFER_ASSETS[0], 2
                 ),
                 printSupportingText("This print job includes both referral pages in order."),
                 previews,
@@ -4656,8 +4663,8 @@ public class MainActivity extends Activity {
             copy.addView(credentials);
         }
         TextView format = label("A4 " + (landscape ? "Landscape" : "Portrait") + " | "
-                + pages + (pages == 1 ? " page" : " pages"), 12, true);
-        format.setTextColor(PRIMARY);
+                + pages + (pages == 1 ? " page" : " pages"), 12, false);
+        format.setTextColor(SLATE);
         format.setPadding(0, dp(6), 0, 0);
         copy.addView(format);
         item.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
@@ -4779,13 +4786,8 @@ public class MainActivity extends Activity {
         return item;
     }
 
-    private View printSelectedDocumentCard(String title, String detail, String format) {
-        LinearLayout card = (LinearLayout) printChoiceItem(title, detail, true);
-        TextView formatBadge = chip(format, PRIMARY_SOFT, PRIMARY_DARK);
-        formatBadge.setPadding(dp(CHIP_PAD_X), dp(CHIP_PAD_Y), dp(CHIP_PAD_X), dp(CHIP_PAD_Y));
-        card.addView(formatBadge);
-        card.setContentDescription(title + ", selected, " + format);
-        return card;
+    private View printSelectedDocumentCard(String title, String detail, String asset, int pages) {
+        return printDialogDocumentRow(title, detail, asset, false, pages, true);
     }
 
     private LinearLayout printWorkspaceCard(
@@ -4838,7 +4840,8 @@ public class MainActivity extends Activity {
         preview.setAdjustViewBounds(false);
         preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         preview.setPadding(dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD), dp(SPACE_MD));
-        preview.setBackground(rounded(PRINT_STAGE, dp(CARD_RADIUS), dp(1), Color.rgb(157, 197, 232)));
+        preview.setBackground(rounded(Color.rgb(242, 244, 247), dp(8), dp(1), BORDER));
+        preview.setElevation(dp(2));
         setPrintPreview(preview, assetPath, landscape);
         return preview;
     }
@@ -4898,13 +4901,24 @@ public class MainActivity extends Activity {
 
     private Button printPrimaryButton(String text, View.OnClickListener listener) {
         Button action = button(text, listener);
-        action.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(54)));
+        action.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        action.setTextColor(Color.WHITE);
+        action.setBackground(rounded(PRIMARY, dp(8), 0, PRIMARY));
+        action.setMinHeight(dp(54));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, dp(8), 0, dp(8));
+        action.setLayoutParams(lp);
         return action;
     }
 
     private Button printSecondaryButton(String text, View.OnClickListener listener) {
         Button action = navButton(text, listener);
-        action.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(50)));
+        action.setMinHeight(dp(50));
+        action.setTextColor(PRIMARY_DARK);
+        action.setBackground(rounded(Color.WHITE, dp(8), dp(1), BORDER));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(8));
+        action.setLayoutParams(lp);
         return action;
     }
 
@@ -4928,11 +4942,15 @@ public class MainActivity extends Activity {
         LinearLayout pages = new LinearLayout(this);
         pages.setOrientation(LinearLayout.VERTICAL);
         pages.setGravity(Gravity.CENTER_VERTICAL);
+        pages.setPadding(dp(8), dp(12), dp(8), dp(12));
+        pages.setBackgroundColor(Color.rgb(242, 244, 247));
         for (int i = 0; i < assetPaths.length; i++) {
-            TextView page = label("PAGE " + (i + 1), 11, true);
+            TextView page = label("Page " + (i + 1) + " of " + assetPaths.length, 12, true);
             page.setTextColor(MUTED);
             page.setPadding(0, i == 0 ? 0 : dp(SPACE_MD), 0, dp(SPACE_XS));
             ImageView preview = printPreview(assetPaths[i], landscape);
+            preview.setBackground(rounded(Color.WHITE, dp(4), dp(1), BORDER));
+            preview.setPadding(dp(4), dp(4), dp(4), dp(4));
             LinearLayout.LayoutParams previewLp = new LinearLayout.LayoutParams(-1, dp(landscape ? 320 : 520));
             previewLp.setMargins(0, 0, 0, dp(SPACE_SM));
             preview.setLayoutParams(previewLp);

@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.45 - 2026-10-12
+
+- Grouped Print Desk categories into Prescriptions, OT Papers and Other Forms without removing any document choices.
+- Unified fixed-form tiles with original thumbnails, bold names, quieter A4/orientation/page metadata and the existing blue selected checkmarks.
+- Placed the primary Epson action consistently above secondary preview and Android Print/PDF actions; content-sized buttons accommodate larger text.
+- Refined full-page previews with a neutral grey stage, subtle paper shadow and Page X of Y labels outside the original artwork.
+- Printing callbacks, role access and original document artwork are unchanged. Targeted ADB Save as PDF checks verified portrait prescription, landscape BHT and two-page portrait blood forms. Physical printing was not tested.
+- Verification: 118 automated tests passed; release lint has zero errors and five existing warnings. Independent diff review and 130% font/action/preview checks passed; font scale restored afterward. All 15 bundled document assets verified byte-for-byte.
+
 ## v1.1.44 - 2026-10-12
 
 - Restyled Print Desk selection, library, favourites/recent, preview, confirmation and preparation popups with consistent blue-and-white sheets and subtle motion.

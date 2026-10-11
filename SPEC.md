@@ -1,13 +1,21 @@
 # Blue Bird Maternal Tracker Specification
 
 Last updated: 2026-10-12
-Current version: `1.1.44` / versionCode `53`
+Current version: `1.1.45` / versionCode `54`
 Latest published version: `1.1.44` / versionCode `53`
 Release: https://github.com/0xhydraOp/maternal-tracker-india-android/releases/tag/v1.1.44
 Package: `com.maternaltracker.india`  
 Hospital scope: `BLUE BIRD A GENERAL HOSPITAL`
 
 ## 1. Product Scope
+
+### Print Desk Visual Refinements v1.1.45
+
+- Category rail groups Prescriptions, OT Papers and Other Forms; all five original category choices remain.
+- Fixed-form tiles share the selector thumbnail/title/metadata treatment, retaining blue borders and selected checkmarks.
+- All workspaces place the primary Epson action first, followed by secondary preview and Android Print/Save as PDF actions. Buttons wrap rather than clip enlarged text.
+- Full-page previews use a neutral grey stage, white paper with subtle shadow and Page X of Y labels outside the image.
+- No printing dispatch, original document assets, permissions or patient logic changed.
 
 ### Print Desk Popup Polish v1.1.44
 
